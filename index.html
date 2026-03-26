@@ -3,390 +3,301 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vocalizer - Ejercicios Vocales</title>
+    <title>Vocalizer Pro - Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg: #f8f9fa;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; color: #333;
         }
 
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 500px;
-            width: 100%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        .app-card {
+            background: white; width: 100%; max-width: 500px;
+            height: 95vh; border-radius: 24px; display: flex; flex-direction: column;
+            overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
 
-        h1 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 28px;
+        /* Cabecera Fija con Pantalla de Notas */
+        .display-section {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 20px; text-align: center; color: white;
+            flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
 
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
+        .vowel-large { font-size: 80px; font-weight: 800; line-height: 1; margin: 10px 0; }
+        .note-small { font-size: 24px; opacity: 0.9; font-weight: 300; }
+
+        /* Cuerpo Scrolleable */
+        .config-body {
+            flex-grow: 1; overflow-y: auto; padding: 20px;
+            background: var(--bg);
         }
 
-        .control-group {
-            margin-bottom: 25px;
+        .section-card {
+            background: white; border-radius: 15px; padding: 15px;
+            margin-bottom: 15px; border: 1px solid #eee;
         }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-            font-size: 14px;
+        .section-title {
+            font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+            color: #888; margin-bottom: 12px; font-weight: bold;
         }
 
-        select, input[type="range"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 16px;
-            background: white;
-            transition: border-color 0.3s;
+        /* Controles Compactos */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+        select, input {
+            width: 100%; padding: 8px; border-radius: 8px;
+            border: 1px solid #ddd; font-size: 14px;
         }
 
-        select:focus {
-            outline: none;
-            border-color: #667eea;
+        /* Botonera Fija Inferior */
+        .action-bar {
+            padding: 15px 20px; background: white; border-top: 1px solid #eee;
+            display: flex; gap: 10px; flex-shrink: 0;
         }
 
-        input[type="range"] {
-            padding: 0;
-            height: 40px;
-            cursor: pointer;
+        .btn {
+            flex: 1; padding: 15px; border: none; border-radius: 12px;
+            font-weight: bold; cursor: pointer; transition: 0.2s;
         }
 
-        .tempo-display {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-            margin-top: 10px;
-        }
+        .btn-play { background: var(--primary); color: white; }
+        .btn-stop { background: #ff4757; color: white; display: none; }
+        .btn:active { transform: scale(0.98); }
 
-        .note-display {
-            background: #f5f5f5;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            margin-bottom: 25px;
-            min-height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        .btn-mini { padding: 5px; font-size: 11px; background: #eee; border-radius: 4px; border: none; cursor: pointer;}
+        .btn-mini:hover { background: var(--primary); color: white; }
 
-        .current-note {
-            font-size: 48px;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .note-display.playing {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .note-display.playing .current-note {
-            color: white;
-        }
-
-        button {
-            width: 100%;
-            padding: 18px;
-            border: none;
-            border-radius: 10px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 10px;
-        }
-
-        .play-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .play-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        .play-btn:active {
-            transform: translateY(0);
-        }
-
-        .stop-btn {
-            background: #ff6b6b;
-            color: white;
-            display: none;
-        }
-
-        .stop-btn:hover {
-            background: #ff5252;
-        }
-
-        .info {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 20px;
-            font-size: 14px;
-            color: #1976d2;
-        }
-
-        .row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        @media (max-width: 500px) {
-            .container {
-                padding: 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-        }
+        /* Estilo para los Toggles */
+        .toggle-row { display: flex; background: #eee; border-radius: 8px; padding: 3px; }
+        .toggle-btn { flex: 1; border: none; background: none; padding: 5px; font-size: 12px; cursor: pointer; }
+        .toggle-btn.active { background: white; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎵 Vocalizer</h1>
-        <p class="subtitle">Ejercicios de vocalización</p>
 
-        <div class="note-display" id="noteDisplay">
-            <div class="current-note" id="currentNote">-</div>
+<div class="app-card">
+    <div class="display-section" id="display">
+        <div class="note-small" id="currentNote">Listo para cantar</div>
+        <div class="vowel-large" id="currentVowel">-</div>
+        <div class="note-small" id="progressInfo">Selecciona un ejercicio</div>
+    </div>
+
+    <div class="config-body">
+        <div class="section-card">
+            <div class="section-title">Tesitura</div>
+            <div class="preset-grid">
+                <button class="btn-mini" onclick="setVoicePreset('soprano')">Soprano</button>
+                <button class="btn-mini" onclick="setVoicePreset('mezzosoprano')">Mezzo</button>
+                <button class="btn-mini" onclick="setVoicePreset('alto')">Alto</button>
+                <button class="btn-mini" onclick="setVoicePreset('tenor')">Tenor</button>
+                <button class="btn-mini" onclick="setVoicePreset('baritone')">Barítono</button>
+                <button class="btn-mini" onclick="setVoicePreset('bass')">Bajo</button>
+            </div>
+            <div class="grid-2" style="margin-top:10px">
+                <div><label>Inicio</label><select id="startNote"></select></div>
+                <div><label>Fin</label><select id="endNote"></select></div>
+            </div>
         </div>
 
-        <div class="control-group">
-            <label for="scale">Escala</label>
-            <select id="scale">
-                <option value="major">Mayor</option>
-                <option value="minor">Menor Natural</option>
-                <option value="harmonic">Menor Armónica</option>
-                <option value="pentatonic">Pentatónica Mayor</option>
-                <option value="chromatic">Cromática</option>
+        <div class="section-card">
+            <div class="section-title">Ejercicio</div>
+            <label>Tipo de Salto</label>
+            <select id="pattern">
+                <option value="scale">Escala Lineal</option>
+                <option value="triad">Tríada (1-3-5-3-1)</option>
+                <option value="octave">Octava (1-5-8-5-1)</option>
+                <option value="arpeggio">Arpegio (1-3-5-8-5-3-1)</option>
+                <option value="messa">Messa di Voce (Sostenido)</option>
+            </select>
+            <div id="scaleGroup" style="margin-top:10px">
+                <label>Escala</label>
+                <select id="scale">
+                    <option value="major">Mayor</option>
+                    <option value="minor">Menor</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Vocales</div>
+            <select id="vowelPattern">
+                <option value="a">Solo A</option>
+                <option value="aeiou">A - E - I - O - U</option>
+                <option value="mama">Ma - Me - Mi - Mo - Mu</option>
             </select>
         </div>
 
-        <div class="row">
-            <div class="control-group">
-                <label for="startNote">Nota Inicial</label>
-                <select id="startNote"></select>
+        <div class="section-card">
+            <div class="section-title">Ajustes</div>
+            <label>Modo</label>
+            <select id="practiceMode">
+                <option value="single">Tocar una vez</option>
+                <option value="loop">Subir Automático</option>
+                <option value="loop-desc">Bajar Automático</option>
+            </select>
+            <div class="grid-2" style="margin-top:10px">
+                <div><label>BPM: <span id="bpmVal">100</span></label><input type="range" id="tempo" min="60" max="180" value="100"></div>
+                <div><label>Metrónomo</label>
+                    <div class="toggle-row">
+                        <button class="toggle-btn active" id="mOff" onclick="setMet(false)">Off</button>
+                        <button class="toggle-btn" id="mOn" onclick="setMet(true)">On</button>
+                    </div>
+                </div>
             </div>
-
-            <div class="control-group">
-                <label for="endNote">Nota Final</label>
-                <select id="endNote"></select>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <label for="tempo">Tempo</label>
-            <input type="range" id="tempo" min="40" max="200" value="100" step="5">
-            <div class="tempo-display"><span id="tempoValue">100</span> BPM</div>
-        </div>
-
-        <button class="play-btn" id="playBtn">▶ Iniciar Ejercicio</button>
-        <button class="stop-btn" id="stopBtn">⏹ Detener</button>
-
-        <div class="info">
-            💡 <strong>Tip:</strong> La escala subirá desde la nota inicial hasta la final, y luego descenderá de vuelta.
         </div>
     </div>
 
-    <script>
-        // Configuración de escalas (intervalos en semitonos)
-        const scales = {
-            major: [0, 2, 4, 5, 7, 9, 11, 12],
-            minor: [0, 2, 3, 5, 7, 8, 10, 12],
-            harmonic: [0, 2, 3, 5, 7, 8, 11, 12],
-            pentatonic: [0, 2, 4, 7, 9, 12],
-            chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    <div class="action-bar">
+        <button class="btn btn-play" id="playBtn" onclick="startExercise()">INICIAR ENTRENAMIENTO</button>
+        <button class="btn btn-stop" id="stopBtn" onclick="stopExercise()">DETENER</button>
+    </div>
+</div>
+
+<script>
+    const notes = [];
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    for(let o=2; o<=6; o++) noteNames.forEach(n => notes.push(n+o));
+
+    const scales = { major: [0,2,4,5,7,9,11,12], minor: [0,2,3,5,7,8,10,12] };
+    const patterns = {
+        scale: [0,1,2,3,4,5,6,7,6,5,4,3,2,1,0],
+        triad: [0,2,4,2,0],
+        octave: [0,4,7,4,0],
+        arpeggio: [0,2,4,7,4,2,0],
+        messa: [0]
+    };
+
+    const vowels = { a:['A'], aeiou:['A','E','I','O','U'], mama:['Ma','Me','Mi','Mo','Mu'] };
+    const voicePresets = {
+        soprano:['C4','C6'], mezzosoprano:['A3','A5'], alto:['F3','F5'],
+        tenor:['C3','C5'], baritone:['G2','G4'], bass:['E2','E4']
+    };
+
+    let synth, metClick, isPlaying = false, metEnabled = false, loopTimeout;
+
+    function init() {
+        const s = document.getElementById('startNote'), e = document.getElementById('endNote');
+        notes.forEach((n, i) => {
+            s.options.add(new Option(n, i));
+            e.options.add(new Option(n, i));
+        });
+        s.value = 24; e.value = 48; // C3 a C5 default
+        
+        synth = new Tone.Synth().toDestination();
+        metClick = new Tone.MembraneSynth({volume: -10}).toDestination();
+        
+        document.getElementById('tempo').oninput = (e) => document.getElementById('bpmVal').innerText = e.target.value;
+    }
+
+    function setVoicePreset(v) {
+        document.getElementById('startNote').value = notes.indexOf(voicePresets[v][0]);
+        document.getElementById('endNote').value = notes.indexOf(voicePresets[v][1]);
+    }
+
+    function setMet(v) {
+        metEnabled = v;
+        document.getElementById('mOn').classList.toggle('active', v);
+        document.getElementById('mOff').classList.toggle('active', !v);
+    }
+
+    async function startExercise() {
+        if(isPlaying) return;
+        await Tone.start();
+        isPlaying = true;
+        document.getElementById('playBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'block';
+        
+        const config = {
+            start: parseInt(document.getElementById('startNote').value),
+            end: parseInt(document.getElementById('endNote').value),
+            pattern: document.getElementById('pattern').value,
+            scale: document.getElementById('scale').value,
+            vowels: document.getElementById('vowelPattern').value,
+            mode: document.getElementById('practiceMode').value,
+            bpm: parseInt(document.getElementById('tempo').value)
         };
-
-        // Notas disponibles (3 octavas)
-        const notes = [];
-        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const octaves = [2, 3, 4, 5, 6];
         
-        octaves.forEach(octave => {
-            noteNames.forEach(note => {
-                notes.push(`${note}${octave}`);
-            });
-        });
+        runSequence(config.start, config);
+    }
 
-        // Poblar selectores de notas
-        const startNoteSelect = document.getElementById('startNote');
-        const endNoteSelect = document.getElementById('endNote');
+    function runSequence(baseNoteIdx, config) {
+        if(!isPlaying) return;
         
-        notes.forEach((note, index) => {
-            const option1 = document.createElement('option');
-            option1.value = index;
-            option1.textContent = note;
-            startNoteSelect.appendChild(option1);
+        // Validar límites
+        if(config.mode === 'loop' && baseNoteIdx > config.end) return stopExercise();
+        if(config.mode === 'loop-desc' && baseNoteIdx < config.start) return stopExercise();
 
-            const option2 = document.createElement('option');
-            option2.value = index;
-            option2.textContent = note;
-            endNoteSelect.appendChild(option2);
+        const scaleInt = scales[config.scale];
+        const patternGrades = patterns[config.pattern];
+        const vowelList = vowels[config.vowels];
+        
+        // CONSTRUIR NOTAS: Aquí estaba el error. Mapeamos grados a semitonos de la escala.
+        const sequence = patternGrades.map(grade => {
+            const octaveShift = Math.floor(grade / 8);
+            const scaleDegree = grade % 8;
+            const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
+            return notes[baseNoteIdx + semitoneJump];
         });
 
-        // Valores por defecto: C3 a C5
-        startNoteSelect.value = notes.indexOf('C3');
-        endNoteSelect.value = notes.indexOf('C5');
+        const stepTime = 60 / config.bpm;
+        const isMessa = config.pattern === 'messa';
+        const duration = isMessa ? 4 : stepTime;
 
-        // Control de tempo
-        const tempoSlider = document.getElementById('tempo');
-        const tempoValue = document.getElementById('tempoValue');
-        tempoSlider.addEventListener('input', (e) => {
-            tempoValue.textContent = e.target.value;
-        });
+        // Limpiar transporte previo
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
 
-        // Sintetizador
-        const synth = new Tone.Synth({
-            oscillator: {
-                type: 'sine'
-            },
-            envelope: {
-                attack: 0.05,
-                decay: 0.1,
-                sustain: 0.3,
-                release: 0.3
-            }
-        }).toDestination();
+        const part = new Tone.Part((time, event) => {
+            if(metEnabled) metClick.triggerAttackRelease("C2", "32n", time);
+            
+            synth.triggerAttackRelease(event.note, duration * 0.8, time);
+            
+            Tone.Draw.schedule(() => {
+                document.getElementById('currentNote').innerText = event.note;
+                document.getElementById('currentVowel').innerText = vowelList[event.i % vowelList.length];
+                document.getElementById('progressInfo').innerText = `Tonalidad base: ${notes[baseNoteIdx]}`;
+            }, time);
+        }, sequence.map((n, i) => [i * stepTime, {note: n, i: i}]));
 
-        let isPlaying = false;
-        let sequence = null;
+        part.start(0);
+        Tone.Transport.start();
 
-        // Generar secuencia de notas basada en la escala
-        function generateNoteSequence(startIdx, endIdx, scaleType) {
-            const start = Math.min(startIdx, endIdx);
-            const end = Math.max(startIdx, endIdx);
-            const scaleIntervals = scales[scaleType];
-            
-            const sequence = [];
-            const startNoteName = notes[start];
-            const endNoteName = notes[end];
-            const startMidi = Tone.Frequency(startNoteName).toMidi();
-            const endMidi = Tone.Frequency(endNoteName).toMidi();
-            
-            // Generar todas las notas de la escala en el rango
-            let currentMidi = startMidi;
-            
-            while (currentMidi <= endMidi) {
-                sequence.push(Tone.Frequency(currentMidi, "midi").toNote());
-                
-                // Calcular siguiente nota de la escala
-                const positionInScale = (currentMidi - startMidi) % 12;
-                let nextInterval = scaleIntervals.find(interval => interval > positionInScale);
-                
-                if (!nextInterval) {
-                    // Si completamos la escala, pasar a la siguiente octava
-                    nextInterval = scaleIntervals[0] + 12;
-                }
-                
-                const jump = nextInterval - positionInScale;
-                currentMidi += jump;
-            }
-            
-            // Bajar (reversa sin repetir la última nota)
-            const descending = sequence.slice(0, -1).reverse();
-            
-            return [...sequence, ...descending];
+        // Calcular siguiente paso
+        const nextStepDelay = (sequence.length * stepTime) + (stepTime * 2); // Duración + 2 pulsos de descanso
+        
+        if(config.mode !== 'single') {
+            loopTimeout = setTimeout(() => {
+                const nextIdx = config.mode === 'loop' ? baseNoteIdx + 1 : baseNoteIdx - 1;
+                runSequence(nextIdx, config);
+            }, nextStepDelay * 1000);
+        } else {
+            loopTimeout = setTimeout(stopExercise, nextStepDelay * 1000);
         }
+    }
 
-        // Play button
-        document.getElementById('playBtn').addEventListener('click', async () => {
-            if (isPlaying) return;
-            
-            // Iniciar AudioContext
-            await Tone.start();
-            console.log('Audio context started');
-            
-            const startIdx = parseInt(startNoteSelect.value);
-            const endIdx = parseInt(endNoteSelect.value);
-            const scaleType = document.getElementById('scale').value;
-            const tempo = parseInt(tempoSlider.value);
-            
-            const noteSequence = generateNoteSequence(startIdx, endIdx, scaleType);
-            console.log('Note sequence:', noteSequence);
-            
-            isPlaying = true;
-            document.getElementById('playBtn').style.display = 'none';
-            document.getElementById('stopBtn').style.display = 'block';
-            document.getElementById('noteDisplay').classList.add('playing');
-            
-            // Usar un enfoque más simple con Part en lugar de Sequence
-            const noteDuration = 60 / tempo;
-            const events = noteSequence.map((note, i) => {
-                return [i * noteDuration, note];
-            });
-            
-            const part = new Tone.Part((time, note) => {
-                synth.triggerAttackRelease(note, noteDuration * 0.7, time);
-                
-                Tone.Draw.schedule(() => {
-                    document.getElementById('currentNote').textContent = note;
-                }, time);
-            }, events);
-            
-            part.start(0);
-            
-            // Detener automáticamente al final
-            part.stop(noteSequence.length * noteDuration);
-            
-            Tone.Transport.schedule(() => {
-                stopExercise();
-            }, noteSequence.length * noteDuration);
-            
-            sequence = part; // Guardar referencia para poder detener
-            
-            Tone.Transport.start();
-        });
+    function stopExercise() {
+        isPlaying = false;
+        clearTimeout(loopTimeout);
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+        document.getElementById('playBtn').style.display = 'block';
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('currentVowel').innerText = "-";
+        document.getElementById('currentNote').innerText = "Ejercicio detenido";
+    }
 
-        // Stop button
-        document.getElementById('stopBtn').addEventListener('click', stopExercise);
-
-        function stopExercise() {
-            if (sequence) {
-                sequence.stop();
-                sequence.dispose();
-                sequence = null;
-            }
-            Tone.Transport.stop();
-            Tone.Transport.cancel(0);
-            
-            isPlaying = false;
-            document.getElementById('playBtn').style.display = 'block';
-            document.getElementById('stopBtn').style.display = 'none';
-            document.getElementById('noteDisplay').classList.remove('playing');
-            document.getElementById('currentNote').textContent = '-';
-        }
-    </script>
+    window.onload = init;
+</script>
 </body>
 </html>
