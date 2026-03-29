@@ -2,302 +2,294 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vocalizer Pro - Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>MusicTools</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
     <style>
         :root {
-            --primary: #667eea;
-            --secondary: #764ba2;
-            --bg: #f8f9fa;
+            --bg-dark: #1a1a2e;
+            --bg-card: #16213e;
+            --text-light: #e0e0e0;
+            --text-muted: rgba(255,255,255,0.5);
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a2e;
-            display: flex; justify-content: center; align-items: center;
-            min-height: 100vh; margin: 0; color: #333;
+            background: var(--bg-dark);
+            min-height: 100vh;
+            color: white;
         }
 
-        .app-card {
-            background: white; width: 100%; max-width: 500px;
-            height: 95vh; border-radius: 24px; display: flex; flex-direction: column;
-            overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        /* ---- Header ---- */
+        .header {
+            padding: 48px 24px 24px;
+            text-align: center;
         }
 
-        /* Cabecera Fija con Pantalla de Notas */
-        .display-section {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            padding: 20px; text-align: center; color: white;
-            flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        .header-logo {
+            font-size: 48px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: center;
+            opacity: 0.9;
         }
 
-        .vowel-large { font-size: 80px; font-weight: 800; line-height: 1; margin: 10px 0; }
-        .note-small { font-size: 24px; opacity: 0.9; font-weight: 300; }
-
-        /* Cuerpo Scrolleable */
-        .config-body {
-            flex-grow: 1; overflow-y: auto; padding: 20px;
-            background: var(--bg);
+        .header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         }
 
-        .section-card {
-            background: white; border-radius: 15px; padding: 15px;
-            margin-bottom: 15px; border: 1px solid #eee;
+        .header p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 6px;
         }
 
-        .section-title {
-            font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
-            color: #888; margin-bottom: 12px; font-weight: bold;
+        /* ---- Sección de categoría ---- */
+        .section-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            font-weight: 700;
+            padding: 0 20px;
+            margin: 28px 0 12px;
         }
 
-        /* Controles Compactos */
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
-        select, input {
-            width: 100%; padding: 8px; border-radius: 8px;
-            border: 1px solid #ddd; font-size: 14px;
+        /* ---- Grid de herramientas ---- */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            padding: 0 16px;
         }
 
-        /* Botonera Fija Inferior */
-        .action-bar {
-            padding: 15px 20px; background: white; border-top: 1px solid #eee;
-            display: flex; gap: 10px; flex-shrink: 0;
+        @media (min-width: 420px) {
+            .tools-grid { padding: 0 20px; }
         }
 
-        .btn {
-            flex: 1; padding: 15px; border: none; border-radius: 12px;
-            font-weight: bold; cursor: pointer; transition: 0.2s;
+        /* ---- Tarjeta de herramienta ---- */
+        .tool-card {
+            border-radius: 20px;
+            padding: 20px 16px;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.18s, box-shadow 0.18s;
+            min-height: 150px;
         }
 
-        .btn-play { background: var(--primary); color: white; }
-        .btn-stop { background: #ff4757; color: white; display: none; }
-        .btn:active { transform: scale(0.98); }
+        .tool-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+        }
 
-        .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-        .btn-mini { padding: 5px; font-size: 11px; background: #eee; border-radius: 4px; border: none; cursor: pointer;}
-        .btn-mini:hover { background: var(--primary); color: white; }
+        .tool-card:active { transform: scale(0.97); }
 
-        /* Estilo para los Toggles */
-        .toggle-row { display: flex; background: #eee; border-radius: 8px; padding: 3px; }
-        .toggle-btn { flex: 1; border: none; background: none; padding: 5px; font-size: 12px; cursor: pointer; }
-        .toggle-btn.active { background: white; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-weight: bold; }
+        .tool-card.coming-soon {
+            opacity: 0.75;
+            cursor: default;
+        }
+
+        .tool-card.coming-soon:hover { transform: none; box-shadow: none; }
+        .tool-card.coming-soon:active { transform: none; }
+
+        /* Gradientes por herramienta */
+        .grad-vocalizer    { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .grad-afinador     { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .grad-acordes      { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); color: #1a1a2e; }
+        .grad-escalas      { background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); }
+        .grad-metronomo    { background: linear-gradient(135deg, #4776e6 0%, #8e54e9 100%); }
+        .grad-oidos        { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
+
+        .grad-acordes .tool-icon,
+        .grad-acordes .tool-name,
+        .grad-acordes .tool-desc { color: #1a1a2e; }
+        .grad-acordes .badge-soon { background: rgba(0,0,0,0.15); color: #1a1a2e; }
+        .grad-acordes .tool-arrow { color: rgba(0,0,0,0.4); }
+
+        /* Decoración de fondo */
+        .tool-card::before {
+            content: '';
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.07);
+            bottom: -30px;
+            right: -20px;
+        }
+
+        .tool-card::after {
+            content: '';
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            bottom: 20px;
+            right: 40px;
+        }
+
+        .tool-icon {
+            font-size: 28px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .tool-icon .ti {
+            font-size: inherit;
+            line-height: 1;
+        }
+
+        .tool-content { flex: 1; }
+
+        .tool-name {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: -0.2px;
+        }
+
+        .tool-desc {
+            font-size: 11px;
+            opacity: 0.75;
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+
+        .tool-arrow {
+            font-size: 18px;
+            opacity: 0.5;
+            align-self: flex-end;
+            display: flex;
+            align-items: center;
+        }
+
+        .badge-soon {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        /* ---- Tarjeta ancha (full width) ---- */
+        .tools-grid .full-width {
+            grid-column: 1 / -1;
+            min-height: 120px;
+            flex-direction: row;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .full-width .tool-icon { font-size: 38px; }
+        .full-width .tool-name { font-size: 18px; }
+        .full-width .tool-desc { font-size: 13px; }
+
+        /* ---- Footer ---- */
+        .footer {
+            text-align: center;
+            padding: 32px 16px 48px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .footer a { color: var(--text-muted); }
     </style>
 </head>
 <body>
 
-<div class="app-card">
-    <div class="display-section" id="display">
-        <div class="note-small" id="currentNote">Listo para cantar</div>
-        <div class="vowel-large" id="currentVowel">-</div>
-        <div class="note-small" id="progressInfo">Selecciona un ejercicio</div>
+<div class="header">
+    <div class="header-logo"><i class="ti ti-music"></i></div>
+    <h1>MusicTools</h1>
+    <p>Herramientas para aprender y practicar música</p>
+</div>
+
+<!-- Voz -->
+<div class="section-label">Voz</div>
+<div class="tools-grid">
+    <a class="tool-card grad-vocalizer full-width" href="apps/vocalizer/">
+        <div class="tool-icon"><i class="ti ti-microphone"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Vocalizer</div>
+            <div class="tool-desc">Ejercicios de voz con escalas, tesituras y patrones rítmicos</div>
+        </div>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+    </a>
+</div>
+
+<!-- Guitarra -->
+<div class="section-label">Guitarra</div>
+<div class="tools-grid">
+    <a class="tool-card grad-afinador" href="apps/afinador/">
+        <div class="tool-icon"><i class="ti ti-guitar-pick"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Afinador</div>
+            <div class="tool-desc">Afina por micrófono o con tonos de referencia</div>
+            <div class="badge-soon">Próximamente</div>
+        </div>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+    </a>
+
+    <a class="tool-card grad-acordes" href="apps/acordes-guitarra/">
+        <div class="tool-icon"><i class="ti ti-playlist"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Acordes</div>
+            <div class="tool-desc">Diagramas y audio de acordes de guitarra</div>
+            <div class="badge-soon">Próximamente</div>
+        </div>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+    </a>
+</div>
+
+<!-- Teoría musical -->
+<div class="section-label">Teoría musical</div>
+<div class="tools-grid">
+    <a class="tool-card grad-escalas" href="apps/escalas/">
+        <div class="tool-icon"><i class="ti ti-piano"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Escalas</div>
+            <div class="tool-desc">Explora escalas en el teclado con sonido</div>
+        </div>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+    </a>
+
+    <div class="tool-card grad-metronomo coming-soon">
+        <div class="tool-icon"><i class="ti ti-metronome"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Metrónomo</div>
+            <div class="tool-desc">Pulso preciso con subdivisiones y compases</div>
+            <div class="badge-soon">Próximamente</div>
+        </div>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
     </div>
 
-    <div class="config-body">
-        <div class="section-card">
-            <div class="section-title">Tesitura</div>
-            <div class="preset-grid">
-                <button class="btn-mini" onclick="setVoicePreset('soprano')">Soprano</button>
-                <button class="btn-mini" onclick="setVoicePreset('mezzosoprano')">Mezzo</button>
-                <button class="btn-mini" onclick="setVoicePreset('alto')">Alto</button>
-                <button class="btn-mini" onclick="setVoicePreset('tenor')">Tenor</button>
-                <button class="btn-mini" onclick="setVoicePreset('baritone')">Barítono</button>
-                <button class="btn-mini" onclick="setVoicePreset('bass')">Bajo</button>
-            </div>
-            <div class="grid-2" style="margin-top:10px">
-                <div><label>Inicio</label><select id="startNote"></select></div>
-                <div><label>Fin</label><select id="endNote"></select></div>
-            </div>
+    <div class="tool-card grad-oidos coming-soon">
+        <div class="tool-icon"><i class="ti ti-headphones"></i></div>
+        <div class="tool-content">
+            <div class="tool-name">Entrenamiento auditivo</div>
+            <div class="tool-desc">Reconoce intervalos y acordes de oído</div>
+            <div class="badge-soon">Próximamente</div>
         </div>
-
-        <div class="section-card">
-            <div class="section-title">Ejercicio</div>
-            <label>Tipo de Salto</label>
-            <select id="pattern">
-                <option value="scale">Escala Lineal</option>
-                <option value="triad">Tríada (1-3-5-3-1)</option>
-                <option value="octave">Octava (1-5-8-5-1)</option>
-                <option value="arpeggio">Arpegio (1-3-5-8-5-3-1)</option>
-                <option value="messa">Messa di Voce (Sostenido)</option>
-            </select>
-            <div id="scaleGroup" style="margin-top:10px">
-                <label>Escala</label>
-                <select id="scale">
-                    <option value="major">Mayor</option>
-                    <option value="minor">Menor</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="section-card">
-            <div class="section-title">Vocales</div>
-            <select id="vowelPattern">
-                <option value="a">Solo A</option>
-                <option value="aeiou">A - E - I - O - U</option>
-                <option value="mama">Ma - Me - Mi - Mo - Mu</option>
-            </select>
-        </div>
-
-        <div class="section-card">
-            <div class="section-title">Ajustes</div>
-            <label>Modo</label>
-            <select id="practiceMode">
-                <option value="single">Tocar una vez</option>
-                <option value="loop">Subir Automático</option>
-                <option value="loop-desc">Bajar Automático</option>
-            </select>
-            <div class="grid-2" style="margin-top:10px">
-                <div><label>BPM: <span id="bpmVal">100</span></label><input type="range" id="tempo" min="60" max="180" value="100"></div>
-                <div><label>Metrónomo</label>
-                    <div class="toggle-row">
-                        <button class="toggle-btn active" id="mOff" onclick="setMet(false)">Off</button>
-                        <button class="toggle-btn" id="mOn" onclick="setMet(true)">On</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="action-bar">
-        <button class="btn btn-play" id="playBtn" onclick="startExercise()">INICIAR ENTRENAMIENTO</button>
-        <button class="btn btn-stop" id="stopBtn" onclick="stopExercise()">DETENER</button>
+        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
     </div>
 </div>
 
-<script>
-    const notes = [];
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    for(let o=2; o<=6; o++) noteNames.forEach(n => notes.push(n+o));
+<div class="footer">
+    MusicTools · Herramientas libres para músicos
+</div>
 
-    const scales = { major: [0,2,4,5,7,9,11,12], minor: [0,2,3,5,7,8,10,12] };
-    const patterns = {
-        scale: [0,1,2,3,4,5,6,7,6,5,4,3,2,1,0],
-        triad: [0,2,4,2,0],
-        octave: [0,4,7,4,0],
-        arpeggio: [0,2,4,7,4,2,0],
-        messa: [0]
-    };
-
-    const vowels = { a:['A'], aeiou:['A','E','I','O','U'], mama:['Ma','Me','Mi','Mo','Mu'] };
-    const voicePresets = {
-        soprano:['C4','C6'], mezzosoprano:['A3','A5'], alto:['F3','F5'],
-        tenor:['C3','C5'], baritone:['G2','G4'], bass:['E2','E4']
-    };
-
-    let synth, metClick, isPlaying = false, metEnabled = false, loopTimeout;
-
-    function init() {
-        const s = document.getElementById('startNote'), e = document.getElementById('endNote');
-        notes.forEach((n, i) => {
-            s.options.add(new Option(n, i));
-            e.options.add(new Option(n, i));
-        });
-        s.value = 24; e.value = 48; // C3 a C5 default
-        
-        synth = new Tone.Synth().toDestination();
-        metClick = new Tone.MembraneSynth({volume: -10}).toDestination();
-        
-        document.getElementById('tempo').oninput = (e) => document.getElementById('bpmVal').innerText = e.target.value;
-    }
-
-    function setVoicePreset(v) {
-        document.getElementById('startNote').value = notes.indexOf(voicePresets[v][0]);
-        document.getElementById('endNote').value = notes.indexOf(voicePresets[v][1]);
-    }
-
-    function setMet(v) {
-        metEnabled = v;
-        document.getElementById('mOn').classList.toggle('active', v);
-        document.getElementById('mOff').classList.toggle('active', !v);
-    }
-
-    async function startExercise() {
-        if(isPlaying) return;
-        await Tone.start();
-        isPlaying = true;
-        document.getElementById('playBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'block';
-        
-        const config = {
-            start: parseInt(document.getElementById('startNote').value),
-            end: parseInt(document.getElementById('endNote').value),
-            pattern: document.getElementById('pattern').value,
-            scale: document.getElementById('scale').value,
-            vowels: document.getElementById('vowelPattern').value,
-            mode: document.getElementById('practiceMode').value,
-            bpm: parseInt(document.getElementById('tempo').value)
-        };
-        
-        runSequence(config.start, config);
-    }
-
-    function runSequence(baseNoteIdx, config) {
-        if(!isPlaying) return;
-        
-        // Validar límites
-        if(config.mode === 'loop' && baseNoteIdx > config.end) return stopExercise();
-        if(config.mode === 'loop-desc' && baseNoteIdx < config.start) return stopExercise();
-
-        const scaleInt = scales[config.scale];
-        const patternGrades = patterns[config.pattern];
-        const vowelList = vowels[config.vowels];
-        
-        // CONSTRUIR NOTAS: Aquí estaba el error. Mapeamos grados a semitonos de la escala.
-        const sequence = patternGrades.map(grade => {
-            const octaveShift = Math.floor(grade / 8);
-            const scaleDegree = grade % 8;
-            const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
-            return notes[baseNoteIdx + semitoneJump];
-        });
-
-        const stepTime = 60 / config.bpm;
-        const isMessa = config.pattern === 'messa';
-        const duration = isMessa ? 4 : stepTime;
-
-        // Limpiar transporte previo
-        Tone.Transport.stop();
-        Tone.Transport.cancel();
-
-        const part = new Tone.Part((time, event) => {
-            if(metEnabled) metClick.triggerAttackRelease("C2", "32n", time);
-            
-            synth.triggerAttackRelease(event.note, duration * 0.8, time);
-            
-            Tone.Draw.schedule(() => {
-                document.getElementById('currentNote').innerText = event.note;
-                document.getElementById('currentVowel').innerText = vowelList[event.i % vowelList.length];
-                document.getElementById('progressInfo').innerText = `Tonalidad base: ${notes[baseNoteIdx]}`;
-            }, time);
-        }, sequence.map((n, i) => [i * stepTime, {note: n, i: i}]));
-
-        part.start(0);
-        Tone.Transport.start();
-
-        // Calcular siguiente paso
-        const nextStepDelay = (sequence.length * stepTime) + (stepTime * 2); // Duración + 2 pulsos de descanso
-        
-        if(config.mode !== 'single') {
-            loopTimeout = setTimeout(() => {
-                const nextIdx = config.mode === 'loop' ? baseNoteIdx + 1 : baseNoteIdx - 1;
-                runSequence(nextIdx, config);
-            }, nextStepDelay * 1000);
-        } else {
-            loopTimeout = setTimeout(stopExercise, nextStepDelay * 1000);
-        }
-    }
-
-    function stopExercise() {
-        isPlaying = false;
-        clearTimeout(loopTimeout);
-        Tone.Transport.stop();
-        Tone.Transport.cancel();
-        document.getElementById('playBtn').style.display = 'block';
-        document.getElementById('stopBtn').style.display = 'none';
-        document.getElementById('currentVowel').innerText = "-";
-        document.getElementById('currentNote').innerText = "Ejercicio detenido";
-    }
-
-    window.onload = init;
-</script>
 </body>
 </html>

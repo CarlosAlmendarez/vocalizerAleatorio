@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escalas - MusicTools</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="../../shared/style.css">
+    <style>
+        body { display: flex; justify-content: center; align-items: flex-start; }
+
+        .display-section {
+            background: linear-gradient(135deg, #ee0979, #ff6a00);
+        }
+
+        .scale-name-big {
+            font-size: 52px;
+            font-weight: 800;
+            line-height: 1.1;
+            margin: 10px 0 4px;
+        }
+
+        .scale-subtitle {
+            font-size: 15px;
+            opacity: 0.85;
+            font-weight: 300;
+        }
+
+        /* Piano visual */
+        .piano-wrap {
+            overflow-x: auto;
+            padding: 10px 0 4px;
+        }
+
+        .piano {
+            display: flex;
+            position: relative;
+            height: 90px;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        .key-white {
+            width: 32px;
+            height: 90px;
+            border: 1px solid #ccc;
+            border-radius: 0 0 5px 5px;
+            background: white;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.1s;
+            flex-shrink: 0;
+        }
+
+        .key-white.in-scale {
+            background: #ffb3c6;
+        }
+
+        .key-white.root {
+            background: #ee0979;
+            border-color: #c0063e;
+        }
+
+        .key-white.playing {
+            background: #ff6a00 !important;
+            box-shadow: 0 0 12px rgba(255, 106, 0, 0.7);
+        }
+
+        .key-black {
+            width: 22px;
+            height: 55px;
+            background: #333;
+            position: absolute;
+            top: 0;
+            border-radius: 0 0 4px 4px;
+            z-index: 2;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+
+        .key-black.in-scale {
+            background: #c0063e;
+        }
+
+        .key-black.root {
+            background: #ee0979;
+        }
+
+        .key-black.playing {
+            background: #ff6a00 !important;
+            box-shadow: 0 0 10px rgba(255, 106, 0, 0.8);
+        }
+
+        .key-label {
+            position: absolute;
+            bottom: 5px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .key-white.root .key-label,
+        .key-white.in-scale .key-label { color: #333; }
+
+        /* Chips de escala */
+        .scale-chip {
+            padding: 7px 14px;
+            border-radius: 20px;
+            border: 1.5px solid #ddd;
+            background: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+
+        .scale-chip:hover   { border-color: #ee0979; color: #ee0979; }
+        .scale-chip.active  { background: #ee0979; border-color: #ee0979; color: white; }
+
+        /* Notas de la escala */
+        .scale-note-list {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .scale-note-pill {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            background: #fce4ec;
+            color: #c0063e;
+            transition: background 0.15s;
+        }
+
+        .scale-note-pill.root {
+            background: #ee0979;
+            color: white;
+        }
+
+        .scale-note-pill.playing {
+            background: #ff6a00;
+            color: white;
+        }
+
+        /* Root selector */
+        .root-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+        }
+
+        .root-btn {
+            padding: 7px 2px;
+            border: 1.5px solid #eee;
+            border-radius: 8px;
+            background: white;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .root-btn:hover  { border-color: #ee0979; color: #ee0979; }
+        .root-btn.active { background: #ee0979; border-color: #ee0979; color: white; }
+
+        .btn-play-scale {
+            background: linear-gradient(135deg, #ee0979, #ff6a00);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+
+    <div class="display-section" style="padding-top:10px;">
+        <div class="app-nav" style="background:none; padding: 0 4px 8px;">
+            <a class="nav-back" href="../../index.html">
+                <i class="ti ti-chevron-left"></i>
+                MusicTools
+            </a>
+        </div>
+        <div class="scale-subtitle" id="displayScaleType">Mayor</div>
+        <div class="scale-name-big" id="displayScaleName">Do Mayor</div>
+        <div class="scale-subtitle" id="displayInterval">W-W-H-W-W-W-H</div>
+    </div>
+
+    <div class="config-body">
+
+        <!-- Piano visual -->
+        <div class="section-card" style="padding:12px 8px;">
+            <div class="section-title" style="padding-left:8px;">Teclado</div>
+            <div class="piano-wrap">
+                <div class="piano" id="piano"></div>
+            </div>
+        </div>
+
+        <!-- Notas de la escala -->
+        <div class="section-card">
+            <div class="section-title">Notas</div>
+            <div class="scale-note-list" id="noteList"></div>
+        </div>
+
+        <!-- Tipo de escala -->
+        <div class="section-card">
+            <div class="section-title">Tipo de escala</div>
+            <div class="filter-row" id="scaleTypeFilter" style="flex-wrap:wrap; gap:6px;">
+                <button class="scale-chip active" onclick="setScaleType('mayor', this)">Mayor</button>
+                <button class="scale-chip" onclick="setScaleType('menor', this)">Menor natural</button>
+                <button class="scale-chip" onclick="setScaleType('pentatonica', this)">Pentatónica M</button>
+                <button class="scale-chip" onclick="setScaleType('pent-menor', this)">Pentatónica m</button>
+                <button class="scale-chip" onclick="setScaleType('blues', this)">Blues</button>
+                <button class="scale-chip" onclick="setScaleType('dórico', this)">Dórico</button>
+                <button class="scale-chip" onclick="setScaleType('frigio', this)">Frigio</button>
+                <button class="scale-chip" onclick="setScaleType('lidio', this)">Lidio</button>
+                <button class="scale-chip" onclick="setScaleType('mixolidio', this)">Mixolidio</button>
+            </div>
+        </div>
+
+        <!-- Nota raíz -->
+        <div class="section-card">
+            <div class="section-title">Nota raíz</div>
+            <div class="root-grid" id="rootGrid"></div>
+        </div>
+
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-play-scale" id="playScaleBtn" onclick="playScale()">
+            Escuchar escala
+        </button>
+    </div>
+</div>
+
+<script src="../../shared/audio-utils.js"></script>
+<script>
+    const SCALES = {
+        mayor:        { label: 'Mayor',          intervals: [0,2,4,5,7,9,11,12], pattern: 'T-T-s-T-T-T-s'   },
+        menor:        { label: 'Menor natural',  intervals: [0,2,3,5,7,8,10,12], pattern: 'T-s-T-T-s-T-T'   },
+        pentatonica:  { label: 'Pentatónica M',  intervals: [0,2,4,7,9,12],      pattern: 'T-T-3s-T-3s'     },
+        'pent-menor': { label: 'Pentatónica m',  intervals: [0,3,5,7,10,12],     pattern: '3s-T-T-3s-T'     },
+        blues:        { label: 'Blues',          intervals: [0,3,5,6,7,10,12],   pattern: '3s-T-s-s-3s-T'   },
+        'dórico':     { label: 'Dórico',         intervals: [0,2,3,5,7,9,10,12], pattern: 'T-s-T-T-T-s-T'   },
+        frigio:       { label: 'Frigio',         intervals: [0,1,3,5,7,8,10,12], pattern: 's-T-T-T-s-T-T'   },
+        lidio:        { label: 'Lidio',          intervals: [0,2,4,6,7,9,11,12], pattern: 'T-T-T-s-T-T-s'   },
+        mixolidio:    { label: 'Mixolidio',      intervals: [0,2,4,5,7,9,10,12], pattern: 'T-T-s-T-T-s-T'   },
+    };
+
+    const NOTE_NAMES_ES = ['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+    const NOTE_NAMES_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+    // Piano fijo C3–B4: teclas blancas = semitonos 0,2,4,5,7,9,11 dentro de la octava
+    const WHITE_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+    // Teclas negras: semitono dentro de la octava → desplazamiento px desde el inicio de esa octava
+    const BLACK_POSITIONS = { 1: 23, 3: 55, 6: 119, 8: 151, 10: 183 };
+    const WHITE_KEY_W = 32;
+    const OCT_WIDTH   = WHITE_SEMITONES.length * WHITE_KEY_W; // 224 px
+
+    let currentScaleKey = 'mayor';
+    let currentRootIdx  = 0; // índice 0–11 (Do=0, Do#=1 … Si=11)
+    let synth           = null;
+    let playingTimeout  = null;
+    let isPlayingScale  = false;
+
+    // ---- Convierte intervalo de escala a nota con octava correcta ----
+    // Ejemplo: root=9 (La), interval=4 → abs=13 → C#4
+    function intervalToNote(interval) {
+        const abs    = currentRootIdx + interval;
+        const octave = 3 + Math.floor(abs / 12);
+        return NOTE_NAMES_EN[abs % 12] + octave;
+    }
+
+    // ---- Construye el conjunto de notas de la escala como strings "C3", "D4", … ----
+    function buildScaleNoteSet() {
+        const scale = SCALES[currentScaleKey];
+        return new Set(scale.intervals.map(i => intervalToNote(i)));
+    }
+
+    // ---- Piano ----
+    function buildPiano() {
+        const piano = document.getElementById('piano');
+        piano.innerHTML = '';
+        piano.style.width  = (OCT_WIDTH * 2) + 'px';
+        piano.style.height = '90px';
+
+        const scaleNotes = buildScaleNoteSet();
+
+        // Teclas blancas
+        for (let oct = 0; oct < 2; oct++) {
+            WHITE_SEMITONES.forEach((semitone, wi) => {
+                const noteStr = NOTE_NAMES_EN[semitone] + (3 + oct);
+                const inScale = scaleNotes.has(noteStr);
+                // La raíz se marca en ambas octavas
+                const isRoot  = semitone === currentRootIdx % 12 &&
+                                (oct === 0 ? currentRootIdx < 12 : currentRootIdx >= 0);
+
+                const key = document.createElement('div');
+                key.className = 'key-white' + (isRoot ? ' root' : inScale ? ' in-scale' : '');
+                key.dataset.note = noteStr;
+                key.style.cssText = `left:${oct * OCT_WIDTH + wi * WHITE_KEY_W}px; position:absolute;`;
+
+                const lbl = document.createElement('div');
+                lbl.className = 'key-label';
+                lbl.textContent = NOTE_NAMES_ES[semitone];
+                key.appendChild(lbl);
+                key.onclick = () => playNoteWithHighlight(noteStr);
+                piano.appendChild(key);
+            });
+        }
+
+        // Teclas negras
+        for (let oct = 0; oct < 2; oct++) {
+            Object.entries(BLACK_POSITIONS).forEach(([st, xOff]) => {
+                const semitone = parseInt(st);
+                const noteStr  = NOTE_NAMES_EN[semitone] + (3 + oct);
+                const inScale  = scaleNotes.has(noteStr);
+                const isRoot   = semitone === currentRootIdx % 12;
+
+                const key = document.createElement('div');
+                key.className = 'key-black' + (isRoot ? ' root' : inScale ? ' in-scale' : '');
+                key.dataset.note = noteStr;
+                key.style.cssText = `left:${oct * OCT_WIDTH + xOff}px; position:absolute;`;
+                key.onclick = () => playNoteWithHighlight(noteStr);
+                piano.appendChild(key);
+            });
+        }
+    }
+
+    // ---- Resalta una tecla brevemente (click manual) ----
+    function highlightKey(noteStr, durationMs = 400) {
+        const key = document.querySelector(`[data-note="${noteStr}"]`);
+        if (!key) return;
+        key.classList.add('playing');
+        setTimeout(() => key.classList.remove('playing'), durationMs);
+    }
+
+    function clearAllHighlights() {
+        document.querySelectorAll('.playing').forEach(el => el.classList.remove('playing'));
+    }
+
+    // ---- Lista de notas (pills) ----
+    function renderNoteList() {
+        const scale = SCALES[currentScaleKey];
+        const list  = document.getElementById('noteList');
+        list.innerHTML = '';
+        scale.intervals.forEach((interval, i) => {
+            const noteIdx = (currentRootIdx + interval) % 12;
+            const pill    = document.createElement('div');
+            pill.className = 'scale-note-pill' + (i === 0 ? ' root' : '');
+            pill.id = 'pill-' + i;
+            pill.textContent = NOTE_NAMES_ES[noteIdx];
+            list.appendChild(pill);
+        });
+    }
+
+    // ---- Selector de raíz ----
+    function renderRootGrid() {
+        const grid = document.getElementById('rootGrid');
+        grid.innerHTML = '';
+        NOTE_NAMES_ES.forEach((name, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'root-btn' + (i === currentRootIdx ? ' active' : '');
+            btn.textContent = name;
+            btn.onclick = () => {
+                currentRootIdx = i;
+                stopPlayback();
+                document.querySelectorAll('.root-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                update();
+            };
+            grid.appendChild(btn);
+        });
+    }
+
+    function setScaleType(key, btn) {
+        currentScaleKey = key;
+        stopPlayback();
+        document.querySelectorAll('.scale-chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        update();
+    }
+
+    function update() {
+        const scale = SCALES[currentScaleKey];
+        document.getElementById('displayScaleType').textContent = scale.label;
+        document.getElementById('displayScaleName').textContent =
+            NOTE_NAMES_ES[currentRootIdx] + ' ' + scale.label;
+        document.getElementById('displayInterval').textContent = scale.pattern;
+        buildPiano();
+        renderNoteList();
+    }
+
+    // ---- Reproducción de nota individual (click en tecla) ----
+    async function playNoteWithHighlight(noteStr) {
+        await startAudio();
+        if (!synth) initSynth();
+        synth.triggerAttackRelease(noteStr, '8n');
+        if (!isPlayingScale) highlightKey(noteStr, 400);
+    }
+
+    function initSynth() {
+        synth = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.7, release: 0.6 }
+        }).toDestination();
+    }
+
+    // ---- Reproducción de escala completa ----
+    async function playScale() {
+        if (isPlayingScale) return;
+        await startAudio();
+        if (!synth) initSynth();
+
+        stopPlayback();
+        isPlayingScale = true;
+
+        const scale = SCALES[currentScaleKey];
+        // FIX: calcular octava correctamente para cada nota
+        const notes = scale.intervals.map(i => intervalToNote(i));
+
+        const btn = document.getElementById('playScaleBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Reproduciendo...';
+
+        let i = 0;
+        function playNext() {
+            clearAllHighlights();
+
+            if (i >= notes.length) {
+                isPlayingScale  = false;
+                btn.disabled    = false;
+                btn.textContent = 'Escuchar escala';
+                return;
+            }
+
+            // Resaltar pill
+            const pill = document.getElementById('pill-' + i);
+            if (pill) pill.classList.add('playing');
+
+            // Resaltar tecla de piano
+            const key = document.querySelector(`[data-note="${notes[i]}"]`);
+            if (key) key.classList.add('playing');
+
+            synth.triggerAttackRelease(notes[i], '8n');
+            i++;
+            playingTimeout = setTimeout(playNext, 450);
+        }
+        playNext();
+    }
+
+    function stopPlayback() {
+        if (playingTimeout) clearTimeout(playingTimeout);
+        playingTimeout  = null;
+        isPlayingScale  = false;
+        clearAllHighlights();
+        const btn = document.getElementById('playScaleBtn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Escuchar escala'; }
+    }
+
+    // Init
+    renderRootGrid();
+    update();
+</script>
+</body>
+</html>

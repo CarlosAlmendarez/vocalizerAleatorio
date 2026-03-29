@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afinador - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/style.css">
+    <style>
+        body { display: flex; justify-content: center; align-items: flex-start; }
+
+        .display-section {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+        }
+
+        .tuner-note {
+            font-size: 90px;
+            font-weight: 800;
+            line-height: 1;
+            margin: 12px 0 4px;
+            letter-spacing: -2px;
+        }
+
+        .tuner-freq {
+            font-size: 18px;
+            opacity: 0.85;
+            font-weight: 300;
+        }
+
+        /* Medidor de centavos */
+        .cents-bar-wrap {
+            margin: 16px auto 4px;
+            width: 85%;
+            position: relative;
+        }
+
+        .cents-bar-bg {
+            height: 10px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cents-bar-fill {
+            position: absolute;
+            height: 100%;
+            width: 4px;
+            background: white;
+            border-radius: 4px;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: left 0.1s ease;
+        }
+
+        .cents-center-mark {
+            position: absolute;
+            top: -3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 16px;
+            background: rgba(255,255,255,0.6);
+            border-radius: 1px;
+        }
+
+        .cents-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 4px;
+            color: white;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.4);
+            display: inline-block;
+            margin-right: 6px;
+            transition: background 0.2s;
+        }
+        .status-dot.active { background: white; box-shadow: 0 0 8px white; }
+
+        .btn-listen {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: white;
+        }
+        .btn-stop-tuner {
+            background: #ff4757;
+            color: white;
+            display: none;
+        }
+
+        /* Referencia de notas */
+        .note-ref-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .note-ref-btn {
+            padding: 8px 4px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #f0f0f0;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+            text-align: center;
+        }
+
+        .note-ref-btn:hover { background: #e0f7f4; border-color: #11998e; }
+        .note-ref-btn.selected { background: #11998e; color: white; border-color: #11998e; }
+
+        .coming-soon-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+
+    <div class="display-section" style="padding-top:10px;">
+        <div class="app-nav" style="background:none; padding: 0 4px 8px;">
+            <a class="nav-back" href="../../index.html">
+                <i class="ti ti-chevron-left"></i>
+                MusicTools
+            </a>
+        </div>
+        <div style="font-size:15px; opacity:0.85;">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Inactivo</span>
+        </div>
+        <div class="tuner-note" id="tunerNote">--</div>
+        <div class="tuner-freq" id="tunerFreq">--- Hz</div>
+
+        <div class="cents-bar-wrap">
+            <div class="cents-bar-bg">
+                <div class="cents-bar-fill" id="centsBar"></div>
+                <div class="cents-center-mark"></div>
+            </div>
+            <div class="cents-labels"><span>-50¢</span><span>0</span><span>+50¢</span></div>
+        </div>
+
+        <div class="coming-soon-badge">Próximamente</div>
+    </div>
+
+    <div class="config-body">
+        <div class="section-card">
+            <div class="section-title">Tono de referencia</div>
+            <p style="font-size:13px; color:#666; margin:0 0 12px;">
+                Pulsa cualquier nota para escuchar su tono de referencia mientras afinas.
+            </p>
+            <div class="note-ref-grid" id="noteRefGrid">
+                <!-- generado por JS -->
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Afinación estándar</div>
+            <div class="note-ref-grid">
+                <button class="note-ref-btn" onclick="playRef('E2')">E2<br><small style="font-weight:400;font-size:10px;">Cuerda 6</small></button>
+                <button class="note-ref-btn" onclick="playRef('A2')">A2<br><small style="font-weight:400;font-size:10px;">Cuerda 5</small></button>
+                <button class="note-ref-btn" onclick="playRef('D3')">D3<br><small style="font-weight:400;font-size:10px;">Cuerda 4</small></button>
+                <button class="note-ref-btn" onclick="playRef('G3')">G3<br><small style="font-weight:400;font-size:10px;">Cuerda 3</small></button>
+                <button class="note-ref-btn" onclick="playRef('B3')">B3<br><small style="font-weight:400;font-size:10px;">Cuerda 2</small></button>
+                <button class="note-ref-btn" onclick="playRef('E4')">E4<br><small style="font-weight:400;font-size:10px;">Cuerda 1</small></button>
+            </div>
+        </div>
+
+        <div class="section-card" style="background:#fff8e1; border-color:#ffe082;">
+            <div class="section-title" style="color:#f9a825;">En desarrollo</div>
+            <p style="font-size:13px; color:#666; margin:0;">
+                La detección de tono por micrófono estará disponible próximamente.
+                Usará <strong>Web Audio API + FFT</strong> para detectar la nota en tiempo real directamente desde tu dispositivo.
+            </p>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-listen" id="listenBtn" onclick="startListening()" disabled>
+            Micrófono (próximamente)
+        </button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="../../shared/audio-utils.js"></script>
+<script>
+    let refSynth = null;
+
+    async function playRef(note) {
+        await startAudio();
+        if (!refSynth) {
+            refSynth = new Tone.Synth({
+                oscillator: { type: 'triangle' },
+                envelope: { attack: 0.02, decay: 0.1, sustain: 0.8, release: 1.5 }
+            }).toDestination();
+        }
+        refSynth.triggerAttackRelease(note, '2n');
+
+        // Highlight botón seleccionado
+        document.querySelectorAll('.note-ref-btn').forEach(b => b.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        setTimeout(() => event.currentTarget.classList.remove('selected'), 800);
+    }
+
+    function startListening() {
+        // Placeholder — implementación futura con getUserMedia + AnalyserNode
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocalizer - MusicTools</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="../../shared/style.css">
+    <style>
+        body { display: flex; justify-content: center; align-items: flex-start; }
+
+        .display-section {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .vowel-large { font-size: 80px; font-weight: 800; line-height: 1; margin: 10px 0; }
+        .note-small  { font-size: 24px; opacity: 0.9; font-weight: 300; }
+
+        .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+
+        .btn-mini {
+            padding: 5px; font-size: 11px; background: #eee;
+            border-radius: 6px; border: none; cursor: pointer;
+            font-family: inherit; transition: background 0.15s, color 0.15s;
+        }
+        .btn-mini:hover { background: #667eea; color: white; }
+
+        .btn-play { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .btn-stop { background: #ff4757; color: white; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+
+    <!-- Navegación -->
+    <div class="display-section" id="display" style="padding-top:10px;">
+        <div class="app-nav" style="background:none; padding: 0 4px 8px;">
+            <a class="nav-back" href="../../index.html">
+                <i class="ti ti-chevron-left"></i>
+                MusicTools
+            </a>
+        </div>
+        <div class="note-small" id="currentNote">Listo para cantar</div>
+        <div class="vowel-large" id="currentVowel">-</div>
+        <div class="note-small" id="progressInfo">Selecciona un ejercicio</div>
+    </div>
+
+    <div class="config-body">
+        <div class="section-card">
+            <div class="section-title">Tesitura</div>
+            <div class="preset-grid">
+                <button class="btn-mini" onclick="setVoicePreset('soprano')">Soprano</button>
+                <button class="btn-mini" onclick="setVoicePreset('mezzosoprano')">Mezzo</button>
+                <button class="btn-mini" onclick="setVoicePreset('alto')">Alto</button>
+                <button class="btn-mini" onclick="setVoicePreset('tenor')">Tenor</button>
+                <button class="btn-mini" onclick="setVoicePreset('baritone')">Barítono</button>
+                <button class="btn-mini" onclick="setVoicePreset('bass')">Bajo</button>
+            </div>
+            <div class="grid-2" style="margin-top:10px">
+                <div><label>Inicio</label><select id="startNote"></select></div>
+                <div><label>Fin</label><select id="endNote"></select></div>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Ejercicio</div>
+            <label>Tipo de Salto</label>
+            <select id="pattern">
+                <option value="scale">Escala Lineal</option>
+                <option value="triad">Tríada (1-3-5-3-1)</option>
+                <option value="octave">Octava (1-5-8-5-1)</option>
+                <option value="arpeggio">Arpegio (1-3-5-8-5-3-1)</option>
+                <option value="messa">Messa di Voce (Sostenido)</option>
+            </select>
+            <div id="scaleGroup" style="margin-top:10px">
+                <label>Escala</label>
+                <select id="scale">
+                    <option value="major">Mayor</option>
+                    <option value="minor">Menor</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Vocales</div>
+            <select id="vowelPattern">
+                <option value="a">Solo A</option>
+                <option value="aeiou">A - E - I - O - U</option>
+                <option value="mama">Ma - Me - Mi - Mo - Mu</option>
+            </select>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Ajustes</div>
+            <label>Modo</label>
+            <select id="practiceMode">
+                <option value="single">Tocar una vez</option>
+                <option value="loop">Subir Automático</option>
+                <option value="loop-desc">Bajar Automático</option>
+            </select>
+            <div class="grid-2" style="margin-top:10px">
+                <div>
+                    <label>BPM: <span id="bpmVal">100</span></label>
+                    <input type="range" id="tempo" min="60" max="180" value="100">
+                </div>
+                <div>
+                    <label>Metrónomo</label>
+                    <div class="toggle-row">
+                        <button class="toggle-btn active" id="mOff" onclick="setMet(false)">Off</button>
+                        <button class="toggle-btn" id="mOn" onclick="setMet(true)">On</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-play" id="playBtn" onclick="startExercise()">INICIAR ENTRENAMIENTO</button>
+        <button class="btn btn-stop" id="stopBtn" onclick="stopExercise()">DETENER</button>
+    </div>
+</div>
+
+<script src="../../shared/audio-utils.js"></script>
+<script>
+    const notes = getAllNotes(2, 6);
+    const scales = { major: [0,2,4,5,7,9,11,12], minor: [0,2,3,5,7,8,10,12] };
+    const patterns = {
+        scale:   [0,1,2,3,4,5,6,7,6,5,4,3,2,1,0],
+        triad:   [0,2,4,2,0],
+        octave:  [0,4,7,4,0],
+        arpeggio:[0,2,4,7,4,2,0],
+        messa:   [0]
+    };
+    const vowels = { a:['A'], aeiou:['A','E','I','O','U'], mama:['Ma','Me','Mi','Mo','Mu'] };
+    const voicePresets = {
+        soprano:['C4','C6'], mezzosoprano:['A3','A5'], alto:['F3','F5'],
+        tenor:['C3','C5'], baritone:['G2','G4'], bass:['E2','E4']
+    };
+
+    let synth, metClick, isPlaying = false, metEnabled = false, loopTimeout;
+
+    function init() {
+        const s = document.getElementById('startNote');
+        const e = document.getElementById('endNote');
+        notes.forEach((n, i) => {
+            s.options.add(new Option(n, i));
+            e.options.add(new Option(n, i));
+        });
+        s.value = 24; e.value = 48;
+
+        synth    = new Tone.Synth().toDestination();
+        metClick = new Tone.MembraneSynth({ volume: -10 }).toDestination();
+
+        document.getElementById('tempo').oninput = (ev) => {
+            document.getElementById('bpmVal').innerText = ev.target.value;
+        };
+    }
+
+    function setVoicePreset(v) {
+        document.getElementById('startNote').value = notes.indexOf(voicePresets[v][0]);
+        document.getElementById('endNote').value   = notes.indexOf(voicePresets[v][1]);
+    }
+
+    function setMet(v) {
+        metEnabled = v;
+        document.getElementById('mOn').classList.toggle('active',  v);
+        document.getElementById('mOff').classList.toggle('active', !v);
+    }
+
+    async function startExercise() {
+        if (isPlaying) return;
+        await startAudio();
+        isPlaying = true;
+        document.getElementById('playBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'block';
+
+        const config = {
+            start:  parseInt(document.getElementById('startNote').value),
+            end:    parseInt(document.getElementById('endNote').value),
+            pattern: document.getElementById('pattern').value,
+            scale:   document.getElementById('scale').value,
+            vowels:  document.getElementById('vowelPattern').value,
+            mode:    document.getElementById('practiceMode').value,
+            bpm:     parseInt(document.getElementById('tempo').value)
+        };
+
+        runSequence(config.start, config);
+    }
+
+    function runSequence(baseNoteIdx, config) {
+        if (!isPlaying) return;
+        if (config.mode === 'loop'      && baseNoteIdx > config.end)   return stopExercise();
+        if (config.mode === 'loop-desc' && baseNoteIdx < config.start) return stopExercise();
+
+        const scaleInt     = scales[config.scale];
+        const patternGrades = patterns[config.pattern];
+        const vowelList    = vowels[config.vowels];
+
+        const sequence = patternGrades.map(grade => {
+            const octaveShift  = Math.floor(grade / 8);
+            const scaleDegree  = grade % 8;
+            const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
+            return notes[baseNoteIdx + semitoneJump];
+        });
+
+        const stepTime = 60 / config.bpm;
+        const isMessa  = config.pattern === 'messa';
+        const duration = isMessa ? 4 : stepTime;
+
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+
+        const part = new Tone.Part((time, event) => {
+            if (metEnabled) metClick.triggerAttackRelease("C2", "32n", time);
+            synth.triggerAttackRelease(event.note, duration * 0.8, time);
+
+            Tone.Draw.schedule(() => {
+                document.getElementById('currentNote').innerText    = event.note;
+                document.getElementById('currentVowel').innerText   = vowelList[event.i % vowelList.length];
+                document.getElementById('progressInfo').innerText   = `Tonalidad base: ${notes[baseNoteIdx]}`;
+            }, time);
+        }, sequence.map((n, i) => [i * stepTime, { note: n, i }]));
+
+        part.start(0);
+        Tone.Transport.start();
+
+        const nextStepDelay = (sequence.length * stepTime) + (stepTime * 2);
+
+        if (config.mode !== 'single') {
+            loopTimeout = setTimeout(() => {
+                const nextIdx = config.mode === 'loop' ? baseNoteIdx + 1 : baseNoteIdx - 1;
+                runSequence(nextIdx, config);
+            }, nextStepDelay * 1000);
+        } else {
+            loopTimeout = setTimeout(stopExercise, nextStepDelay * 1000);
+        }
+    }
+
+    function stopExercise() {
+        isPlaying = false;
+        clearTimeout(loopTimeout);
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+        document.getElementById('playBtn').style.display = 'block';
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('currentVowel').innerText = "-";
+        document.getElementById('currentNote').innerText  = "Ejercicio detenido";
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
