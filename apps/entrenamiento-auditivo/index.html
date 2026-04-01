@@ -123,6 +123,20 @@
         .bkey.k-ping    { background: #6c3bc4 !important; }
 
         .k-disabled { opacity: 0.32; cursor: not-allowed; pointer-events: none; }
+        .k-selected { background: #f59e0b !important; }
+        .bkey.k-selected { background: #b45309 !important; }
+
+        #confirmCard { text-align:center; padding: 10px 16px 4px; }
+        .confirm-note-btn {
+            background: linear-gradient(135deg,#7c3aed,#a855f7);
+            color:#fff; font-size:1.05rem; font-weight:700;
+            padding: 13px 52px; border:none; border-radius:14px;
+            cursor:pointer; box-shadow:0 4px 16px rgba(124,58,237,0.35);
+            transition: transform 0.1s, box-shadow 0.1s;
+            letter-spacing:0.02em;
+        }
+        .confirm-note-btn:active { transform:scale(0.96); box-shadow:0 2px 8px rgba(124,58,237,0.25); }
+        .confirm-note-btn:disabled { opacity:0.45; cursor:not-allowed; }
 
         /* ── Mode cards ── */
         .mode-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
@@ -279,6 +293,11 @@
                 </div>
             </div>
 
+            <!-- Confirm button: notes mode free-play -->
+            <div id="confirmCard" style="display:none;">
+                <button class="confirm-note-btn" id="btnConfirm" onclick="confirmNoteAnswer()">Confirmar nota</button>
+            </div>
+
             <div class="section-card" id="ansCard" style="display:none;">
                 <div class="section-title" id="ansTitle">Elige tu respuesta</div>
                 <div class="ans-grid" id="ansGrid"></div>
@@ -402,6 +421,7 @@ let G = {
     phase: 'lobby',   // lobby | playing | answered | gameover
     question: null,
     answered: false,
+    pendingNote: null,   // for notes free-play mode
 };
 
 // ══════════════════════════════════════════════════════════
@@ -453,13 +473,14 @@ async function playChord(rootNote, type) {
 
 async function playInterval(rootNote, semitones) {
     await ensureAudio();
-    const rootMidi  = noteToMidi(rootNote);
+    const rootMidi   = noteToMidi(rootNote);
     const targetMidi = rootMidi + semitones;
     const targetNote = NOTE_NAMES[targetMidi%12] + (Math.floor(targetMidi/12)-1);
+    const expertIntervals = G.mode === 'intervals' && G.diff === 'expert';
     synth.triggerAttackRelease(rootNote, '0.5');
     setTimeout(async () => {
         synth.triggerAttackRelease(targetNote, '0.6');
-        pingKey('piano2', targetNote, 'k-ping', 350);
+        if (!expertIntervals) pingKey('piano2', targetNote, 'k-ping', 350);
     }, 600);
     pingKey('piano2', rootNote, 'k-ping', 350);
 }
@@ -676,6 +697,7 @@ async function startGame() {
     const cfg = CFG[G.diff];
     G.lives = cfg.lives; G.score = 0; G.streak = 0; G.maxStreak = 0;
     G.qTotal = 0; G.qCorrect = 0; G.phase = 'playing'; G.answered = false;
+    G.pendingNote = null;
     recentKeys = [];
 
     // Build game piano
@@ -695,7 +717,9 @@ async function startGame() {
     document.getElementById('navBackLabel').textContent = 'Juegos';
 
     document.getElementById('btnStart').style.display  = 'none';
-    document.getElementById('btnListen').style.display = 'flex';
+    // En notas nivel medio/experto no hay botón de repetir (mayor dificultad)
+    const showListen = !(G.mode === 'notes' && G.diff !== 'beginner');
+    document.getElementById('btnListen').style.display = showListen ? 'flex' : 'none';
     document.getElementById('btnNext').style.display   = 'none';
     document.getElementById('btnRetry').style.display  = 'none';
 
@@ -705,6 +729,8 @@ async function startGame() {
 
 async function newQuestion() {
     G.answered = false;
+    G.pendingNote = null;
+    document.getElementById('confirmCard').style.display = 'none';
     G.question = makeQuestion();
     G.qTotal++;
 
@@ -721,7 +747,7 @@ async function newQuestion() {
     const ansCard = document.getElementById('ansCard');
     if (G.mode === 'notes') {
         ansCard.style.display = 'none';
-        document.getElementById('pianoHint').textContent = 'Toca la nota correcta en el teclado';
+        document.getElementById('pianoHint').textContent = 'Toca el piano libremente · confirma tu respuesta';
     } else if (G.mode === 'intervals') {
         if (G.diff === 'expert') {
             // Expert: answer via keyboard
@@ -789,16 +815,12 @@ function handleKeyClick(note, midi) {
     const q = G.question;
 
     if (G.mode === 'notes') {
-        const correct = note === q.note;
-        markAnswer(correct, q.note);
-        if (correct) {
-            setKeyState('piano2', note, 'k-correct');
-        } else {
-            setKeyState('piano2', note, 'k-wrong');
-            setKeyState('piano2', q.note, 'k-reveal');
-        }
+        // Free-play: highlight the selected note, wait for Confirm
+        if (G.pendingNote) setKeyState('piano2', G.pendingNote, null, true);
+        G.pendingNote = note;
+        setKeyState('piano2', note, 'k-selected');
         ensureAudio().then(() => synth?.triggerAttackRelease(note, '0.4'));
-        scrollPianoToNote('piano2', q.note);
+        document.getElementById('confirmCard').style.display = 'block';
     }
 
     if (G.mode === 'intervals' && G.diff === 'expert') {
@@ -831,6 +853,24 @@ function handleKeyClick(note, midi) {
             pingKey('piano2', note, 'k-ping', 280);
         });
     }
+}
+
+function confirmNoteAnswer() {
+    if (!G.pendingNote || G.answered || G.phase !== 'playing') return;
+    const note = G.pendingNote;
+    const q = G.question;
+    const correct = note === q.note;
+    setKeyState('piano2', note, null, true);   // clear k-selected
+    markAnswer(correct, q.note);
+    if (correct) {
+        setKeyState('piano2', note, 'k-correct');
+    } else {
+        setKeyState('piano2', note, 'k-wrong');
+        setKeyState('piano2', q.note, 'k-reveal');
+    }
+    scrollPianoToNote('piano2', q.note);
+    document.getElementById('confirmCard').style.display = 'none';
+    G.pendingNote = null;
 }
 
 function checkIntervalAnswer(selected) {
