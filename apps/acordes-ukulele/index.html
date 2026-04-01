@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acordes Ukulele - MusicTools</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="../../shared/style.css">
+    <style>
+        body { display: flex; justify-content: center; align-items: flex-start; }
+
+        .display-section {
+            background: linear-gradient(135deg, #a18cd1, #fbc2eb);
+            color: #1a1a2e;
+        }
+        .display-section .nav-back { color: rgba(0,0,0,0.55); }
+        .display-section .nav-back:hover { background: rgba(0,0,0,0.08); color: #1a1a2e; }
+
+        .chord-header {
+            display: flex; align-items: baseline;
+            justify-content: center; gap: 6px; margin: 8px 0 2px;
+        }
+        .chord-name-big { font-size: 58px; font-weight: 800; line-height: 1; color: #1a1a2e; }
+        .chord-type-sup { font-size: 20px; font-weight: 600; color: rgba(0,0,0,0.55); align-self: flex-start; margin-top: 10px; }
+        .chord-notes-row { font-size: 13px; opacity: 0.6; margin-bottom: 6px; }
+
+        .diagram-wrap { display: flex; justify-content: center; padding: 8px 0 4px; }
+        canvas#chordCanvas { display: block; }
+
+        @keyframes strumPulse {
+            0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); }
+        }
+        .btn-strum.strumming { animation: strumPulse 0.25s ease; }
+
+        .root-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+        }
+        .root-btn {
+            padding: 8px 2px; border: 1.5px solid #eee; border-radius: 8px;
+            background: white; font-size: 12px; font-weight: 700;
+            cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s;
+        }
+        .root-btn:hover  { border-color: #a18cd1; color: #a18cd1; }
+        .root-btn.active { background: #a18cd1; border-color: #a18cd1; color: white; }
+
+        .type-chip {
+            padding: 7px 13px; border-radius: 20px; border: 1.5px solid #ddd;
+            background: white; font-size: 12px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .type-chip:hover  { border-color: #a18cd1; color: #a18cd1; }
+        .type-chip.active { background: #a18cd1; border-color: #a18cd1; color: white; }
+
+        .note-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .note-pill {
+            padding: 5px 11px; border-radius: 20px; font-size: 13px; font-weight: 700;
+            background: #f3e8ff; color: #7c3aed;
+        }
+        .note-pill.root { background: #a18cd1; color: white; }
+
+        .btn-strum {
+            background: linear-gradient(135deg, #a18cd1, #fbc2eb);
+            color: #1a1a2e; font-weight: 800; font-size: 15px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="app-card">
+
+    <div class="display-section" style="padding-top:10px;">
+        <div class="app-nav" style="background:none; padding:0 4px 6px;">
+            <a class="nav-back" href="../../index.html">
+                <i class="ti ti-chevron-left"></i> MusicTools
+            </a>
+        </div>
+        <div class="chord-header">
+            <div class="chord-name-big" id="dispName">Am</div>
+            <div class="chord-type-sup" id="dispType">menor</div>
+        </div>
+        <div class="chord-notes-row" id="dispNotes">La · Do · Mi</div>
+    </div>
+
+    <div class="config-body">
+
+        <div class="section-card" style="padding:12px 8px;">
+            <div class="section-title" style="padding-left:8px;">Diagrama</div>
+            <div class="diagram-wrap">
+                <canvas id="chordCanvas" width="200" height="270"></canvas>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Notas</div>
+            <div class="note-pills" id="notePills"></div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Tipo de acorde</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;" id="typeFilter">
+                <button class="type-chip active" onclick="setType('major',this)">Mayor</button>
+                <button class="type-chip" onclick="setType('minor',this)">Menor</button>
+                <button class="type-chip" onclick="setType('7',this)">7ª Dom.</button>
+                <button class="type-chip" onclick="setType('m7',this)">m7</button>
+                <button class="type-chip" onclick="setType('maj7',this)">Maj7</button>
+                <button class="type-chip" onclick="setType('sus2',this)">Sus2</button>
+                <button class="type-chip" onclick="setType('sus4',this)">Sus4</button>
+                <button class="type-chip" onclick="setType('dim',this)">Dim</button>
+                <button class="type-chip" onclick="setType('aug',this)">Aug</button>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Nota raíz</div>
+            <div class="root-grid" id="rootGrid"></div>
+        </div>
+
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-strum" id="strumBtn" onclick="strumChord()">
+            <i class="ti ti-music"></i> Rasguear acorde
+        </button>
+    </div>
+</div>
+
+<script src="../../shared/audio-utils.js"></script>
+<script>
+// ──────────────────────────────────────────────
+//  CONSTANTES
+// ──────────────────────────────────────────────
+const NOTE_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_ES = ['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+
+// Ukulele afinación estándar (soprano/concert): G4, C4, E4, A4
+// Índice 0 = cuerda 4 (G, la más gruesa/grave visualmente arriba)
+// Índice 3 = cuerda 1 (A, la más aguda)
+const OPEN_MIDI = [67, 60, 64, 69]; // G4, C4, E4, A4
+
+const CHORD_INTERVALS = {
+    major: [0,4,7],
+    minor: [0,3,7],
+    '7':   [0,4,7,10],
+    m7:    [0,3,7,10],
+    maj7:  [0,4,7,11],
+    sus2:  [0,2,7],
+    sus4:  [0,5,7],
+    dim:   [0,3,6],
+    aug:   [0,4,8],
+};
+
+const TYPE_LABELS = {
+    major:'mayor', minor:'menor', '7':'7ª', m7:'m7', maj7:'maj7',
+    sus2:'sus2', sus4:'sus4', dim:'dim', aug:'aug+'
+};
+
+// ──────────────────────────────────────────────
+//  SHAPES DE UKULELE
+//  frets: [str4(G4), str3(C4), str2(E4), str1(A4)]
+//  -1=muda, 0=al aire, n=traste
+// ──────────────────────────────────────────────
+const SHAPES = {
+    // ── MAYOR ──
+    'C_major':  {frets:[0,0,0,3], baseFret:1, barre:null},
+    'D_major':  {frets:[2,2,2,0], baseFret:1, barre:{fret:2,from:0,to:2}},
+    'E_major':  {frets:[4,4,4,2], baseFret:2, barre:{fret:2,from:3,to:3}},
+    'F_major':  {frets:[2,0,1,0], baseFret:1, barre:null},
+    'G_major':  {frets:[0,2,3,2], baseFret:1, barre:null},
+    'A_major':  {frets:[2,1,0,0], baseFret:1, barre:null},
+    'Bb_major': {frets:[3,2,1,1], baseFret:1, barre:{fret:1,from:2,to:3}},
+    'B_major':  {frets:[4,3,2,2], baseFret:2, barre:{fret:2,from:2,to:3}},
+    // ── MENOR ──
+    'C_minor':  {frets:[0,3,3,3], baseFret:1, barre:{fret:3,from:1,to:3}},
+    'D_minor':  {frets:[2,2,1,0], baseFret:1, barre:null},
+    'E_minor':  {frets:[0,4,3,2], baseFret:1, barre:null},
+    'F_minor':  {frets:[1,0,1,3], baseFret:1, barre:null},
+    'G_minor':  {frets:[0,2,3,1], baseFret:1, barre:null},
+    'A_minor':  {frets:[2,0,0,0], baseFret:1, barre:null},
+    'B_minor':  {frets:[4,2,2,2], baseFret:2, barre:{fret:2,from:1,to:3}},
+    // ── 7ª DOMINANTE ──
+    'C_7':      {frets:[0,0,0,1], baseFret:1, barre:null},
+    'D_7':      {frets:[2,2,2,3], baseFret:1, barre:{fret:2,from:0,to:2}},
+    'E_7':      {frets:[1,2,0,2], baseFret:1, barre:null},
+    'F_7':      {frets:[2,3,1,3], baseFret:1, barre:null},
+    'G_7':      {frets:[0,2,1,2], baseFret:1, barre:null},
+    'A_7':      {frets:[0,1,0,0], baseFret:1, barre:null},
+    'B_7':      {frets:[2,3,2,2], baseFret:2, barre:null},
+    // ── m7 ──
+    'A_m7':     {frets:[0,0,0,0], baseFret:1, barre:null},
+    'D_m7':     {frets:[2,2,1,3], baseFret:1, barre:null},
+    'E_m7':     {frets:[0,2,0,2], baseFret:1, barre:null},
+    'G_m7':     {frets:[0,2,1,1], baseFret:1, barre:{fret:1,from:2,to:3}},
+    'C_m7':     {frets:[3,3,3,3], baseFret:3, barre:{fret:3,from:0,to:3}},
+    // ── Maj7 ──
+    'C_maj7':   {frets:[0,0,0,2], baseFret:1, barre:null},
+    'F_maj7':   {frets:[2,4,1,3], baseFret:1, barre:null},
+    'G_maj7':   {frets:[0,2,2,2], baseFret:1, barre:{fret:2,from:1,to:3}},
+    'A_maj7':   {frets:[1,1,0,0], baseFret:1, barre:null},
+    // ── Sus2 ──
+    'C_sus2':   {frets:[0,2,3,3], baseFret:1, barre:{fret:3,from:2,to:3}},
+    'D_sus2':   {frets:[2,2,0,0], baseFret:1, barre:null},
+    'G_sus2':   {frets:[0,2,3,0], baseFret:1, barre:null},
+    // ── Sus4 ──
+    'C_sus4':   {frets:[0,0,1,3], baseFret:1, barre:null},
+    'D_sus4':   {frets:[0,2,3,0], baseFret:1, barre:null},
+    'G_sus4':   {frets:[0,2,3,3], baseFret:1, barre:null},
+    // ── Dim ──
+    'A_dim':    {frets:[2,3,2,3], baseFret:1, barre:null},
+    'B_dim':    {frets:[0,1,0,1], baseFret:1, barre:null},
+    'C_dim':    {frets:[1,2,1,2], baseFret:1, barre:null},
+    'D_dim':    {frets:[1,0,1,0], baseFret:1, barre:null},
+    'E_dim':    {frets:[0,1,3,1], baseFret:1, barre:null},
+    'F_dim':    {frets:[1,2,4,2], baseFret:1, barre:null},
+    'G_dim':    {frets:[0,2,1,2], baseFret:1, barre:null},
+    // ── Aug ──
+    'C_aug':    {frets:[1,0,0,3], baseFret:1, barre:null},
+    'D_aug':    {frets:[3,2,2,1], baseFret:1, barre:null},
+    'E_aug':    {frets:[1,0,0,3], baseFret:1, barre:null},
+    'F_aug':    {frets:[2,1,1,0], baseFret:1, barre:null},
+    'G_aug':    {frets:[0,3,3,2], baseFret:1, barre:null},
+    'A_aug':    {frets:[2,1,1,4], baseFret:1, barre:null},
+};
+
+// Generador barre para acordes sin forma predefinida
+function buildBarreShape(rootIdx, type) {
+    // Forma basada en C (raíz en cuerda 3 al fret 0+diferencia)
+    const cFret = ((rootIdx - 0) % 12 + 12) % 12 || 12;
+    const shapes = {
+        major: [cFret-1<0?0:cFret-1, cFret, cFret, cFret+3],
+        minor: [cFret-1<0?0:cFret-1, cFret, cFret-1<0?0:cFret-1, cFret+3],
+        '7':   [cFret-1<0?0:cFret-1, cFret, cFret, cFret+1],
+        m7:    [cFret-1<0?0:cFret-1, cFret, cFret, cFret+1],
+        maj7:  [cFret-1<0?0:cFret-1, cFret, cFret, cFret+2],
+        sus2:  [cFret-1<0?0:cFret-1, cFret, cFret-1<0?0:cFret-1, cFret+3],
+        sus4:  [cFret-1<0?0:cFret-1, cFret, cFret+1, cFret+3],
+        dim:   [cFret-1<0?0:cFret-1, cFret, cFret-2<0?0:cFret-2, cFret+2],
+        aug:   [cFret+1, cFret, cFret, cFret+3],
+    };
+    const f = shapes[type] ? Math.min(...shapes[type].filter(x=>x>=0)) : 1;
+    return { frets: shapes[type] || shapes.major, baseFret: Math.max(1,f), barre: null };
+}
+
+function getShape(rootIdx, type) {
+    const key = NOTE_EN[rootIdx] + '_' + type;
+    // Intentar con bemol también (para Bb, Eb, etc.)
+    const keyFlat = (['Bb','Eb','Ab','Db','Gb'][
+        [10,3,8,1,6].indexOf(rootIdx)
+    ] || '') + '_' + type;
+    return SHAPES[key] || SHAPES[keyFlat] || buildBarreShape(rootIdx, type);
+}
+
+// ──────────────────────────────────────────────
+//  ESTADO
+// ──────────────────────────────────────────────
+let rootIdx = 9;    // La
+let chordType = 'minor';
+
+// ──────────────────────────────────────────────
+//  AUDIO
+// ──────────────────────────────────────────────
+let plucks = null;
+
+function initAudio() {
+    if (plucks) return;
+    const verb = new Tone.Freeverb({ roomSize:0.2, dampening:3000, wet:0.12 }).toDestination();
+    const eq   = new Tone.EQ3({ low:3, mid:1, high:-4,
+                                lowFrequency:400, highFrequency:2800 }).connect(verb);
+    plucks = Array.from({length:4}, () =>
+        new Tone.PluckSynth({ attackNoise:0.5, dampening:4500, resonance:0.98 }).connect(eq)
+    );
+}
+
+function midiToNoteName(midi) {
+    return NOTE_EN[midi % 12] + (Math.floor(midi / 12) - 1);
+}
+
+async function strumChord() {
+    if (Tone.context.state !== 'running') await Tone.context.resume();
+    await Tone.start();
+    initAudio();
+
+    const shape = getShape(rootIdx, chordType);
+    const btn   = document.getElementById('strumBtn');
+    btn.classList.add('strumming');
+    setTimeout(() => btn.classList.remove('strumming'), 260);
+
+    shape.frets.forEach((fret, s) => {
+        if (fret < 0) return;
+        const note = midiToNoteName(OPEN_MIDI[s] + fret);
+        setTimeout(() => plucks[s].triggerAttack(note), s * 50);
+    });
+}
+
+// ──────────────────────────────────────────────
+//  CANVAS — DIAGRAMA (4 cuerdas)
+// ──────────────────────────────────────────────
+const CANVAS_W  = 200;
+const CANVAS_H  = 270;
+const STR_LEFT  = 30;
+const STR_RIGHT = 170;
+const NUT_Y     = 62;
+const FRET_H    = 42;
+const FRET_COUNT = 4;
+const STR_GAP   = (STR_RIGHT - STR_LEFT) / 3;  // 4 cuerdas → 3 gaps
+const MARKER_Y  = 36;
+const DOT_R     = 11;
+
+function strX(s) { return STR_LEFT + s * STR_GAP; }
+function fretLineY(f) { return NUT_Y + f * FRET_H; }
+function dotCenterY(f) { return fretLineY(f - 1) + FRET_H / 2; }
+
+function drawDiagram(shape) {
+    const canvas = document.getElementById('chordCanvas');
+    const ctx    = canvas.getContext('2d');
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+    const { frets, baseFret, barre } = shape;
+
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    if (baseFret > 1) {
+        ctx.fillStyle = '#888';
+        ctx.font = 'bold 13px Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(baseFret + 'fr', STR_RIGHT + 8, NUT_Y + FRET_H / 2);
+    }
+
+    ctx.strokeStyle = baseFret === 1 ? '#1a1a2e' : '#bbb';
+    ctx.lineWidth   = baseFret === 1 ? 7 : 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(strX(0), NUT_Y); ctx.lineTo(strX(3), NUT_Y);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+    for (let f = 1; f <= FRET_COUNT; f++) {
+        ctx.beginPath();
+        ctx.moveTo(strX(0), fretLineY(f)); ctx.lineTo(strX(3), fretLineY(f));
+        ctx.stroke();
+    }
+
+    for (let s = 0; s < 4; s++) {
+        ctx.strokeStyle = '#c0c0c0';
+        ctx.lineWidth   = 1 + (3 - s) * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(strX(s), NUT_Y); ctx.lineTo(strX(s), fretLineY(FRET_COUNT));
+        ctx.stroke();
+    }
+
+    if (barre) {
+        const relFret = barre.fret - baseFret + 1;
+        if (relFret >= 1 && relFret <= FRET_COUNT) {
+            const by  = dotCenterY(relFret);
+            const bx1 = strX(barre.from);
+            const bx2 = strX(barre.to);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            ctx.roundRect(bx1 - DOT_R * 0.7, by - DOT_R, (bx2 - bx1) + DOT_R * 1.4, DOT_R * 2, DOT_R);
+            ctx.fill();
+        }
+    }
+
+    frets.forEach((fret, s) => {
+        const x = strX(s);
+        if (fret === -1) {
+            ctx.strokeStyle = '#e53935'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x-7, MARKER_Y-7); ctx.lineTo(x+7, MARKER_Y+7);
+            ctx.moveTo(x+7, MARKER_Y-7); ctx.lineTo(x-7, MARKER_Y+7);
+            ctx.stroke(); ctx.lineCap = 'butt';
+        } else if (fret === 0) {
+            ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, MARKER_Y, 8, 0, Math.PI*2); ctx.stroke();
+        } else {
+            const relFret = fret - baseFret + 1;
+            if (relFret < 1 || relFret > FRET_COUNT) return;
+            if (barre && fret === barre.fret && s >= barre.from && s <= barre.to) return;
+            const dy = dotCenterY(relFret);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath(); ctx.arc(x, dy, DOT_R, 0, Math.PI*2); ctx.fill();
+        }
+    });
+
+    const STRING_NAMES = ['G','C','E','A'];
+    ctx.fillStyle = '#aaa'; ctx.font = '11px Segoe UI, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    STRING_NAMES.forEach((n, s) => ctx.fillText(n, strX(s), fretLineY(FRET_COUNT) + 10));
+}
+
+// ──────────────────────────────────────────────
+//  RENDER UI
+// ──────────────────────────────────────────────
+function renderRootGrid() {
+    const grid = document.getElementById('rootGrid');
+    grid.innerHTML = '';
+    NOTE_ES.forEach((name, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'root-btn' + (i === rootIdx ? ' active' : '');
+        btn.textContent = name;
+        btn.onclick = () => {
+            rootIdx = i;
+            document.querySelectorAll('.root-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            update();
+        };
+        grid.appendChild(btn);
+    });
+}
+
+function setType(type, btn) {
+    chordType = type;
+    document.querySelectorAll('.type-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    update();
+}
+
+function update() {
+    const shape     = getShape(rootIdx, chordType);
+    const intervals = CHORD_INTERVALS[chordType];
+    const noteNames = intervals.map(i => NOTE_ES[(rootIdx + i) % 12]);
+
+    const suffix = chordType === 'minor' ? 'm'
+                 : chordType === '7'     ? '7'
+                 : chordType === 'm7'    ? 'm7'
+                 : chordType === 'maj7'  ? 'maj7'
+                 : chordType === 'sus2'  ? 'sus2'
+                 : chordType === 'sus4'  ? 'sus4'
+                 : chordType === 'dim'   ? '°'
+                 : chordType === 'aug'   ? '+'
+                 : '';
+    document.getElementById('dispName').textContent  = NOTE_EN[rootIdx] + suffix;
+    document.getElementById('dispType').textContent  = TYPE_LABELS[chordType];
+    document.getElementById('dispNotes').textContent = noteNames.join(' · ');
+
+    const pillsEl = document.getElementById('notePills');
+    pillsEl.innerHTML = '';
+    noteNames.forEach((n, i) => {
+        const p = document.createElement('div');
+        p.className = 'note-pill' + (i === 0 ? ' root' : '');
+        p.textContent = n;
+        pillsEl.appendChild(p);
+    });
+
+    drawDiagram(shape);
+}
+
+renderRootGrid();
+update();
+</script>
+</body>
+</html>

@@ -31,13 +31,14 @@ body {
     background: white;
     width: 100%;
     max-width: 500px;
-    min-height: 95vh;
+    height: 100vh;
+    height: 100svh; /* soporte dinámico en móvil (barra de browser incluida) */
     border-radius: var(--card-radius);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     box-shadow: var(--shadow);
-    margin: 2.5vh auto;
+    margin: 0 auto;
 }
 
 /* ---- Barra de navegación superior ---- */

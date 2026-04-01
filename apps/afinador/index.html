@@ -9,30 +9,25 @@
         body { display: flex; justify-content: center; align-items: flex-start; }
 
         .display-section {
-            background: linear-gradient(135deg, #11998e, #38ef7d);
+            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
+            transition: background 0.4s ease;
         }
+        .display-section.in-tune   { background: linear-gradient(135deg, #11998e, #38ef7d); }
+        .display-section.close     { background: linear-gradient(135deg, #f7971e, #ffd200); }
+        .display-section.out-tune  { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
+        .display-section.listening { background: linear-gradient(135deg, #2c3e50, #4a6fa5); }
 
         .tuner-note {
             font-size: 90px;
             font-weight: 800;
             line-height: 1;
-            margin: 12px 0 4px;
+            margin: 8px 0 4px;
             letter-spacing: -2px;
         }
-
-        .tuner-freq {
-            font-size: 18px;
-            opacity: 0.85;
-            font-weight: 300;
-        }
+        .tuner-freq { font-size: 18px; opacity: 0.85; font-weight: 300; }
 
         /* Medidor de centavos */
-        .cents-bar-wrap {
-            margin: 16px auto 4px;
-            width: 85%;
-            position: relative;
-        }
-
+        .cents-bar-wrap { margin: 14px auto 4px; width: 85%; position: relative; }
         .cents-bar-bg {
             height: 10px;
             background: rgba(255,255,255,0.25);
@@ -40,19 +35,17 @@
             position: relative;
             overflow: hidden;
         }
-
         .cents-bar-fill {
             position: absolute;
             height: 100%;
-            width: 4px;
+            width: 6px;
             background: white;
             border-radius: 4px;
             top: 0;
             left: 50%;
             transform: translateX(-50%);
-            transition: left 0.1s ease;
+            transition: left 0.08s ease;
         }
-
         .cents-center-mark {
             position: absolute;
             top: -3px;
@@ -63,7 +56,6 @@
             background: rgba(255,255,255,0.6);
             border-radius: 1px;
         }
-
         .cents-labels {
             display: flex;
             justify-content: space-between;
@@ -72,35 +64,124 @@
             margin-top: 4px;
             color: white;
         }
+        .cents-val { text-align: center; }
 
         .status-dot {
-            width: 12px;
-            height: 12px;
+            width: 12px; height: 12px;
             border-radius: 50%;
             background: rgba(255,255,255,0.4);
             display: inline-block;
             margin-right: 6px;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
-        .status-dot.active { background: white; box-shadow: 0 0 8px white; }
-
-        .btn-listen {
-            background: linear-gradient(135deg, #11998e, #38ef7d);
-            color: white;
+        .status-dot.active {
+            background: white;
+            box-shadow: 0 0 8px white;
+            animation: pulse 1.2s ease-in-out infinite;
         }
-        .btn-stop-tuner {
-            background: #ff4757;
-            color: white;
-            display: none;
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 4px white; }
+            50%       { box-shadow: 0 0 12px white; }
         }
 
-        /* Referencia de notas */
+        /* Selector de instrumento */
+        .instrument-scroll {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+        }
+        .instrument-scroll::-webkit-scrollbar { display: none; }
+
+        .instrument-pill {
+            flex-shrink: 0;
+            padding: 7px 14px;
+            border-radius: 20px;
+            border: 2px solid #ddd;
+            background: #f5f5f5;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .instrument-pill.active {
+            background: #11998e;
+            color: white;
+            border-color: #11998e;
+        }
+
+        /* Select de afinación */
+        .tuning-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 500;
+            background: white;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+        }
+        .tuning-select:focus { outline: none; border-color: #11998e; }
+
+        /* Grid de cuerdas */
+        .strings-grid {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .string-btn {
+            flex: 1;
+            min-width: 48px;
+            padding: 10px 4px 8px;
+            border-radius: 10px;
+            border: 2px solid #ddd;
+            background: #f5f5f5;
+            font-family: inherit;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .string-btn .string-note {
+            display: block;
+            font-size: 20px;
+            font-weight: 800;
+            line-height: 1;
+            color: #222;
+        }
+        .string-btn .string-label {
+            display: block;
+            font-size: 10px;
+            color: #888;
+            margin-top: 3px;
+            font-weight: 500;
+        }
+        .string-btn:hover { border-color: #11998e; background: #e0f7f4; }
+        .string-btn.selected {
+            background: #11998e;
+            border-color: #11998e;
+        }
+        .string-btn.selected .string-note,
+        .string-btn.selected .string-label { color: white; }
+        .string-btn.auto-highlight {
+            border-color: #11998e;
+            background: #e0f7f4;
+        }
+
+        /* Grid de referencia cromática */
         .note-ref-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 6px;
         }
-
         .note-ref-btn {
             padding: 8px 4px;
             font-size: 13px;
@@ -113,38 +194,31 @@
             transition: all 0.15s;
             text-align: center;
         }
-
         .note-ref-btn:hover { background: #e0f7f4; border-color: #11998e; }
-        .note-ref-btn.selected { background: #11998e; color: white; border-color: #11998e; }
+        .note-ref-btn.playing { background: #11998e; color: white; border-color: #11998e; }
 
-        .coming-soon-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 20px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            margin-top: 4px;
-        }
+        /* Botones de acción */
+        .btn-listen { background: linear-gradient(135deg, #11998e, #38ef7d); color: white; }
+        .btn-stop   { background: #ff4757; color: white; }
     </style>
 </head>
 <body>
 
 <div class="app-card">
 
-    <div class="display-section" style="padding-top:10px;">
+    <!-- ── Sección de display ── -->
+    <div class="display-section" id="displaySection" style="padding-top:10px;">
         <div class="app-nav" style="background:none; padding: 0 4px 8px;">
             <a class="nav-back" href="../../index.html">
-                <i class="ti ti-chevron-left"></i>
-                MusicTools
+                <i class="ti ti-chevron-left"></i> MusicTools
             </a>
         </div>
-        <div style="font-size:15px; opacity:0.85;">
+
+        <div style="font-size:15px; opacity:0.9;">
             <span class="status-dot" id="statusDot"></span>
             <span id="statusText">Inactivo</span>
         </div>
+
         <div class="tuner-note" id="tunerNote">--</div>
         <div class="tuner-freq" id="tunerFreq">--- Hz</div>
 
@@ -153,47 +227,53 @@
                 <div class="cents-bar-fill" id="centsBar"></div>
                 <div class="cents-center-mark"></div>
             </div>
-            <div class="cents-labels"><span>-50¢</span><span>0</span><span>+50¢</span></div>
+            <div class="cents-labels">
+                <span>-50¢</span>
+                <span class="cents-val" id="centsVal">—</span>
+                <span>+50¢</span>
+            </div>
         </div>
-
-        <div class="coming-soon-badge">Próximamente</div>
     </div>
 
+    <!-- ── Cuerpo de configuración ── -->
     <div class="config-body">
+
+        <!-- Instrumento -->
+        <div class="section-card">
+            <div class="section-title">Instrumento</div>
+            <div class="instrument-scroll" id="instrumentSelector"></div>
+        </div>
+
+        <!-- Afinación -->
+        <div class="section-card">
+            <div class="section-title">Afinación</div>
+            <select class="tuning-select" id="tuningSelect" onchange="selectTuning(this.value)"></select>
+        </div>
+
+        <!-- Cuerdas -->
+        <div class="section-card">
+            <div class="section-title" id="stringsTitle">Cuerdas</div>
+            <p style="font-size:12px; color:#888; margin:0 0 10px;">
+                Toca una cuerda para afinarse en ella. Con el micrófono activo, se detecta automáticamente.
+            </p>
+            <div class="strings-grid" id="stringsGrid"></div>
+        </div>
+
+        <!-- Referencia cromática -->
         <div class="section-card">
             <div class="section-title">Tono de referencia</div>
-            <p style="font-size:13px; color:#666; margin:0 0 12px;">
-                Pulsa cualquier nota para escuchar su tono de referencia mientras afinas.
+            <p style="font-size:12px; color:#888; margin:0 0 10px;">
+                Pulsa cualquier nota para escuchar su tono mientras afinas.
             </p>
-            <div class="note-ref-grid" id="noteRefGrid">
-                <!-- generado por JS -->
-            </div>
+            <div class="note-ref-grid" id="noteRefGrid"></div>
         </div>
 
-        <div class="section-card">
-            <div class="section-title">Afinación estándar</div>
-            <div class="note-ref-grid">
-                <button class="note-ref-btn" onclick="playRef('E2')">E2<br><small style="font-weight:400;font-size:10px;">Cuerda 6</small></button>
-                <button class="note-ref-btn" onclick="playRef('A2')">A2<br><small style="font-weight:400;font-size:10px;">Cuerda 5</small></button>
-                <button class="note-ref-btn" onclick="playRef('D3')">D3<br><small style="font-weight:400;font-size:10px;">Cuerda 4</small></button>
-                <button class="note-ref-btn" onclick="playRef('G3')">G3<br><small style="font-weight:400;font-size:10px;">Cuerda 3</small></button>
-                <button class="note-ref-btn" onclick="playRef('B3')">B3<br><small style="font-weight:400;font-size:10px;">Cuerda 2</small></button>
-                <button class="note-ref-btn" onclick="playRef('E4')">E4<br><small style="font-weight:400;font-size:10px;">Cuerda 1</small></button>
-            </div>
-        </div>
-
-        <div class="section-card" style="background:#fff8e1; border-color:#ffe082;">
-            <div class="section-title" style="color:#f9a825;">En desarrollo</div>
-            <p style="font-size:13px; color:#666; margin:0;">
-                La detección de tono por micrófono estará disponible próximamente.
-                Usará <strong>Web Audio API + FFT</strong> para detectar la nota en tiempo real directamente desde tu dispositivo.
-            </p>
-        </div>
     </div>
 
+    <!-- ── Barra de acción ── -->
     <div class="action-bar">
-        <button class="btn btn-listen" id="listenBtn" onclick="startListening()" disabled>
-            Micrófono (próximamente)
+        <button class="btn btn-listen" id="listenBtn" onclick="toggleListening()">
+            <i class="ti ti-microphone"></i> Activar micrófono
         </button>
     </div>
 </div>
@@ -201,27 +281,423 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 <script src="../../shared/audio-utils.js"></script>
 <script>
-    let refSynth = null;
-
-    async function playRef(note) {
-        await startAudio();
-        if (!refSynth) {
-            refSynth = new Tone.Synth({
-                oscillator: { type: 'triangle' },
-                envelope: { attack: 0.02, decay: 0.1, sustain: 0.8, release: 1.5 }
-            }).toDestination();
+// ══════════════════════════════════════════════
+//  INSTRUMENTOS Y AFINACIONES
+// ══════════════════════════════════════════════
+const INSTRUMENTS = {
+    guitar: {
+        name: 'Guitarra',
+        tunings: {
+            standard: { name: 'Estándar  EADGBE',    notes: ['E2','A2','D3','G3','B3','E4'] },
+            dropD:    { name: 'Drop D',               notes: ['D2','A2','D3','G3','B3','E4'] },
+            dropC:    { name: 'Drop C',               notes: ['C2','G2','C3','F3','A3','D4'] },
+            halfDown: { name: 'Eb  (½ tono bajo)',    notes: ['Eb2','Ab2','Db3','Gb3','Bb3','Eb4'] },
+            fullDown: { name: 'D  (1 tono bajo)',     notes: ['D2','G2','C3','F3','A3','D4'] },
+            openG:    { name: 'Open G  DGDGBD',       notes: ['D2','G2','D3','G3','B3','D4'] },
+            openD:    { name: 'Open D  DADF#AD',      notes: ['D2','A2','D3','F#3','A3','D4'] },
+            openE:    { name: 'Open E  EBE G#BE',     notes: ['E2','B2','E3','G#3','B3','E4'] },
+            openA:    { name: 'Open A  EAE A C#E',    notes: ['E2','A2','E3','A3','C#4','E4'] },
+            dadgad:   { name: 'DADGAD',               notes: ['D2','A2','D3','G3','A3','D4'] },
         }
-        refSynth.triggerAttackRelease(note, '2n');
+    },
+    bass: {
+        name: 'Bajo',
+        tunings: {
+            standard: { name: 'Estándar  EADG',       notes: ['E1','A1','D2','G2'] },
+            dropD:    { name: 'Drop D',                notes: ['D1','A1','D2','G2'] },
+            dropC:    { name: 'Drop C',                notes: ['C1','G1','C2','F2'] },
+            halfDown: { name: 'Eb  (½ tono bajo)',     notes: ['Eb1','Ab1','Db2','Gb2'] },
+            fiveStr:  { name: '5 cuerdas  BEADG',     notes: ['B0','E1','A1','D2','G2'] },
+        }
+    },
+    ukulele: {
+        name: 'Ukulele',
+        tunings: {
+            standard: { name: 'Soprano/Concert  GCEA', notes: ['G4','C4','E4','A4'] },
+            lowG:     { name: 'Low G',                 notes: ['G3','C4','E4','A4'] },
+            dTuning:  { name: 'D  ADF#B',             notes: ['A4','D4','F#4','B4'] },
+            baritone: { name: 'Barítono  DGBE',        notes: ['D3','G3','B3','E4'] },
+        }
+    },
+    violin: {
+        name: 'Violín',
+        tunings: {
+            standard: { name: 'Estándar  GDAE', notes: ['G3','D4','A4','E5'] },
+        }
+    },
+    viola: {
+        name: 'Viola',
+        tunings: {
+            standard: { name: 'Estándar  CGDA', notes: ['C3','G3','D4','A4'] },
+        }
+    },
+    cello: {
+        name: 'Cello',
+        tunings: {
+            standard: { name: 'Estándar  CGDA', notes: ['C2','G2','D3','A3'] },
+        }
+    },
+    mandolin: {
+        name: 'Mandolina',
+        tunings: {
+            standard: { name: 'Estándar  GDAE', notes: ['G3','D4','A4','E5'] },
+        }
+    },
+    banjo: {
+        name: 'Banjo',
+        tunings: {
+            openG:   { name: '5 cuerdas Open G', notes: ['G4','D3','G3','B3','D4'] },
+            doubleC: { name: 'Double C',         notes: ['G4','C3','G3','C4','D4'] },
+            openD:   { name: '5 cuerdas Open D', notes: ['F#4','D3','F#3','A3','D4'] },
+            fourStr: { name: '4 cuerdas  CGDA',  notes: ['C3','G3','D4','A4'] },
+        }
+    },
+};
 
-        // Highlight botón seleccionado
-        document.querySelectorAll('.note-ref-btn').forEach(b => b.classList.remove('selected'));
-        event.currentTarget.classList.add('selected');
-        setTimeout(() => event.currentTarget.classList.remove('selected'), 800);
+// Nombres de notas para display (sharps)
+const NOTE_DISPLAY = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+// Map de notas → semitono MIDI (acepta sostenidos y bemoles)
+const NOTE_TO_PC = {
+    'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,
+    'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11
+};
+
+// ══════════════════════════════════════════════
+//  ESTADO
+// ══════════════════════════════════════════════
+let currentInstrument = 'guitar';
+let currentTuning     = 'standard';
+let selectedString    = null;   // índice de cuerda bloqueada (null = auto)
+
+let audioCtx   = null;
+let analyser   = null;
+let mediaStream = null;
+let rafId      = null;
+let isListening = false;
+let lastDetectTime = 0;
+
+let refSynth     = null;
+let playingRefBtn = null;
+
+// ══════════════════════════════════════════════
+//  UTILIDADES DE NOTAS
+// ══════════════════════════════════════════════
+function noteToMidi(noteStr) {
+    const m = noteStr.match(/^([A-G][b#]?)(\d+)$/);
+    if (!m) return null;
+    const pc = NOTE_TO_PC[m[1]];
+    if (pc === undefined) return null;
+    return pc + (parseInt(m[2]) + 1) * 12;
+}
+
+function freqToMidi(freq) {
+    return 69 + 12 * Math.log2(freq / 440);
+}
+
+function midiToDisplayNote(midi) {
+    const r = Math.round(midi);
+    const pc = ((r % 12) + 12) % 12;
+    const oct = Math.floor(r / 12) - 1;
+    return { name: NOTE_DISPLAY[pc], octave: oct, full: NOTE_DISPLAY[pc] + oct };
+}
+
+function noteToFreq(noteStr) {
+    const midi = noteToMidi(noteStr);
+    if (midi === null) return null;
+    return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+// ══════════════════════════════════════════════
+//  AUTOCORRELACIÓN (detección de tono)
+// ══════════════════════════════════════════════
+function autoCorrelate(buffer, sampleRate) {
+    const SIZE = buffer.length;
+
+    // Nivel de señal mínimo
+    let rms = 0;
+    for (let i = 0; i < SIZE; i++) rms += buffer[i] * buffer[i];
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.012) return -1;
+
+    const MAX_LAG = Math.min(Math.ceil(sampleRate / 35), Math.floor(SIZE / 2));
+    const corr = new Float32Array(MAX_LAG + 1);
+    const len  = SIZE - MAX_LAG;
+
+    for (let lag = 0; lag <= MAX_LAG; lag++) {
+        let s = 0;
+        for (let j = 0; j < len; j++) s += buffer[j] * buffer[j + lag];
+        corr[lag] = s;
     }
 
-    function startListening() {
-        // Placeholder — implementación futura con getUserMedia + AnalyserNode
+    // Primer valle (descenso desde lag=0)
+    let d = 0;
+    while (d < MAX_LAG - 1 && corr[d] > corr[d + 1]) d++;
+
+    // Pico máximo tras el primer valle, en el rango musical (40–4000 Hz)
+    const MIN_LAG = Math.floor(sampleRate / 4000);
+    let maxVal = -Infinity, maxPos = -1;
+    for (let i = Math.max(d, MIN_LAG); i <= MAX_LAG; i++) {
+        if (corr[i] > maxVal) { maxVal = corr[i]; maxPos = i; }
     }
+
+    if (maxPos === -1 || maxVal <= 0) return -1;
+
+    // Interpolación parabólica para mayor precisión
+    let T0 = maxPos;
+    if (maxPos > 0 && maxPos < MAX_LAG) {
+        const y1 = corr[maxPos - 1], y2 = corr[maxPos], y3 = corr[maxPos + 1];
+        const den = 2 * y2 - y1 - y3;
+        if (den > 0) T0 += (y3 - y1) / (2 * den);
+    }
+
+    return sampleRate / T0;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER UI
+// ══════════════════════════════════════════════
+function renderInstruments() {
+    const el = document.getElementById('instrumentSelector');
+    el.innerHTML = Object.entries(INSTRUMENTS).map(([id, inst]) =>
+        `<button class="instrument-pill${id === currentInstrument ? ' active' : ''}"
+                 onclick="selectInstrument('${id}')">${inst.name}</button>`
+    ).join('');
+}
+
+function renderTunings() {
+    const select = document.getElementById('tuningSelect');
+    const tunings = INSTRUMENTS[currentInstrument].tunings;
+    select.innerHTML = Object.entries(tunings).map(([id, t]) =>
+        `<option value="${id}"${id === currentTuning ? ' selected' : ''}>${t.name}</option>`
+    ).join('');
+}
+
+function renderStrings() {
+    const grid  = document.getElementById('stringsGrid');
+    const title = document.getElementById('stringsTitle');
+    const notes = INSTRUMENTS[currentInstrument].tunings[currentTuning].notes;
+    const n     = notes.length;
+
+    title.textContent = `Cuerdas (${n})`;
+
+    grid.innerHTML = notes.map((note, i) => {
+        const strNum = n - i;
+        const notePart = note.replace(/\d+/, '');   // solo nombre sin octava
+        const isSel   = selectedString === i;
+        return `<button class="string-btn${isSel ? ' selected' : ''}"
+                        id="strBtn${i}"
+                        onclick="selectString(${i})">
+                    <span class="string-note">${notePart}</span>
+                    <span class="string-label">Cuerda ${strNum}</span>
+                </button>`;
+    }).join('');
+}
+
+function renderNoteRefGrid() {
+    const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const octave = 4;
+    document.getElementById('noteRefGrid').innerHTML = notes.map(n =>
+        `<button class="note-ref-btn" onclick="playRef('${n}${octave}',this)">${n}${octave}</button>`
+    ).join('');
+}
+
+// ══════════════════════════════════════════════
+//  EVENTOS DE SELECCIÓN
+// ══════════════════════════════════════════════
+function selectInstrument(id) {
+    currentInstrument = id;
+    currentTuning     = Object.keys(INSTRUMENTS[id].tunings)[0];
+    selectedString    = null;
+    renderInstruments();
+    renderTunings();
+    renderStrings();
+    resetDisplay();
+}
+
+function selectTuning(id) {
+    currentTuning  = id;
+    selectedString = null;
+    renderStrings();
+    resetDisplay();
+}
+
+function selectString(idx) {
+    if (selectedString === idx) {
+        selectedString = null;   // deseleccionar → modo auto
+    } else {
+        selectedString = idx;
+    }
+    renderStrings();
+    // Reproducir el tono de referencia de la cuerda
+    if (selectedString !== null) {
+        const note = INSTRUMENTS[currentInstrument].tunings[currentTuning].notes[selectedString];
+        playRef(note, null);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  AUDIO: MICRÓFONO + DETECCIÓN
+// ══════════════════════════════════════════════
+async function toggleListening() {
+    if (isListening) stopListening();
+    else await startListening();
+}
+
+async function startListening() {
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (e) {
+        alert('No se pudo acceder al micrófono: ' + e.message);
+        return;
+    }
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0.2;
+
+    const source = audioCtx.createMediaStreamSource(mediaStream);
+    source.connect(analyser);
+
+    isListening = true;
+    document.getElementById('listenBtn').textContent = '⏹ Detener micrófono';
+    document.getElementById('listenBtn').className = 'btn btn-stop';
+    document.getElementById('statusDot').classList.add('active');
+    document.getElementById('statusText').textContent = 'Escuchando...';
+    document.getElementById('displaySection').className = 'display-section listening';
+
+    detect();
+}
+
+function stopListening() {
+    isListening = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (audioCtx)    audioCtx.close();
+    mediaStream = audioCtx = analyser = null;
+
+    document.getElementById('listenBtn').innerHTML = '<i class="ti ti-microphone"></i> Activar micrófono';
+    document.getElementById('listenBtn').className = 'btn btn-listen';
+    document.getElementById('statusDot').classList.remove('active');
+    document.getElementById('statusText').textContent = 'Inactivo';
+    resetDisplay();
+}
+
+function detect() {
+    if (!isListening) return;
+    rafId = requestAnimationFrame(detect);
+
+    const now = performance.now();
+    if (now - lastDetectTime < 80) return;   // ~12 fps de detección
+    lastDetectTime = now;
+
+    const buf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buf);
+
+    const freq = autoCorrelate(buf, audioCtx.sampleRate);
+    if (freq === -1) {
+        document.getElementById('statusText').textContent = 'Escuchando...';
+        document.getElementById('tunerNote').textContent = '--';
+        document.getElementById('tunerFreq').textContent = '--- Hz';
+        document.getElementById('centsVal').textContent  = '—';
+        document.getElementById('centsBar').style.left   = '50%';
+        document.getElementById('displaySection').className = 'display-section listening';
+        return;
+    }
+
+    const midiFloat = freqToMidi(freq);
+    const note      = midiToDisplayNote(midiFloat);
+
+    // Determinar cuerda objetivo
+    const tuningNotes = INSTRUMENTS[currentInstrument].tunings[currentTuning].notes;
+    let targetIdx = selectedString;
+    if (targetIdx === null) {
+        // Auto: buscar la cuerda más cercana
+        let minDist = Infinity;
+        tuningNotes.forEach((n, i) => {
+            const m = noteToMidi(n);
+            if (m !== null) {
+                const dist = Math.abs(midiFloat - m);
+                if (dist < minDist) { minDist = dist; targetIdx = i; }
+            }
+        });
+    }
+
+    // Frecuencia objetivo y cents
+    const targetNote = tuningNotes[targetIdx];
+    const targetFreq = noteToFreq(targetNote);
+    const cents      = targetFreq ? 1200 * Math.log2(freq / targetFreq) : 0;
+    const centsClamp = Math.max(-50, Math.min(50, cents));
+    const barPct     = 50 + centsClamp;   // porcentaje left 0-100
+
+    // Clase de color
+    const absCents = Math.abs(cents);
+    let colorClass = 'out-tune';
+    if (absCents <= 5)       colorClass = 'in-tune';
+    else if (absCents <= 15) colorClass = 'close';
+
+    // Actualizar display
+    document.getElementById('tunerNote').textContent  = note.name + note.octave;
+    document.getElementById('tunerFreq').textContent  = freq.toFixed(1) + ' Hz';
+    document.getElementById('centsVal').textContent   = (cents >= 0 ? '+' : '') + cents.toFixed(0) + '¢';
+    document.getElementById('centsBar').style.left    = barPct + '%';
+    document.getElementById('displaySection').className = 'display-section ' + colorClass;
+    document.getElementById('statusText').textContent = colorClass === 'in-tune' ? '¡Afinado!' : 'Detectando...';
+
+    // Resaltar cuerda más cercana (solo en modo auto)
+    if (selectedString === null) {
+        document.querySelectorAll('.string-btn').forEach((b, i) => {
+            b.classList.toggle('auto-highlight', i === targetIdx);
+        });
+    }
+}
+
+// ══════════════════════════════════════════════
+//  TONO DE REFERENCIA
+// ══════════════════════════════════════════════
+async function playRef(note, btn) {
+    await startAudio();   // de audio-utils.js
+
+    if (!refSynth) {
+        refSynth = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.85, release: 2 }
+        }).toDestination();
+    }
+
+    // Quitar clase playing anterior
+    if (playingRefBtn) playingRefBtn.classList.remove('playing');
+
+    refSynth.triggerAttackRelease(note, '2s');
+
+    if (btn) {
+        playingRefBtn = btn;
+        btn.classList.add('playing');
+        setTimeout(() => btn.classList.remove('playing'), 2000);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function resetDisplay() {
+    document.getElementById('tunerNote').textContent  = '--';
+    document.getElementById('tunerFreq').textContent  = '--- Hz';
+    document.getElementById('centsVal').textContent   = '—';
+    document.getElementById('centsBar').style.left    = '50%';
+    document.getElementById('displaySection').className = isListening
+        ? 'display-section listening'
+        : 'display-section';
+}
+
+// ══════════════════════════════════════════════
+//  INICIALIZACIÓN
+// ══════════════════════════════════════════════
+renderInstruments();
+renderTunings();
+renderStrings();
+renderNoteRefGrid();
 </script>
 </body>
 </html>

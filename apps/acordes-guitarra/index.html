@@ -149,6 +149,8 @@
                 <button class="type-chip" onclick="setType('maj7',this)">Maj7</button>
                 <button class="type-chip" onclick="setType('sus2',this)">Sus2</button>
                 <button class="type-chip" onclick="setType('sus4',this)">Sus4</button>
+                <button class="type-chip" onclick="setType('dim',this)">Dim</button>
+                <button class="type-chip" onclick="setType('aug',this)">Aug</button>
             </div>
         </div>
 
@@ -186,10 +188,13 @@ const CHORD_INTERVALS = {
     maj7:  [0,4,7,11],
     sus2:  [0,2,7],
     sus4:  [0,5,7],
+    dim:   [0,3,6],
+    aug:   [0,4,8],
 };
 
 const TYPE_LABELS = {
-    major:'mayor', minor:'menor', '7':'7ª', m7:'m7', maj7:'maj7', sus2:'sus2', sus4:'sus4'
+    major:'mayor', minor:'menor', '7':'7ª', m7:'m7', maj7:'maj7',
+    sus2:'sus2', sus4:'sus4', dim:'dim', aug:'aug+'
 };
 
 // ─────────────────────────────────────────────
@@ -248,6 +253,21 @@ const SHAPES = {
     'D_sus4':    {frets:[-1,-1,0,2,3,3], baseFret:1, barre:null},
     'E_sus4':    {frets:[0,2,2,2,0,0],  baseFret:1, barre:null},
     'G_sus4':    {frets:[3,3,0,0,1,3],  baseFret:1, barre:null},
+    // ── Dim ──
+    'A_dim':     {frets:[-1,0,1,2,1,-1], baseFret:1, barre:null},
+    'B_dim':     {frets:[-1,2,3,4,3,-1], baseFret:2, barre:null},
+    'C_dim':     {frets:[-1,3,4,5,4,3],  baseFret:3, barre:{fret:3,from:1,to:5}},
+    'D_dim':     {frets:[-1,-1,0,1,0,1], baseFret:1, barre:null},
+    'E_dim':     {frets:[0,1,2,3,2,-1],  baseFret:1, barre:null},
+    'F_dim':     {frets:[1,2,3,4,3,1],   baseFret:1, barre:{fret:1,from:0,to:5}},
+    'G_dim':     {frets:[3,4,5,6,5,3],   baseFret:3, barre:{fret:3,from:0,to:5}},
+    // ── Aug ──
+    'C_aug':     {frets:[-1,3,2,1,1,0],  baseFret:1, barre:null},
+    'D_aug':     {frets:[-1,-1,0,3,3,2], baseFret:1, barre:null},
+    'E_aug':     {frets:[0,3,2,1,1,0],   baseFret:1, barre:null},
+    'F_aug':     {frets:[1,4,3,2,2,1],   baseFret:1, barre:{fret:1,from:0,to:5}},
+    'G_aug':     {frets:[3,2,1,0,0,3],   baseFret:1, barre:null},
+    'A_aug':     {frets:[-1,0,3,2,2,1],  baseFret:1, barre:null},
 };
 
 // ─────────────────────────────────────────────
@@ -271,6 +291,8 @@ function buildBarreShape(rootIdx, type) {
             maj7:  [f, f+2, f+1, f+1, f,   f  ],
             sus2:  [f, f+2, f+2, f-1>=0?f-1:f, f, f],
             sus4:  [f, f+2, f+2, f+2, f,   f  ],
+            dim:   [f, f+1, f+2, f+3, f+2, f+1],
+            aug:   [f, f+3, f+2, f+1, f+1, f  ],
         };
         return { frets: shapes[type] || shapes.major, baseFret: f, barre:{fret:f,from:0,to:5} };
     } else {
@@ -282,6 +304,8 @@ function buildBarreShape(rootIdx, type) {
             maj7:  [-1, f, f+2, f+1, f+2, f  ],
             sus2:  [-1, f, f+2, f+2, f-1>=0?f-1:f, f],
             sus4:  [-1, f, f+2, f+3, f+2, f  ],
+            dim:   [-1, f, f+1, f+2, f+1, f  ],
+            aug:   [-1, f, f+3, f+2, f+2, f+1],
         };
         return { frets: shapes[type] || shapes.major, baseFret: f, barre:{fret:f,from:1,to:5} };
     }
@@ -542,6 +566,8 @@ function update() {
                  : chordType === 'maj7'  ? 'maj7'
                  : chordType === 'sus2'  ? 'sus2'
                  : chordType === 'sus4'  ? 'sus4'
+                 : chordType === 'dim'   ? '°'
+                 : chordType === 'aug'   ? '+'
                  : '';
     document.getElementById('dispName').textContent = NOTE_EN[rootIdx] + suffix;
     document.getElementById('dispType').textContent = TYPE_LABELS[chordType];
