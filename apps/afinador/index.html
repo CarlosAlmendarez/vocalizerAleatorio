@@ -11,8 +11,11 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
-            padding: 12px 0 32px;
+            padding: 12px 0 calc(var(--bottomnav-h) + 24px);
             color: var(--ink);
+        }
+        @media (min-width: 960px) {
+            .afin-screen { padding-bottom: 32px; }
         }
 
         /* ── Giant note display ── */
