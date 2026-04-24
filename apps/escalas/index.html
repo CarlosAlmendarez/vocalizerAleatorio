@@ -4,240 +4,308 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escalas - MusicTools</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-    <link rel="stylesheet" href="../../shared/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
+    <script src="../../shared/sound-engine.js"></script>
+    <link rel="stylesheet" href="../../shared/design.css">
     <style>
-        body { display: flex; justify-content: center; align-items: flex-start; }
-
-        .display-section {
-            background: linear-gradient(135deg, #ee0979, #ff6a00);
+        /* ── Screen wrapper ── */
+        .scale-screen {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 16px 16px calc(var(--bottomnav-h) + 88px + 16px);
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        @media (min-width: 960px) {
+            .scale-screen { padding-bottom: 32px; }
         }
 
-        .scale-name-big {
-            font-size: 52px;
+        /* ── Hero ── */
+        .scale-hero {
+            text-align: center;
+            padding: 20px 0 4px;
+        }
+        .scale-hero-type {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--ink-dim);
+            margin-bottom: 10px;
+        }
+        .scale-hero-name {
+            font-family: var(--font-head);
+            font-size: clamp(36px, 10vw, 60px);
             font-weight: 800;
-            line-height: 1.1;
-            margin: 10px 0 4px;
+            line-height: 1;
+            color: var(--ink);
+            margin-bottom: 12px;
+        }
+        .scale-hero-mode {
+            color: var(--accent);
+            text-shadow: var(--accent-glow);
+        }
+        .scale-hero-pattern {
+            display: inline-block;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--ink-dim);
+            background: var(--surface-s);
+            padding: 5px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            letter-spacing: 0.05em;
         }
 
-        .scale-subtitle {
-            font-size: 15px;
-            opacity: 0.85;
-            font-weight: 300;
+        /* ── Note pills ── */
+        .scale-pills-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .scale-note-pill {
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+            background: rgba(var(--accent-rgb), 0.09);
+            color: var(--ink-dim);
+            border: 1px solid var(--border);
+            transition: background 0.15s, color 0.15s;
+        }
+        .scale-note-pill.root {
+            background: rgba(var(--accent-rgb), 0.22);
+            color: var(--accent);
+            border-color: rgba(var(--accent-rgb), 0.45);
+        }
+        .scale-note-pill.playing {
+            background: rgba(var(--accent2-rgb), 0.22);
+            color: var(--accent2);
+            border-color: rgba(var(--accent2-rgb), 0.5);
         }
 
-        /* Piano visual */
-        .piano-wrap {
+        /* ── Piano ── */
+        .scale-piano-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px 10px;
             overflow-x: auto;
-            padding: 10px 0 4px;
+            scrollbar-width: none;
         }
-
+        .scale-piano-card::-webkit-scrollbar { display: none; }
         .piano {
             display: flex;
             position: relative;
-            height: 90px;
+            height: 140px;
             width: fit-content;
             margin: 0 auto;
         }
 
         .key-white {
-            width: 32px;
-            height: 90px;
-            border: 1px solid #ccc;
-            border-radius: 0 0 5px 5px;
-            background: white;
-            position: relative;
+            width: 42px; height: 140px;
+            border: 1px solid rgba(var(--accent-rgb), 0.12);
+            border-radius: 0 0 8px 8px;
+            background: rgba(255,255,255,0.88);
+            position: absolute;
             cursor: pointer;
             transition: background 0.1s;
-            flex-shrink: 0;
         }
-
-        .key-white.in-scale {
-            background: #ffb3c6;
+        [data-theme="minimal"] .key-white {
+            background: #f0ece4;
+            border-color: rgba(0,0,0,0.18);
         }
-
-        .key-white.root {
-            background: #ee0979;
-            border-color: #c0063e;
-        }
-
-        .key-white.playing {
-            background: #ff6a00 !important;
-            box-shadow: 0 0 12px rgba(255, 106, 0, 0.7);
-        }
+        .key-white.in-scale  { background: rgba(var(--accent-rgb), 0.28); border-color: rgba(var(--accent-rgb), 0.55); }
+        .key-white.root      { background: var(--accent) !important; border-color: var(--accent) !important; }
+        .key-white.playing   { background: var(--accent2) !important; box-shadow: 0 0 16px rgba(var(--accent2-rgb), 0.65) !important; }
 
         .key-black {
-            width: 22px;
-            height: 55px;
-            background: #333;
+            width: 26px; height: 88px;
+            background: #0e0e28;
+            border: 1px solid rgba(255,255,255,0.1);
             position: absolute;
             top: 0;
-            border-radius: 0 0 4px 4px;
+            border-radius: 0 0 5px 5px;
             z-index: 2;
             cursor: pointer;
             transition: background 0.12s;
         }
+        [data-theme="minimal"] .key-black { background: #1a1a2e; }
+        [data-theme="amber"]   .key-black { background: #0e0a08; }
 
-        .key-black.in-scale {
-            background: #c0063e;
-        }
-
-        .key-black.root {
-            background: #ee0979;
-        }
-
-        .key-black.playing {
-            background: #ff6a00 !important;
-            box-shadow: 0 0 10px rgba(255, 106, 0, 0.8);
-        }
+        .key-black.in-scale { background: rgba(var(--accent-rgb), 0.55); }
+        .key-black.root     { background: var(--accent) !important; }
+        .key-black.playing  { background: var(--accent2) !important; box-shadow: 0 0 12px rgba(var(--accent2-rgb), 0.8) !important; }
 
         .key-label {
             position: absolute;
-            bottom: 5px;
-            left: 0;
-            right: 0;
+            bottom: 7px; left: 0; right: 0;
             text-align: center;
-            font-size: 9px;
+            font-size: 10px;
             font-weight: 700;
-            color: #333;
+            color: rgba(30,30,60,0.45);
+            pointer-events: none;
+            user-select: none;
+        }
+        .key-white.in-scale .key-label,
+        .key-white.root .key-label { color: rgba(255,255,255,0.9); }
+        [data-theme="minimal"] .key-white .key-label { color: rgba(30,30,60,0.35); }
+
+        /* ── Section label ── */
+        .scale-section-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ink-dim);
+            margin-bottom: 8px;
         }
 
-        .key-white.root .key-label,
-        .key-white.in-scale .key-label { color: #333; }
-
-        /* Chips de escala */
-        .scale-chip {
-            padding: 7px 14px;
-            border-radius: 20px;
-            border: 1.5px solid #ddd;
-            background: white;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            font-family: inherit;
-            transition: all 0.15s;
-        }
-
-        .scale-chip:hover   { border-color: #ee0979; color: #ee0979; }
-        .scale-chip.active  { background: #ee0979; border-color: #ee0979; color: white; }
-
-        /* Notas de la escala */
-        .scale-note-list {
+        /* ── Scale type chips ── */
+        .scale-type-chips {
             display: flex;
-            gap: 6px;
+            gap: 8px;
             flex-wrap: wrap;
         }
-
-        .scale-note-pill {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 700;
-            background: #fce4ec;
-            color: #c0063e;
-            transition: background 0.15s;
+        .scale-chip {
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface-s);
+            color: var(--ink-dim);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            transition: all 0.15s;
         }
+        .scale-chip:hover  { border-color: rgba(var(--accent-rgb), 0.4); color: var(--ink); }
+        .scale-chip.active { background: rgba(var(--accent-rgb), 0.22); border-color: var(--accent); color: var(--accent); }
 
-        .scale-note-pill.root {
-            background: #ee0979;
-            color: white;
-        }
-
-        .scale-note-pill.playing {
-            background: #ff6a00;
-            color: white;
-        }
-
-        /* Root selector */
-        .root-grid {
+        /* ── Root grid ── */
+        .scale-root-grid {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            gap: 5px;
+            gap: 6px;
         }
-
         .root-btn {
-            padding: 7px 2px;
-            border: 1.5px solid #eee;
-            border-radius: 8px;
-            background: white;
-            font-size: 12px;
+            padding: 0;
+            min-height: 52px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-s);
+            color: var(--ink-dim);
+            font-size: 14px;
             font-weight: 700;
             cursor: pointer;
-            font-family: inherit;
+            font-family: var(--font-head);
             text-align: center;
             transition: all 0.15s;
         }
+        .root-btn:hover  { border-color: rgba(var(--accent-rgb), 0.4); color: var(--accent); }
+        .root-btn.active { background: rgba(var(--accent-rgb), 0.22); border-color: var(--accent); color: var(--accent); }
 
-        .root-btn:hover  { border-color: #ee0979; color: #ee0979; }
-        .root-btn.active { background: #ee0979; border-color: #ee0979; color: white; }
-
-        .btn-play-scale {
-            background: linear-gradient(135deg, #ee0979, #ff6a00);
-            color: white;
+        /* ── Floating transport ── */
+        .scale-transport {
+            position: fixed;
+            left: 0; right: 0;
+            bottom: var(--bottomnav-h);
+            display: flex;
+            justify-content: center;
+            padding: 14px 16px;
+            background: linear-gradient(to top, var(--bg) 55%, transparent);
+            pointer-events: none;
+            z-index: 40;
         }
+        @media (min-width: 960px) {
+            .scale-transport {
+                position: static;
+                background: none;
+                padding: 4px 0 8px;
+            }
+        }
+        .scale-play-btn {
+            pointer-events: all;
+            min-width: 200px;
+            padding: 16px 36px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white;
+            font-family: var(--font-head);
+            font-size: 16px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 22px rgba(var(--accent-rgb), 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .scale-play-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(var(--accent-rgb), 0.5);
+        }
+        .scale-play-btn:disabled { opacity: 0.7; cursor: default; transform: none; }
+        .scale-play-btn svg { flex-shrink: 0; }
     </style>
 </head>
-<body>
+<body data-tool-name="Escalas" data-page-id="escalas">
 
-<div class="app-card">
+<div class="scale-screen">
 
-    <div class="display-section" style="padding-top:10px;">
-        <div class="app-nav" style="background:none; padding: 0 4px 8px;">
-            <a class="nav-back" href="../../index.html">
-                <i class="ti ti-chevron-left"></i>
-                MusicTools
-            </a>
+    <!-- Hero -->
+    <div class="scale-hero">
+        <div class="scale-hero-type" id="displayScaleType">Mayor</div>
+        <div class="scale-hero-name">
+            <span id="heroRoot">Do</span> <span class="scale-hero-mode" id="heroMode">Mayor</span>
         </div>
-        <div class="scale-subtitle" id="displayScaleType">Mayor</div>
-        <div class="scale-name-big" id="displayScaleName">Do Mayor</div>
-        <div class="scale-subtitle" id="displayInterval">W-W-H-W-W-W-H</div>
+        <code class="scale-hero-pattern" id="displayInterval">T-T-s-T-T-T-s</code>
     </div>
 
-    <div class="config-body">
+    <!-- Note pills -->
+    <div class="scale-pills-row" id="noteList"></div>
 
-        <!-- Piano visual -->
-        <div class="section-card" style="padding:12px 8px;">
-            <div class="section-title" style="padding-left:8px;">Teclado</div>
-            <div class="piano-wrap">
-                <div class="piano" id="piano"></div>
-            </div>
-        </div>
-
-        <!-- Notas de la escala -->
-        <div class="section-card">
-            <div class="section-title">Notas</div>
-            <div class="scale-note-list" id="noteList"></div>
-        </div>
-
-        <!-- Tipo de escala -->
-        <div class="section-card">
-            <div class="section-title">Tipo de escala</div>
-            <div class="filter-row" id="scaleTypeFilter" style="flex-wrap:wrap; gap:6px;">
-                <button class="scale-chip active" onclick="setScaleType('mayor', this)">Mayor</button>
-                <button class="scale-chip" onclick="setScaleType('menor', this)">Menor natural</button>
-                <button class="scale-chip" onclick="setScaleType('pentatonica', this)">Pentatónica M</button>
-                <button class="scale-chip" onclick="setScaleType('pent-menor', this)">Pentatónica m</button>
-                <button class="scale-chip" onclick="setScaleType('blues', this)">Blues</button>
-                <button class="scale-chip" onclick="setScaleType('dórico', this)">Dórico</button>
-                <button class="scale-chip" onclick="setScaleType('frigio', this)">Frigio</button>
-                <button class="scale-chip" onclick="setScaleType('lidio', this)">Lidio</button>
-                <button class="scale-chip" onclick="setScaleType('mixolidio', this)">Mixolidio</button>
-            </div>
-        </div>
-
-        <!-- Nota raíz -->
-        <div class="section-card">
-            <div class="section-title">Nota raíz</div>
-            <div class="root-grid" id="rootGrid"></div>
-        </div>
-
+    <!-- Piano keyboard -->
+    <div class="scale-piano-card">
+        <div class="piano" id="piano"></div>
     </div>
 
-    <div class="action-bar">
-        <button class="btn btn-play-scale" id="playScaleBtn" onclick="playScale()">
-            Escuchar escala
-        </button>
+    <!-- Scale type -->
+    <div>
+        <div class="scale-section-label">Tipo de escala</div>
+        <div class="scale-type-chips" id="scaleTypeFilter">
+            <button class="scale-chip active" onclick="setScaleType('mayor', this)">Mayor</button>
+            <button class="scale-chip" onclick="setScaleType('menor', this)">Menor natural</button>
+            <button class="scale-chip" onclick="setScaleType('pentatonica', this)">Pentatónica M</button>
+            <button class="scale-chip" onclick="setScaleType('pent-menor', this)">Pentatónica m</button>
+            <button class="scale-chip" onclick="setScaleType('blues', this)">Blues</button>
+            <button class="scale-chip" onclick="setScaleType('dórico', this)">Dórico</button>
+            <button class="scale-chip" onclick="setScaleType('frigio', this)">Frigio</button>
+            <button class="scale-chip" onclick="setScaleType('lidio', this)">Lidio</button>
+            <button class="scale-chip" onclick="setScaleType('mixolidio', this)">Mixolidio</button>
+        </div>
     </div>
+
+    <!-- Root note grid -->
+    <div>
+        <div class="scale-section-label">Nota raíz</div>
+        <div class="scale-root-grid" id="rootGrid"></div>
+    </div>
+
+</div>
+
+<!-- Floating play transport -->
+<div class="scale-transport">
+    <button class="scale-play-btn" id="playScaleBtn" onclick="playScale()">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M6 4.5L15.5 10L6 15.5V4.5Z" fill="currentColor"/>
+        </svg>
+        Escuchar escala
+    </button>
 </div>
 
 <script src="../../shared/audio-utils.js"></script>
@@ -257,55 +325,48 @@
     const NOTE_NAMES_ES = ['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
     const NOTE_NAMES_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-    // Piano fijo C3–B4: teclas blancas = semitonos 0,2,4,5,7,9,11 dentro de la octava
-    const WHITE_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
-    // Teclas negras: semitono dentro de la octava → desplazamiento px desde el inicio de esa octava
-    const BLACK_POSITIONS = { 1: 23, 3: 55, 6: 119, 8: 151, 10: 183 };
-    const WHITE_KEY_W = 32;
-    const OCT_WIDTH   = WHITE_SEMITONES.length * WHITE_KEY_W; // 224 px
+    const WHITE_SEMITONES  = [0, 2, 4, 5, 7, 9, 11];
+    const BLACK_POSITIONS  = { 1: 30, 3: 72, 6: 156, 8: 198, 10: 240 };
+    const WHITE_KEY_W      = 42;
+    const OCT_WIDTH        = WHITE_SEMITONES.length * WHITE_KEY_W; // 294 px
 
     let currentScaleKey = 'mayor';
-    let currentRootIdx  = 0; // índice 0–11 (Do=0, Do#=1 … Si=11)
-    let synth           = null;
+    let currentRootIdx  = 0;
+    let pianoInst       = null;
     let playingTimeout  = null;
     let isPlayingScale  = false;
 
-    // ---- Convierte intervalo de escala a nota con octava correcta ----
-    // Ejemplo: root=9 (La), interval=4 → abs=13 → C#4
     function intervalToNote(interval) {
         const abs    = currentRootIdx + interval;
         const octave = 3 + Math.floor(abs / 12);
         return NOTE_NAMES_EN[abs % 12] + octave;
     }
 
-    // ---- Construye el conjunto de notas de la escala como strings "C3", "D4", … ----
     function buildScaleNoteSet() {
         const scale = SCALES[currentScaleKey];
         return new Set(scale.intervals.map(i => intervalToNote(i)));
     }
 
-    // ---- Piano ----
     function buildPiano() {
         const piano = document.getElementById('piano');
         piano.innerHTML = '';
         piano.style.width  = (OCT_WIDTH * 2) + 'px';
-        piano.style.height = '90px';
+        piano.style.height = '140px';
 
         const scaleNotes = buildScaleNoteSet();
 
-        // Teclas blancas
+        // White keys
         for (let oct = 0; oct < 2; oct++) {
             WHITE_SEMITONES.forEach((semitone, wi) => {
                 const noteStr = NOTE_NAMES_EN[semitone] + (3 + oct);
                 const inScale = scaleNotes.has(noteStr);
-                // La raíz se marca en ambas octavas
                 const isRoot  = semitone === currentRootIdx % 12 &&
                                 (oct === 0 ? currentRootIdx < 12 : currentRootIdx >= 0);
 
                 const key = document.createElement('div');
                 key.className = 'key-white' + (isRoot ? ' root' : inScale ? ' in-scale' : '');
                 key.dataset.note = noteStr;
-                key.style.cssText = `left:${oct * OCT_WIDTH + wi * WHITE_KEY_W}px; position:absolute;`;
+                key.style.left = (oct * OCT_WIDTH + wi * WHITE_KEY_W) + 'px';
 
                 const lbl = document.createElement('div');
                 lbl.className = 'key-label';
@@ -316,7 +377,7 @@
             });
         }
 
-        // Teclas negras
+        // Black keys
         for (let oct = 0; oct < 2; oct++) {
             Object.entries(BLACK_POSITIONS).forEach(([st, xOff]) => {
                 const semitone = parseInt(st);
@@ -327,14 +388,13 @@
                 const key = document.createElement('div');
                 key.className = 'key-black' + (isRoot ? ' root' : inScale ? ' in-scale' : '');
                 key.dataset.note = noteStr;
-                key.style.cssText = `left:${oct * OCT_WIDTH + xOff}px; position:absolute;`;
+                key.style.left = (oct * OCT_WIDTH + xOff) + 'px';
                 key.onclick = () => playNoteWithHighlight(noteStr);
                 piano.appendChild(key);
             });
         }
     }
 
-    // ---- Resalta una tecla brevemente (click manual) ----
     function highlightKey(noteStr, durationMs = 400) {
         const key = document.querySelector(`[data-note="${noteStr}"]`);
         if (!key) return;
@@ -343,10 +403,10 @@
     }
 
     function clearAllHighlights() {
-        document.querySelectorAll('.playing').forEach(el => el.classList.remove('playing'));
+        document.querySelectorAll('.key-white.playing, .key-black.playing')
+            .forEach(el => el.classList.remove('playing'));
     }
 
-    // ---- Lista de notas (pills) ----
     function renderNoteList() {
         const scale = SCALES[currentScaleKey];
         const list  = document.getElementById('noteList');
@@ -361,23 +421,18 @@
         });
     }
 
-    // ---- Selector de raíz ----
     function renderRootGrid() {
-        const grid = document.getElementById('rootGrid');
-        grid.innerHTML = '';
-        NOTE_NAMES_ES.forEach((name, i) => {
-            const btn = document.createElement('button');
-            btn.className = 'root-btn' + (i === currentRootIdx ? ' active' : '');
-            btn.textContent = name;
-            btn.onclick = () => {
-                currentRootIdx = i;
-                stopPlayback();
-                document.querySelectorAll('.root-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                update();
-            };
-            grid.appendChild(btn);
-        });
+        document.getElementById('rootGrid').innerHTML = NOTE_NAMES_ES.map((name, i) =>
+            `<button class="root-btn${i === currentRootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${name}</button>`
+        ).join('');
+    }
+
+    function selectRoot(i) {
+        currentRootIdx = i;
+        stopPlayback();
+        document.querySelectorAll('.root-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.root-btn')[i].classList.add('active');
+        update();
     }
 
     function setScaleType(key, btn) {
@@ -390,66 +445,65 @@
 
     function update() {
         const scale = SCALES[currentScaleKey];
+        document.getElementById('heroRoot').textContent       = NOTE_NAMES_ES[currentRootIdx];
+        document.getElementById('heroMode').textContent       = scale.label;
         document.getElementById('displayScaleType').textContent = scale.label;
-        document.getElementById('displayScaleName').textContent =
-            NOTE_NAMES_ES[currentRootIdx] + ' ' + scale.label;
-        document.getElementById('displayInterval').textContent = scale.pattern;
+        document.getElementById('displayInterval').textContent  = scale.pattern;
         buildPiano();
         renderNoteList();
     }
 
-    // ---- Reproducción de nota individual (click en tecla) ----
+    async function ensurePiano() {
+        if (!pianoInst) {
+            pianoInst = await soundEngine.get('acoustic_grand_piano');
+        }
+        return pianoInst;
+    }
+
     async function playNoteWithHighlight(noteStr) {
-        await startAudio();
-        if (!synth) initSynth();
-        synth.triggerAttackRelease(noteStr, '8n');
+        const piano = await ensurePiano();
+        piano.play(noteStr, soundEngine.now, { duration: 0.5, gain: 0.9 });
         if (!isPlayingScale) highlightKey(noteStr, 400);
     }
 
-    function initSynth() {
-        synth = new Tone.Synth({
-            oscillator: { type: 'triangle' },
-            envelope: { attack: 0.02, decay: 0.1, sustain: 0.7, release: 0.6 }
-        }).toDestination();
-    }
-
-    // ---- Reproducción de escala completa ----
     async function playScale() {
         if (isPlayingScale) return;
-        await startAudio();
-        if (!synth) initSynth();
-
         stopPlayback();
         isPlayingScale = true;
 
+        const piano = await ensurePiano();
         const scale = SCALES[currentScaleKey];
-        // FIX: calcular octava correctamente para cada nota
         const notes = scale.intervals.map(i => intervalToNote(i));
 
         const btn = document.getElementById('playScaleBtn');
         btn.disabled    = true;
-        btn.textContent = 'Reproduciendo...';
+        btn.innerHTML   = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="5" y="4" width="4" height="12" rx="1" fill="currentColor"/>
+            <rect x="11" y="4" width="4" height="12" rx="1" fill="currentColor"/>
+        </svg>Reproduciendo…`;
 
         let i = 0;
         function playNext() {
             clearAllHighlights();
+            document.querySelectorAll('.scale-note-pill.playing')
+                .forEach(el => el.classList.remove('playing'));
 
-            if (i >= notes.length) {
+            if (i >= notes.length || !isPlayingScale) {
                 isPlayingScale  = false;
                 btn.disabled    = false;
-                btn.textContent = 'Escuchar escala';
+                btn.innerHTML   = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M6 4.5L15.5 10L6 15.5V4.5Z" fill="currentColor"/>
+                </svg>Escuchar escala`;
                 return;
             }
 
-            // Resaltar pill
             const pill = document.getElementById('pill-' + i);
             if (pill) pill.classList.add('playing');
 
-            // Resaltar tecla de piano
             const key = document.querySelector(`[data-note="${notes[i]}"]`);
             if (key) key.classList.add('playing');
 
-            synth.triggerAttackRelease(notes[i], '8n');
+            piano.play(notes[i], soundEngine.now, { duration: 0.4, gain: 0.9 });
             i++;
             playingTimeout = setTimeout(playNext, 450);
         }
@@ -458,16 +512,28 @@
 
     function stopPlayback() {
         if (playingTimeout) clearTimeout(playingTimeout);
-        playingTimeout  = null;
-        isPlayingScale  = false;
+        playingTimeout = null;
+        isPlayingScale = false;
         clearAllHighlights();
+        document.querySelectorAll('.scale-note-pill.playing')
+            .forEach(el => el.classList.remove('playing'));
+        if (pianoInst) pianoInst.stop();
         const btn = document.getElementById('playScaleBtn');
-        if (btn) { btn.disabled = false; btn.textContent = 'Escuchar escala'; }
+        if (btn) {
+            btn.disabled  = false;
+            btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M6 4.5L15.5 10L6 15.5V4.5Z" fill="currentColor"/>
+            </svg>Escuchar escala`;
+        }
     }
 
-    // Init
-    renderRootGrid();
-    update();
+</script>
+<script src="../../shared/shell.js"></script>
+<script>
+    window.addEventListener('load', function() {
+        renderRootGrid();
+        update();
+    });
 </script>
 </body>
 </html>

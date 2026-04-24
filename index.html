@@ -1,309 +1,224 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>MusicTools</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
-    <style>
-        :root {
-            --bg-dark: #1a1a2e;
-            --bg-card: #16213e;
-            --text-light: #e0e0e0;
-            --text-muted: rgba(255,255,255,0.5);
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MusicTools</title>
+  <link rel="stylesheet" href="shared/design.css">
+  <style>
+    /* ---- Home-specific ---- */
+    .home-header {
+      padding: 28px 0 8px;
+    }
+    .greeting-label {
+      font-size: 12px; font-weight: 600;
+      color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .greeting-title {
+      font-family: var(--font-head);
+      font-size: clamp(22px, 5vw, 34px);
+      font-weight: 800; letter-spacing: -0.025em;
+      color: var(--ink); margin-top: 6px; line-height: 1.1;
+    }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ---- Featured hero card ---- */
+    .featured-card {
+      margin-top: 20px;
+      border-radius: calc(var(--radius) + 4px);
+      padding: 22px;
+      background: linear-gradient(135deg,
+        rgba(var(--accent-rgb), 0.22) 0%,
+        rgba(var(--accent2-rgb), 0.12) 100%);
+      border: 1px solid rgba(var(--accent-rgb), 0.32);
+      box-shadow: 0 20px 50px -18px rgba(var(--accent-rgb), 0.4), inset 0 1px 0 rgba(255,255,255,0.10);
+      position: relative; overflow: hidden; cursor: pointer;
+      text-decoration: none; color: var(--ink);
+      display: flex; align-items: center; gap: 16px;
+      transition: transform 0.18s, box-shadow 0.18s;
+    }
+    .featured-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 28px 60px -18px rgba(var(--accent-rgb), 0.52), inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+    .featured-card:active { transform: scale(0.98); }
+    .featured-glow {
+      position: absolute; right: -60px; top: -60px;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: rgba(var(--accent-rgb), 0.3); filter: blur(40px); pointer-events: none;
+    }
+    .featured-icon {
+      width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0; position: relative;
+      background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2);
+      display: grid; place-items: center; color: var(--ink);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    }
+    .featured-info { flex: 1; min-width: 0; position: relative; }
+    .featured-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
+    .featured-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+    .featured-sub { font-size: 12.5px; color: var(--ink-dim); margin-top: 3px; }
+    .featured-play {
+      width: 50px; height: 50px; border-radius: 50%; flex-shrink: 0; position: relative;
+      background: var(--ink); color: var(--bg);
+      display: grid; place-items: center;
+      box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.3);
+    }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg-dark);
-            min-height: 100vh;
-            color: white;
-        }
-
-        /* ---- Header ---- */
-        .header {
-            padding: 48px 24px 24px;
-            text-align: center;
-        }
-
-        .header-logo {
-            font-size: 48px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: center;
-            opacity: 0.9;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-        }
-
-        .header p {
-            font-size: 14px;
-            color: var(--text-muted);
-            margin-top: 6px;
-        }
-
-        /* ---- Sección de categoría ---- */
-        .section-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--text-muted);
-            font-weight: 700;
-            padding: 0 20px;
-            margin: 28px 0 12px;
-        }
-
-        /* ---- Grid de herramientas ---- */
-        .tools-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-            padding: 0 16px;
-        }
-
-        @media (min-width: 420px) {
-            .tools-grid { padding: 0 20px; }
-        }
-
-        /* ---- Tarjeta de herramienta ---- */
-        .tool-card {
-            border-radius: 20px;
-            padding: 20px 16px;
-            text-decoration: none;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.18s, box-shadow 0.18s;
-            min-height: 150px;
-        }
-
-        .tool-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 30px rgba(0,0,0,0.4);
-        }
-
-        .tool-card:active { transform: scale(0.97); }
-
-        .tool-card.coming-soon {
-            opacity: 0.75;
-            cursor: default;
-        }
-
-        .tool-card.coming-soon:hover { transform: none; box-shadow: none; }
-        .tool-card.coming-soon:active { transform: none; }
-
-        /* Gradientes por herramienta */
-        .grad-vocalizer    { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .grad-afinador     { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-        .grad-acordes      { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); color: #1a1a2e; }
-        .grad-escalas      { background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); }
-        .grad-metronomo    { background: linear-gradient(135deg, #4776e6 0%, #8e54e9 100%); }
-        .grad-oidos        { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
-
-        .grad-acordes .tool-icon,
-        .grad-acordes .tool-name,
-        .grad-acordes .tool-desc { color: #1a1a2e; }
-        .grad-acordes .badge-soon { background: rgba(0,0,0,0.15); color: #1a1a2e; }
-        .grad-acordes .tool-arrow { color: rgba(0,0,0,0.4); }
-
-        /* Decoración de fondo */
-        .tool-card::before {
-            content: '';
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.07);
-            bottom: -30px;
-            right: -20px;
-        }
-
-        .tool-card::after {
-            content: '';
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.05);
-            bottom: 20px;
-            right: 40px;
-        }
-
-        .tool-icon {
-            font-size: 28px;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-        }
-
-        .tool-icon .ti {
-            font-size: inherit;
-            line-height: 1;
-        }
-
-        .tool-content { flex: 1; }
-
-        .tool-name {
-            font-size: 15px;
-            font-weight: 800;
-            letter-spacing: -0.2px;
-        }
-
-        .tool-desc {
-            font-size: 11px;
-            opacity: 0.75;
-            margin-top: 3px;
-            line-height: 1.4;
-        }
-
-        .tool-arrow {
-            font-size: 18px;
-            opacity: 0.5;
-            align-self: flex-end;
-            display: flex;
-            align-items: center;
-        }
-
-        .badge-soon {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            font-size: 9px;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 20px;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-
-        /* ---- Tarjeta ancha (full width) ---- */
-        .tools-grid .full-width {
-            grid-column: 1 / -1;
-            min-height: 120px;
-            flex-direction: row;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .full-width .tool-icon { font-size: 38px; }
-        .full-width .tool-name { font-size: 18px; }
-        .full-width .tool-desc { font-size: 13px; }
-
-        /* ---- Footer ---- */
-        .footer {
-            text-align: center;
-            padding: 32px 16px 48px;
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
-        .footer a { color: var(--text-muted); }
-    </style>
+    /* ---- Footer ---- */
+    .home-footer {
+      text-align: center; padding: 32px 0 16px;
+      font-size: 12px; color: var(--muted);
+    }
+  </style>
 </head>
-<body>
+<body data-page-id="home">
 
-<div class="header">
-    <div class="header-logo"><i class="ti ti-music"></i></div>
-    <h1>MusicTools</h1>
-    <p>Herramientas para aprender y practicar música</p>
-</div>
+  <div class="home-header">
+    <div class="greeting-label">Bienvenido</div>
+    <div class="greeting-title">¿Qué vas a practicar hoy?</div>
+  </div>
 
-<!-- Voz -->
-<div class="section-label">Voz</div>
-<div class="tools-grid">
-    <a class="tool-card grad-vocalizer full-width" href="apps/vocalizer/">
-        <div class="tool-icon"><i class="ti ti-microphone"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Vocalizer</div>
-            <div class="tool-desc">Ejercicios de voz con escalas, tesituras y patrones rítmicos</div>
+  <!-- Featured: Vocalizer -->
+  <a class="featured-card" href="apps/vocalizer/">
+    <div class="featured-glow"></div>
+    <div class="featured-icon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="3" width="6" height="12" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M8 21h8"/>
+      </svg>
+    </div>
+    <div class="featured-info">
+      <div class="featured-eyebrow">Herramienta destacada</div>
+      <div class="featured-title">Vocalizer</div>
+      <div class="featured-sub">Escalas · tesituras · patrones rítmicos</div>
+    </div>
+    <div class="featured-play">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg>
+    </div>
+  </a>
+
+  <!-- Instrumentos de cuerda -->
+  <div class="section-label">Instrumentos de cuerda</div>
+  <div class="tools-grid-nm">
+
+    <a class="tool-card-nm" href="apps/afinador/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 5v7l4.5 2.5"/>
+          </svg>
         </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
-    </a>
-</div>
-
-<!-- Guitarra -->
-<div class="section-label">Instrumentos de cuerda</div>
-<div class="tools-grid">
-    <a class="tool-card grad-afinador" href="apps/afinador/">
-        <div class="tool-icon"><i class="ti ti-guitar-pick"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Afinador</div>
-            <div class="tool-desc">Guitarra, bajo, ukulele, violín y más — micrófono en tiempo real</div>
-        </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
-    </a>
-
-    <a class="tool-card grad-acordes" href="apps/acordes-guitarra/">
-        <div class="tool-icon"><i class="ti ti-playlist"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Acordes Guitarra</div>
-            <div class="tool-desc">Diagramas, audio y 9 tipos de acorde</div>
-        </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
-    </a>
-
-    <a class="tool-card" href="apps/acordes-ukulele/" style="background:linear-gradient(135deg,#a18cd1,#fbc2eb);color:#1a1a2e;">
-        <div class="tool-icon"><i class="ti ti-music"></i></div>
-        <div class="tool-content">
-            <div class="tool-name" style="color:#1a1a2e;">Acordes Ukulele</div>
-            <div class="tool-desc" style="color:rgba(0,0,0,0.6);">Diagramas de 4 cuerdas con audio</div>
-        </div>
-        <div class="tool-arrow" style="color:rgba(0,0,0,0.4);"><i class="ti ti-chevron-right"></i></div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Afinador</div>
+        <div class="tc-desc">Micrófono en tiempo real — guitarra, bajo, ukulele…</div>
+      </div>
     </a>
 
-    <a class="tool-card" href="apps/acordes-bajo/" style="background:linear-gradient(135deg,#373b44,#4286f4);color:white;">
-        <div class="tool-icon"><i class="ti ti-music"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Acordes Bajo</div>
-            <div class="tool-desc" style="opacity:0.75;">Triadas y arpeggios para bajo eléctrico</div>
+    <a class="tool-card-nm" href="apps/acordes-guitarra/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 4h16M4 9h16M4 14h16M4 19h16"/>
+            <circle cx="9" cy="9" r="1.6" fill="currentColor"/><circle cx="14" cy="14" r="1.6" fill="currentColor"/>
+          </svg>
         </div>
-        <div class="tool-arrow" style="opacity:0.6;"><i class="ti ti-chevron-right"></i></div>
-    </a>
-</div>
-
-<!-- Teoría musical -->
-<div class="section-label">Teoría musical</div>
-<div class="tools-grid">
-    <a class="tool-card grad-escalas" href="apps/escalas/">
-        <div class="tool-icon"><i class="ti ti-piano"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Escalas</div>
-            <div class="tool-desc">Explora escalas en el teclado con sonido</div>
-        </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Acordes Guitarra</div>
+        <div class="tc-desc">Diagramas, audio y 9 tipos de acorde</div>
+      </div>
     </a>
 
-    <a class="tool-card grad-metronomo" href="apps/metronomo/">
-        <div class="tool-icon"><i class="ti ti-metronome"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Metrónomo</div>
-            <div class="tool-desc">Pulso clásico, tap tempo y 8 compases</div>
+    <a class="tool-card-nm" href="apps/acordes-ukulele/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="16" r="5"/><path d="M12 11V4M10 4h4"/>
+          </svg>
         </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Acordes Ukulele</div>
+        <div class="tc-desc">Diagramas de 4 cuerdas con audio</div>
+      </div>
     </a>
 
-    <a class="tool-card grad-oidos" href="apps/entrenamiento-auditivo/">
-        <div class="tool-icon"><i class="ti ti-headphones"></i></div>
-        <div class="tool-content">
-            <div class="tool-name">Entrenamiento auditivo</div>
-            <div class="tool-desc">Notas, intervalos y acordes · vidas, racha y puntos</div>
+    <a class="tool-card-nm" href="apps/acordes-bajo/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 14a5 5 0 1 0 10 0 5 5 0 1 0-10 0"/><path d="M11 10V3l5 2"/>
+          </svg>
         </div>
-        <div class="tool-arrow"><i class="ti ti-chevron-right"></i></div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Acordes Bajo</div>
+        <div class="tc-desc">Triadas y arpegios para bajo eléctrico</div>
+      </div>
     </a>
-</div>
 
-<div class="footer">
-    MusicTools · Herramientas libres para músicos
-</div>
+  </div>
 
+  <!-- Teoría musical -->
+  <div class="section-label">Teoría musical</div>
+  <div class="tools-grid-nm">
+
+    <a class="tool-card-nm" href="apps/escalas/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="3" y="5" width="18" height="14" rx="1"/>
+            <path d="M8 5v10M13 5v10M18 5v10"/>
+          </svg>
+        </div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Escalas</div>
+        <div class="tc-desc">Explora escalas en el teclado con sonido</div>
+      </div>
+    </a>
+
+    <a class="tool-card-nm" href="apps/metronomo/">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3h8l3 18H5z"/><path d="M13 21 9 7"/>
+          </svg>
+        </div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Metrónomo</div>
+        <div class="tc-desc">Pulso clásico, tap tempo y 8 compases</div>
+      </div>
+    </a>
+
+    <a class="tool-card-nm" href="apps/entrenamiento-auditivo/" style="grid-column:1/-1;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 14v-2a8 8 0 0 1 16 0v2"/>
+            <rect x="3" y="13" width="5" height="7" rx="2"/>
+            <rect x="16" y="13" width="5" height="7" rx="2"/>
+          </svg>
+        </div>
+        <div class="tc-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div>
+        <div class="tc-name">Entrenamiento auditivo</div>
+        <div class="tc-desc">Notas, intervalos y acordes · vidas, racha y puntos</div>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="home-footer">MusicTools · Herramientas libres para músicos</div>
+
+  <script src="shared/shell.js"></script>
 </body>
 </html>

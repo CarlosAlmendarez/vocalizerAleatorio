@@ -4,226 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metrónomo - MusicTools</title>
-    <link rel="stylesheet" href="../../shared/style.css">
+    <link rel="stylesheet" href="../../shared/design.css">
     <style>
-        body { display: flex; justify-content: center; align-items: flex-start; }
+        /* BPM display */
+        .bpm-display { text-align:center; margin:6px 0 4px; }
+        .bpm-number { font-family:var(--font-head); font-size:88px; font-weight:900; line-height:1; letter-spacing:-4px; color:var(--ink); transition:color 0.15s, text-shadow 0.15s; }
+        .bpm-number.flash { color:var(--accent); text-shadow:var(--accent-glow); }
+        .bpm-label { font-size:13px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+        .tempo-name { font-size:16px; font-weight:600; color:var(--ink-dim); margin-top:4px; min-height:22px; transition:opacity 0.2s; }
 
-        /* ── Display ── */
-        .display-section {
-            background: linear-gradient(135deg, #1a1a2e, #2d3561);
-            color: white;
-            padding-bottom: 20px;
-        }
-        .display-section .nav-back { color: rgba(255,255,255,0.6); }
-        .display-section .nav-back:hover { background: rgba(255,255,255,0.1); }
+        /* Beat dots */
+        .pendulum-wrap { display:flex; justify-content:center; margin:14px 0 6px; height:44px; align-items:center; }
+        .beat-dots { display:flex; gap:10px; }
+        .beat-dot { width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,0.14); border:1px solid var(--border); transition:background 0.05s, transform 0.05s, box-shadow 0.05s; }
+        .beat-dot.accent { background:rgba(157,107,255,0.25); border-color:rgba(157,107,255,0.4); width:18px; height:18px; }
+        .beat-dot.active { background:var(--ink); transform:scale(1.3); box-shadow:0 0 14px rgba(238,240,255,0.7); }
+        .beat-dot.accent.active { background:var(--accent); border-color:var(--accent); box-shadow:0 0 18px rgba(157,107,255,0.9); }
 
-        /* BPM grande */
-        .bpm-display {
-            text-align: center;
-            margin: 6px 0 4px;
-        }
-        .bpm-number {
-            font-size: 88px;
-            font-weight: 900;
-            line-height: 1;
-            letter-spacing: -4px;
-            color: white;
-            transition: color 0.15s;
-        }
-        .bpm-number.flash { color: #4776e6; }
-        .bpm-label {
-            font-size: 13px;
-            color: rgba(255,255,255,0.45);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-top: 2px;
-        }
-        .tempo-name {
-            font-size: 16px;
-            font-weight: 600;
-            color: rgba(255,255,255,0.7);
-            margin-top: 4px;
-            min-height: 22px;
-            transition: opacity 0.2s;
-        }
+        /* BPM controls */
+        .bpm-control-row { display:flex; align-items:center; gap:10px; }
+        .bpm-btn { width:44px; height:44px; border-radius:50%; border:1px solid var(--border); background:var(--surface-s); font-size:22px; font-weight:700; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; transition:all 0.12s; flex-shrink:0; color:var(--ink-dim); line-height:1; }
+        .bpm-btn:hover { border-color:rgba(157,107,255,0.4); color:var(--accent); background:rgba(157,107,255,0.1); }
+        .bpm-btn:active { transform:scale(0.92); }
+        .bpm-btn.large { width:52px; height:52px; font-size:26px; }
 
-        /* Péndulo visual */
-        .pendulum-wrap {
-            display: flex;
-            justify-content: center;
-            margin: 14px 0 6px;
-            height: 44px;
-            align-items: center;
-        }
-        .beat-dots {
-            display: flex;
-            gap: 10px;
-        }
-        .beat-dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.2);
-            transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
-        }
-        .beat-dot.accent {
-            background: rgba(255,255,255,0.35);
-            width: 18px;
-            height: 18px;
-        }
-        .beat-dot.active {
-            background: white;
-            transform: scale(1.3);
-            box-shadow: 0 0 14px rgba(255,255,255,0.7);
-        }
-        .beat-dot.accent.active {
-            background: #8e54e9;
-            box-shadow: 0 0 18px rgba(142,84,233,0.9);
-        }
+        .bpm-slider-wrap { flex:1; }
+        input[type=range].bpm-slider { width:100%; height:6px; -webkit-appearance:none; appearance:none; background:linear-gradient(to right, var(--accent) var(--pct), var(--surface-ss) var(--pct)); border-radius:6px; outline:none; cursor:pointer; }
+        input[type=range].bpm-slider::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); box-shadow:0 2px 6px rgba(157,107,255,0.5); cursor:pointer; }
+        input[type=range].bpm-slider::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:var(--accent); border:none; cursor:pointer; }
 
-        /* ── Controles BPM ── */
-        .bpm-control-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .bpm-btn {
-            width: 44px; height: 44px;
-            border-radius: 50%;
-            border: 2px solid #ddd;
-            background: white;
-            font-size: 22px;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: inherit;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.12s;
-            flex-shrink: 0;
-            color: #333;
-            line-height: 1;
-        }
-        .bpm-btn:hover  { border-color: #4776e6; color: #4776e6; background: #eef; }
-        .bpm-btn:active { transform: scale(0.92); }
-        .bpm-btn.large  { width: 52px; height: 52px; font-size: 26px; }
+        /* Time signature */
+        .time-sig-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+        .sig-btn { padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:var(--surface-s); color:var(--ink-dim); font-size:14px; font-weight:700; cursor:pointer; font-family:var(--font-sans); text-align:center; transition:all 0.15s; }
+        .sig-btn:hover  { border-color:rgba(157,107,255,0.4); color:var(--ink); }
+        .sig-btn.active { background:rgba(157,107,255,0.22); border-color:var(--accent); color:var(--accent); }
 
-        .bpm-slider-wrap { flex: 1; }
-        input[type=range].bpm-slider {
-            width: 100%;
-            height: 6px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: linear-gradient(to right, #4776e6 var(--pct), #ddd var(--pct));
-            border-radius: 6px;
-            outline: none;
-            cursor: pointer;
-        }
-        input[type=range].bpm-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 22px; height: 22px;
-            border-radius: 50%;
-            background: #4776e6;
-            box-shadow: 0 2px 6px rgba(71,118,230,0.4);
-            cursor: pointer;
-        }
-        input[type=range].bpm-slider::-moz-range-thumb {
-            width: 22px; height: 22px;
-            border-radius: 50%;
-            background: #4776e6;
-            border: none;
-            cursor: pointer;
-        }
+        /* Tap tempo */
+        .tap-btn { width:100%; padding:16px; border-radius:14px; border:2px dashed rgba(157,107,255,0.35); background:rgba(157,107,255,0.06); font-size:16px; font-weight:700; color:var(--accent); cursor:pointer; font-family:var(--font-sans); transition:all 0.1s; letter-spacing:0.5px; }
+        .tap-btn:active { background:rgba(157,107,255,0.14); transform:scale(0.98); border-style:solid; }
 
-        /* ── Compás ── */
-        .time-sig-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
-        }
-        .sig-btn {
-            padding: 10px 4px;
-            border-radius: 10px;
-            border: 2px solid #ddd;
-            background: white;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: inherit;
-            text-align: center;
-            transition: all 0.15s;
-        }
-        .sig-btn:hover  { border-color: #4776e6; color: #4776e6; }
-        .sig-btn.active { background: #4776e6; border-color: #4776e6; color: white; }
-
-        /* ── Tap tempo ── */
-        .tap-btn {
-            width: 100%;
-            padding: 16px;
-            border-radius: 14px;
-            border: 2px dashed #c5cae9;
-            background: #f5f7ff;
-            font-size: 16px;
-            font-weight: 700;
-            color: #4776e6;
-            cursor: pointer;
-            font-family: inherit;
-            transition: all 0.1s;
-            letter-spacing: 0.5px;
-        }
-        .tap-btn:active { background: #e8ecff; transform: scale(0.98); border-style: solid; }
-
-        /* ── Presets de tempo ── */
-        .preset-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 6px;
-        }
-        .preset-btn {
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1.5px solid #eee;
-            background: white;
-            cursor: pointer;
-            font-family: inherit;
-            text-align: left;
-            transition: all 0.12s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .preset-btn:hover { border-color: #4776e6; background: #f0f4ff; }
-        .preset-btn.active { background: #eef2ff; border-color: #4776e6; }
-        .preset-name { font-size: 13px; font-weight: 700; color: #333; }
-        .preset-range { font-size: 11px; color: #999; }
-
-        /* ── Botón Start/Stop ── */
-        .btn-start {
-            background: linear-gradient(135deg, #4776e6, #8e54e9);
-            color: white;
-            font-size: 18px;
-            font-weight: 800;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            letter-spacing: 0.5px;
-        }
-        .btn-stop {
-            background: linear-gradient(135deg, #ff4757, #ff6b81);
-            color: white;
-            font-size: 18px;
-            font-weight: 800;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
+        /* Preset grid */
+        .preset-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
+        .preset-btn { padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-s); color:var(--ink-dim); cursor:pointer; font-family:var(--font-sans); text-align:left; transition:all 0.12s; display:flex; justify-content:space-between; align-items:center; }
+        .preset-btn:hover  { border-color:rgba(157,107,255,0.4); background:var(--surface-ss); color:var(--ink); }
+        .preset-btn.active { background:rgba(157,107,255,0.14); border-color:var(--accent); }
+        .preset-name { font-size:13px; font-weight:700; color:var(--ink); }
+        .preset-range { font-size:11px; color:var(--muted); }
     </style>
 </head>
-<body>
+<body data-tool-name="Metrónomo" data-page-id="metronomo">
 <div class="app-card">
 
     <!-- ── Display ── -->
-    <div class="display-section" style="padding-top:10px;">
-        <div class="app-nav" style="background:none; padding:0 4px 6px;">
-            <a class="nav-back" href="../../index.html">
-                <i class="ti ti-chevron-left"></i> MusicTools
-            </a>
-        </div>
-
+    <div class="display-section">
         <div class="bpm-display">
             <div class="bpm-number" id="bpmNumber">120</div>
             <div class="bpm-label">BPM</div>
@@ -283,8 +116,8 @@
     </div>
 
     <div class="action-bar">
-        <button class="btn btn-start" id="mainBtn" onclick="toggleMetronome()">
-            <i class="ti ti-player-play-filled"></i> Iniciar
+        <button class="btn btn-primary" id="mainBtn" onclick="toggleMetronome()" style="font-size:18px;font-weight:800;letter-spacing:0.5px;">
+            ▶ Iniciar
         </button>
     </div>
 </div>
@@ -437,7 +270,7 @@ async function startMetronome() {
 
     document.getElementById('mainBtn').innerHTML =
         '<i class="ti ti-player-stop-filled"></i> Detener';
-    document.getElementById('mainBtn').className = 'btn btn-stop';
+    document.getElementById('mainBtn').className = 'btn btn-primary'; document.getElementById('mainBtn').style.background='linear-gradient(135deg,#ff5b7f,#ff416c)';
 }
 
 function stopMetronome() {
@@ -450,7 +283,7 @@ function stopMetronome() {
 
     document.getElementById('mainBtn').innerHTML =
         '<i class="ti ti-player-play-filled"></i> Iniciar';
-    document.getElementById('mainBtn').className = 'btn btn-start';
+    document.getElementById('mainBtn').className = 'btn btn-primary'; document.getElementById('mainBtn').style.background='';
 }
 
 // ══════════════════════════════════════════════
@@ -584,5 +417,6 @@ setBpm(120);
 renderBeatDots();
 renderPresets();
 </script>
+<script src="../../shared/shell.js"></script>
 </body>
 </html>

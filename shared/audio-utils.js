@@ -1,6 +1,6 @@
 /**
- * MusicTools - Utilidades de audio compartidas
- * Requiere Tone.js cargado previamente en la página.
+ * MusicTools - Utilidades de audio compartidas.
+ * Requiere sound-engine.js (soundEngine) cargado previamente en la página.
  */
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -18,22 +18,18 @@ function getAllNotes(octaveMin = 2, octaveMax = 6) {
 }
 
 /**
- * Inicia el contexto de audio (requerido por los navegadores antes de reproducir).
+ * Activa el contexto de audio (requerido por los navegadores antes de reproducir).
  * Debe llamarse desde un evento de usuario (click, tap).
  */
 async function startAudio() {
-    if (typeof Tone !== 'undefined') {
-        await Tone.start();
-    }
+    await soundEngine.start();
 }
 
 /**
  * Convierte un índice de nota a su frecuencia en Hz.
  * Usa A4 = 440 Hz como referencia (MIDI standard).
- * noteIndex: posición en el array de getAllNotes(2,6)
  */
 function noteIndexToFreq(noteIndex, octaveMin = 2) {
-    // C2 = MIDI 36
     const midiBase = 12 + (octaveMin * 12);
     const midi = midiBase + noteIndex;
     return 440 * Math.pow(2, (midi - 69) / 12);
