@@ -40,8 +40,23 @@
         .sig-btn.active { background:rgba(157,107,255,0.22); border-color:var(--accent); color:var(--accent); }
 
         /* Tap tempo */
-        .tap-btn { width:100%; padding:16px; border-radius:14px; border:2px dashed rgba(157,107,255,0.35); background:rgba(157,107,255,0.06); font-size:16px; font-weight:700; color:var(--accent); cursor:pointer; font-family:var(--font-sans); transition:all 0.1s; letter-spacing:0.5px; }
-        .tap-btn:active { background:rgba(157,107,255,0.14); transform:scale(0.98); border-style:solid; }
+        .tap-btn {
+            width:100%; padding:14px 16px;
+            border-radius:14px; border:2px dashed rgba(var(--accent-rgb),0.35);
+            background:rgba(var(--accent-rgb),0.06); color:var(--accent);
+            cursor:pointer; font-family:var(--font-sans);
+            transition:background 0.08s, transform 0.08s, box-shadow 0.15s;
+            touch-action:manipulation; user-select:none; -webkit-user-select:none;
+            display:flex; flex-direction:column; align-items:center; gap:4px;
+        }
+        .tap-btn:active { background:rgba(var(--accent-rgb),0.14); transform:scale(0.97); border-style:solid; }
+        .tap-btn.tapping {
+            background:rgba(var(--accent-rgb),0.2);
+            box-shadow:0 0 20px rgba(var(--accent-rgb),0.3);
+            border-style:solid;
+        }
+        .tap-text { font-size:16px; font-weight:700; letter-spacing:0.5px; line-height:1; }
+        .tap-hint { font-size:11px; font-weight:600; letter-spacing:0.06em; color:rgba(var(--accent-rgb),0.65); min-height:15px; line-height:1; }
 
         /* Preset grid */
         .preset-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
@@ -88,7 +103,8 @@
 
             <!-- Tap tempo -->
             <button class="tap-btn" id="tapBtn" onclick="tapTempo()">
-                Tap Tempo
+                <span class="tap-text">Tap Tempo</span>
+                <span class="tap-hint" id="tapHint"></span>
             </button>
         </div>
 
@@ -154,9 +170,10 @@ let masterGain    = null;
 let schedulerId   = null;
 let nextBeatTime  = 0;
 
-// Tap tempo
-let tapTimes      = [];
-const TAP_RESET_MS = 2500;
+// Tap tempo — interval-buffer algorithm
+let tapIntervals   = [];   // stores last 4 intervals in ms
+let lastTapTime    = 0;    // absolute timestamp of previous tap
+const TAP_RESET_MS = 2500; // inactivity auto-reset timer
 
 // Scheduler lookahead (Chris Wilson pattern)
 const LOOKAHEAD_MS   = 25;    // Timer interval
@@ -323,37 +340,49 @@ function changeBpm(delta) {
 //  TAP TEMPO
 // ══════════════════════════════════════════════
 function tapTempo() {
-    const now = Date.now();
+    const now  = Date.now();
+    const hint = document.getElementById('tapHint');
+    const btn  = document.getElementById('tapBtn');
 
-    // Reiniciar si pasó demasiado tiempo desde el último tap
-    if (tapTimes.length > 0 && now - tapTimes[tapTimes.length - 1] > TAP_RESET_MS) {
-        tapTimes = [];
+    // Reset buffer if gap > 2 s (< 30 BPM = new session)
+    if (lastTapTime > 0 && now - lastTapTime > 2000) {
+        tapIntervals = [];
     }
 
-    tapTimes.push(now);
-
-    if (tapTimes.length < 2) {
-        document.getElementById('tapBtn').textContent = 'Tap Tempo  (sigue tocando…)';
-        return;
+    // Store interval from previous tap (skip on first tap)
+    if (lastTapTime > 0) {
+        tapIntervals.push(now - lastTapTime);
+        if (tapIntervals.length > 4) tapIntervals.shift(); // keep last 4
     }
 
-    // Calcular promedio de los últimos 8 taps
-    const recent = tapTimes.slice(-8);
-    let totalInterval = 0;
-    for (let i = 1; i < recent.length; i++) {
-        totalInterval += recent[i] - recent[i - 1];
+    lastTapTime = now;
+
+    // Calculate BPM from average of stored intervals
+    if (tapIntervals.length > 0) {
+        const avg = tapIntervals.reduce((a, b) => a + b, 0) / tapIntervals.length;
+        setBpm(Math.round(60000 / avg));
     }
-    const avgInterval = totalInterval / (recent.length - 1);
-    const calculatedBpm = Math.round(60000 / avgInterval);
 
-    setBpm(calculatedBpm);
-    document.getElementById('tapBtn').textContent = `Tap Tempo  ·  ${calculatedBpm} BPM`;
+    // Progress feedback
+    const n = tapIntervals.length;
+    if (n === 0) {
+        hint.textContent = 'Sigue presionando...';
+    } else if (n < 4) {
+        hint.textContent = `${n + 1} / 4 taps`;
+    } else {
+        hint.textContent = `✓ ${bpm} BPM calibrado`;
+    }
 
-    // Restaurar texto tras un momento
-    clearTimeout(tapTimes._labelTimer);
-    tapTimes._labelTimer = setTimeout(() => {
-        document.getElementById('tapBtn').textContent = 'Tap Tempo';
-        tapTimes = [];
+    // Flash
+    btn.classList.add('tapping');
+    setTimeout(() => btn.classList.remove('tapping'), 130);
+
+    // Auto-reset after 2.5 s of inactivity
+    clearTimeout(tapTempo._reset);
+    tapTempo._reset = setTimeout(() => {
+        tapIntervals = [];
+        lastTapTime  = 0;
+        hint.textContent = '';
     }, TAP_RESET_MS);
 }
 

@@ -71,6 +71,7 @@
     metronome: '<path d="M8 3h8l3 18H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 21 9 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     headphones:'<path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="3" y="13" width="5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="16" y="13" width="5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>',
     flame:     '<path d="M12 2s4 4 4 8a4 4 0 0 1-8 0c0-2 2-3 2-6 2 1 2 3 2 3s0-3 0-5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 14a4 4 0 0 0 8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    drum:      '<ellipse cx="12" cy="10" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10v5c0 2.2 4 4 9 4s9-1.8 9-4v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="8.5" y1="2.5" x2="10.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15.5" y1="2.5" x2="13.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   };
 
   function svg(name, size) {
@@ -113,6 +114,7 @@
     { id: 'acordes-bajo',           name: 'Acordes Bajo',       icon: 'bass',       href: ROOT + 'apps/acordes-bajo/' },
     { id: 'escalas',                name: 'Escalas',            icon: 'piano',      href: ROOT + 'apps/escalas/' },
     { id: 'metronomo',              name: 'Metrónomo',          icon: 'metronome',  href: ROOT + 'apps/metronomo/' },
+    { id: 'groove',                 name: 'Groove',             icon: 'drum',       href: ROOT + 'apps/groove/' },
     { id: 'entrenamiento-auditivo', name: 'Entrenamiento auditivo', icon: 'headphones', href: ROOT + 'apps/entrenamiento-auditivo/' },
   ];
 

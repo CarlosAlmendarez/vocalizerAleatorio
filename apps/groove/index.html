@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groove - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <style>
+        /* ── Screen ── */
+        .groove-screen {
+            display: flex; flex-direction: column; gap: 18px;
+            padding: 12px 0 calc(var(--bottomnav-h) + 104px);
+            color: var(--ink);
+        }
+        @media (min-width: 960px) { .groove-screen { padding-bottom: 40px; } }
+
+        .groove-section-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+        }
+
+        /* ── Hero ── */
+        .groove-hero { text-align: center; padding: 14px 0 4px; }
+        .groove-title {
+            font-family: var(--font-head);
+            font-size: clamp(42px,11vw,68px);
+            font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--ink);
+        }
+        .groove-title .acc { color: var(--accent); text-shadow: var(--accent-glow); }
+        .groove-sub { font-size: 13px; color: var(--ink-dim); margin-top: 6px; }
+
+        /* ── Genre chips ── */
+        .groove-genre-scroll {
+            overflow-x: auto; scrollbar-width: none; padding-bottom: 4px;
+        }
+        .groove-genre-scroll::-webkit-scrollbar { display: none; }
+        .groove-genre-row { display: flex; gap: 8px; width: max-content; }
+        .groove-genre-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 10px 18px; border-radius: var(--radius-sm);
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--ink-dim); cursor: pointer; font-family: var(--font-head);
+            font-weight: 700; font-size: 13px; white-space: nowrap;
+            transition: all 0.14s; box-shadow: var(--card-shadow); min-width: 72px;
+        }
+        .groove-genre-btn .g-sub { font-size: 9px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--font-sans); }
+        .groove-genre-btn:hover { background: var(--surface-s); border-color: rgba(var(--accent-rgb),0.3); }
+        .groove-genre-btn.active {
+            background: rgba(var(--accent-rgb),0.14); border-color: var(--accent); color: var(--accent);
+        }
+        .groove-genre-btn.active .g-sub { color: rgba(var(--accent-rgb),0.7); }
+
+        /* ── Timeline card ── */
+        .groove-timeline {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px 14px;
+        }
+        .groove-beats {
+            display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;
+        }
+        .groove-beat-dot {
+            width: 38px; height: 38px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: var(--font-head); font-size: 16px; font-weight: 800;
+            background: var(--surface-s); border: 1px solid var(--border);
+            color: var(--muted); transition: all 0.07s;
+        }
+        .groove-beat-dot.active {
+            background: var(--accent); border-color: transparent;
+            color: var(--accent-ink); box-shadow: var(--accent-shadow);
+            transform: scale(1.15);
+        }
+        .groove-mute-bar {
+            display: none; text-align: center; margin-bottom: 10px;
+            font-size: 11px; font-weight: 700; color: var(--warning);
+            letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .groove-mute-bar.visible { display: block; }
+
+        .groove-grid-scroll { overflow-x: auto; scrollbar-width: none; }
+        .groove-grid-scroll::-webkit-scrollbar { display: none; }
+        .groove-grid { display: flex; gap: 3px; width: max-content; padding: 2px 0; }
+        .groove-step {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 5px; width: 30px; padding: 8px 4px;
+            border-radius: 8px; border: 1px solid transparent;
+            transition: all 0.07s;
+        }
+        .groove-step.on-beat { background: var(--surface-s); }
+        .groove-step.active {
+            background: rgba(var(--accent-rgb),0.2) !important;
+            border-color: rgba(var(--accent-rgb),0.5);
+            box-shadow: 0 0 12px rgba(var(--accent-rgb),0.25);
+        }
+        .groove-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.07s; flex-shrink: 0;
+        }
+        [data-theme="minimal"] .groove-dot { background: rgba(0,0,0,0.08); border-color: rgba(0,0,0,0.1); }
+        .groove-dot.kick-on  { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 6px rgba(var(--accent-rgb),0.5); }
+        .groove-dot.snare-on { background: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.4); }
+        [data-theme="minimal"] .groove-dot.snare-on { background: rgba(30,30,60,0.7); border-color: rgba(30,30,60,0.3); }
+        .groove-dot.hihat-on { background: var(--accent2); border-color: var(--accent2); box-shadow: 0 0 6px rgba(var(--accent2-rgb),0.5); }
+        .groove-step-num {
+            font-size: 7.5px; font-weight: 700; color: var(--muted);
+            font-variant-numeric: tabular-nums; line-height: 1;
+        }
+
+        /* ── Grid legend ── */
+        .groove-legend {
+            display: flex; justify-content: center; gap: 16px; margin-top: 10px;
+        }
+        .groove-legend-item { display: flex; align-items: center; gap: 5px; }
+        .groove-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .groove-legend-lbl { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+
+        /* ── BPM card ── */
+        .groove-bpm-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px 16px;
+            display: flex; flex-direction: column; gap: 14px; align-items: center;
+        }
+        .groove-bpm-display { text-align: center; }
+        .groove-bpm-num {
+            font-family: var(--font-head);
+            font-size: clamp(60px,16vw,88px);
+            font-weight: 900; line-height: 1; letter-spacing: -0.04em; color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+        .groove-bpm-lbl { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; }
+
+        .groove-slider-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+        .groove-adj-btn {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: var(--surface-s); border: 1px solid var(--border);
+            color: var(--ink); font-size: 22px; font-weight: 300; line-height: 1;
+            cursor: pointer; display: grid; place-items: center;
+            flex-shrink: 0; transition: all 0.12s; user-select: none;
+        }
+        .groove-adj-btn:hover { background: var(--surface-ss); color: var(--accent); border-color: rgba(var(--accent-rgb),0.3); }
+        .groove-adj-btn:active { transform: scale(0.9); }
+
+        input[type="range"].groove-slider {
+            flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px;
+        }
+
+        .groove-tap-btn {
+            width: 100%; padding: 14px 15px;
+            border-radius: 12px; border: 2px solid rgba(var(--accent-rgb),0.3);
+            background: rgba(var(--accent-rgb),0.07);
+            color: var(--accent);
+            font-family: var(--font-head); cursor: pointer;
+            transition: background 0.08s, transform 0.08s, box-shadow 0.15s;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            /* Prevent double-tap zoom on mobile */
+            touch-action: manipulation;
+            user-select: none; -webkit-user-select: none;
+        }
+        .groove-tap-btn:active { transform: scale(0.97); }
+        .groove-tap-btn.tapping {
+            background: rgba(var(--accent-rgb),0.22);
+            box-shadow: 0 0 22px rgba(var(--accent-rgb),0.35);
+        }
+        .tap-text { font-size: 16px; font-weight: 800; letter-spacing: 0.18em; line-height: 1; }
+        .tap-hint {
+            font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+            color: rgba(var(--accent-rgb),0.65); min-height: 15px; line-height: 1;
+            font-family: var(--font-sans);
+        }
+
+        /* ── Mixer ── */
+        .groove-mixer-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .groove-mix-row { display: flex; align-items: center; gap: 12px; }
+        .groove-mix-lbl {
+            width: 48px; font-size: 12px; font-weight: 700; flex-shrink: 0;
+            display: flex; align-items: center; gap: 7px; color: var(--ink-dim);
+        }
+        .groove-mix-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        input[type="range"].groove-mix-slider { flex: 1; accent-color: var(--accent); cursor: pointer; }
+        .groove-mix-val { width: 28px; font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+        /* ── Options ── */
+        .groove-options { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .groove-opt-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 14px 12px;
+            display: flex; flex-direction: column; gap: 10px;
+            cursor: pointer; transition: border-color 0.15s;
+        }
+        .groove-opt-card:hover { border-color: rgba(var(--accent-rgb),0.3); }
+        .groove-opt-lbl { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
+
+        .groove-sig-row { display: flex; gap: 4px; flex-wrap: wrap; }
+        .groove-sig-btn {
+            padding: 5px 9px; border-radius: 999px;
+            border: 1px solid var(--border); background: transparent;
+            color: var(--ink-dim); font-size: 12px; font-weight: 700;
+            font-family: var(--font-head); cursor: pointer; transition: all 0.13s;
+        }
+        .groove-sig-btn.active { background: rgba(var(--accent-rgb),0.18); border-color: var(--accent); color: var(--accent); }
+
+        .groove-toggle {
+            width: 44px; height: 26px; border-radius: 13px;
+            background: var(--surface-ss); border: 1px solid var(--border);
+            position: relative; transition: all 0.25s; flex-shrink: 0;
+        }
+        .groove-toggle.on { background: var(--accent); border-color: var(--accent); }
+        .groove-toggle::after {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: white; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+            transition: transform 0.25s;
+        }
+        .groove-toggle.on::after { transform: translateX(18px); }
+        .groove-opt-sub { font-size: 10px; color: var(--muted); line-height: 1.4; }
+
+        /* ── Transport ── */
+        .groove-transport {
+            position: fixed; left: 0; right: 0; bottom: var(--bottomnav-h);
+            display: flex; justify-content: center; align-items: center; gap: 16px;
+            padding: 14px 16px;
+            background: linear-gradient(to top, var(--bg) 55%, transparent);
+            pointer-events: none; z-index: 40;
+        }
+        @media (min-width: 960px) { .groove-transport { position: static; background: none; padding: 8px 0 4px; } }
+        .groove-transport > * { pointer-events: all; }
+
+        .groove-play-btn {
+            width: 84px; height: 84px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: var(--accent-ink); border: none; cursor: pointer;
+            display: grid; place-items: center;
+            box-shadow: var(--accent-shadow);
+            transition: transform 0.12s, box-shadow 0.2s;
+        }
+        .groove-play-btn:hover { transform: scale(1.05); box-shadow: var(--accent-glow), var(--accent-shadow); }
+        .groove-play-btn:active { transform: scale(0.93); }
+        .groove-play-btn.playing {
+            background: linear-gradient(135deg, #ff3366, #ff5b7f);
+            box-shadow: 0 12px 32px -8px rgba(255,51,102,0.7);
+        }
+        .groove-tempo-badge {
+            padding: 10px 18px; border-radius: 999px;
+            background: var(--surface); border: 1px solid var(--border);
+            font-family: var(--font-head); font-size: 22px; font-weight: 800;
+            color: var(--ink); line-height: 1; text-align: center;
+            box-shadow: var(--card-shadow);
+        }
+        .groove-tempo-badge span { font-size: 10px; font-weight: 700; color: var(--muted); display: block; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+    </style>
+</head>
+<body data-tool-name="Groove" data-page-id="groove">
+
+<div class="groove-screen">
+
+    <!-- Hero -->
+    <div class="groove-hero">
+        <div class="groove-title">Groove <span class="acc">Studio</span></div>
+        <div class="groove-sub">Batería & Tempo</div>
+    </div>
+
+    <!-- Genre selector -->
+    <div>
+        <div class="groove-section-label">Estilo</div>
+        <div class="groove-genre-scroll">
+            <div class="groove-genre-row" id="genreRow"></div>
+        </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="groove-timeline">
+        <div class="groove-beats" id="beatRow"></div>
+        <div class="groove-mute-bar" id="muteBar">🔇 Compás silenciado</div>
+        <div class="groove-grid-scroll">
+            <div class="groove-grid" id="stepGrid"></div>
+        </div>
+        <div class="groove-legend">
+            <div class="groove-legend-item">
+                <div class="groove-legend-dot" style="background:var(--accent);"></div>
+                <span class="groove-legend-lbl">KICK</span>
+            </div>
+            <div class="groove-legend-item">
+                <div class="groove-legend-dot" style="background:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3);"></div>
+                <span class="groove-legend-lbl">SNARE</span>
+            </div>
+            <div class="groove-legend-item">
+                <div class="groove-legend-dot" style="background:var(--accent2);"></div>
+                <span class="groove-legend-lbl">HI-HAT</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- BPM -->
+    <div class="groove-bpm-card">
+        <div class="groove-bpm-display">
+            <div class="groove-bpm-num" id="bpmDisplay">100</div>
+            <div class="groove-bpm-lbl">BPM</div>
+        </div>
+        <div class="groove-slider-row">
+            <button class="groove-adj-btn" onclick="adjBPM(-1)">−</button>
+            <input type="range" class="groove-slider" id="bpmSlider" min="40" max="220" value="100" oninput="setBPM(+this.value)">
+            <button class="groove-adj-btn" onclick="adjBPM(1)">+</button>
+        </div>
+        <button class="groove-tap-btn" id="tapBtn" onclick="tap()">
+            <span class="tap-text">TAP TEMPO</span>
+            <span class="tap-hint" id="tapHint"></span>
+        </button>
+    </div>
+
+    <!-- Mixer -->
+    <div class="groove-mixer-card">
+        <div class="groove-section-label" style="margin-bottom:0;">Mezcla</div>
+        <div class="groove-mix-row">
+            <div class="groove-mix-lbl">
+                <div class="groove-mix-dot" style="background:var(--accent);"></div> Kick
+            </div>
+            <input type="range" class="groove-mix-slider" id="volKick" min="0" max="1" step="0.05" value="0.85" oninput="setVol('kick',+this.value,this)">
+            <span class="groove-mix-val" id="lblKick">85</span>
+        </div>
+        <div class="groove-mix-row">
+            <div class="groove-mix-lbl">
+                <div class="groove-mix-dot" style="background:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3);"></div> Snare
+            </div>
+            <input type="range" class="groove-mix-slider" id="volSnare" min="0" max="1" step="0.05" value="0.80" oninput="setVol('snare',+this.value,this)">
+            <span class="groove-mix-val" id="lblSnare">80</span>
+        </div>
+        <div class="groove-mix-row">
+            <div class="groove-mix-lbl">
+                <div class="groove-mix-dot" style="background:var(--accent2);"></div> HH
+            </div>
+            <input type="range" class="groove-mix-slider" id="volHihat" min="0" max="1" step="0.05" value="0.60" oninput="setVol('hihat',+this.value,this)">
+            <span class="groove-mix-val" id="lblHihat">60</span>
+        </div>
+    </div>
+
+    <!-- Options -->
+    <div>
+        <div class="groove-section-label">Opciones avanzadas</div>
+        <div class="groove-options">
+            <div class="groove-opt-card" style="cursor:default;">
+                <div class="groove-opt-lbl">Compás</div>
+                <div class="groove-sig-row">
+                    <button class="groove-sig-btn active" onclick="setSig('4/4',this)">4/4</button>
+                    <button class="groove-sig-btn" onclick="setSig('3/4',this)">3/4</button>
+                    <button class="groove-sig-btn" onclick="setSig('6/8',this)">6/8</button>
+                </div>
+                <div class="groove-opt-sub" id="sigDesc">4 tiempos · 16 subdivisiones</div>
+            </div>
+            <div class="groove-opt-card" onclick="toggleHumanize()">
+                <div class="groove-opt-lbl">Humanizar</div>
+                <div class="groove-toggle on" id="humanizeToggle"></div>
+                <div class="groove-opt-sub">Variación de velocidad</div>
+            </div>
+            <div class="groove-opt-card" onclick="toggleGhost()">
+                <div class="groove-opt-lbl">Silencios</div>
+                <div class="groove-toggle" id="ghostToggle"></div>
+                <div class="groove-opt-sub">1 compás mudo c/4</div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /groove-screen -->
+
+<!-- Transport -->
+<div class="groove-transport">
+    <div class="groove-tempo-badge" id="tempoBadge">
+        100<span>BPM</span>
+    </div>
+    <button class="groove-play-btn" id="playBtn" onclick="togglePlay()">
+        <svg id="playIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg>
+    </button>
+</div>
+
+<script>
+// ── Presets ──────────────────────────────────────────────────────
+const GENRES = [
+    { id:'rock',   name:'Rock',   sub:'Clásico' },
+    { id:'pop',    name:'Pop',    sub:'Moderno' },
+    { id:'funk',   name:'Funk',   sub:'Groove'  },
+    { id:'jazz',   name:'Jazz',   sub:'Swing'   },
+    { id:'blues',  name:'Blues',  sub:'Shuffle' },
+    { id:'reggae', name:'Reggae', sub:'Offbeat' },
+    { id:'metal',  name:'Metal',  sub:'Pesado'  },
+];
+
+// 4/4 — 16 steps (16th notes)
+const P44 = {
+    rock:   { kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0] },
+    pop:    { kick:[1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
+    funk:   { kick:[1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1], hihat:[1,0,1,1,0,1,1,0,1,0,1,1,0,1,1,0] },
+    jazz:   { kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], snare:[0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0], hihat:[1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0] },
+    blues:  { kick:[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat:[1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0] },
+    reggae: { kick:[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,1], hihat:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
+    metal:  { kick:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
+};
+
+// 3/4 — 12 steps (16th notes, 3 beats × 4)
+const P34 = {
+    rock:   { kick:[1,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,1,0,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    pop:    { kick:[1,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,1,0,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1] },
+    funk:   { kick:[1,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,1,0,0,1], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    jazz:   { kick:[1,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,0,0,0,1,0,0,0,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    blues:  { kick:[1,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,1,0,0,0], hihat:[1,0,0,1,0,0,1,0,0,1,0,0] },
+    reggae: { kick:[1,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,1,0,0,0], hihat:[0,0,1,0,0,0,1,0,0,0,1,0] },
+    metal:  { kick:[1,0,1,0,1,0,1,0,1,0,1,0], snare:[0,0,0,0,1,0,0,0,1,0,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1] },
+};
+
+// 6/8 — 12 steps (8th notes, 6 beats × 2)
+const P68 = {
+    rock:   { kick:[1,0,0,1,0,0,1,0,0,0,0,0], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    pop:    { kick:[1,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1] },
+    funk:   { kick:[1,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,1,1,0,0,0,0,1,1,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    jazz:   { kick:[1,0,0,0,0,0,0,0,0,0,0,0], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    blues:  { kick:[1,0,0,1,0,0,1,0,0,0,0,0], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[1,0,1,0,1,0,1,0,1,0,1,0] },
+    reggae: { kick:[1,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[0,0,1,0,0,0,0,0,1,0,0,0] },
+    metal:  { kick:[1,0,1,1,0,1,1,0,1,1,0,1], snare:[0,0,0,1,0,0,0,0,0,1,0,0], hihat:[1,1,1,1,1,1,1,1,1,1,1,1] },
+};
+
+const SIG_DESC = { '4/4':'4 tiempos · 16 subdivisiones', '3/4':'3 tiempos · vals / balada', '6/8':'6 tiempos · compás compuesto' };
+
+// ── State ────────────────────────────────────────────────────────
+let bpm       = 100;
+let isPlaying = false;
+let genre     = 'rock';
+let timeSig   = '4/4';
+let humanize  = true;
+let ghostMute = false;
+let vols      = { kick: 0.85, snare: 0.80, hihat: 0.60 };
+
+let audioCtx      = null;
+let schedId       = null;
+let currentStep   = 0;
+let nextStepTime  = 0;
+let barCount      = 0;
+let tapIntervals  = [];   // stores last 4 intervals in ms
+let lastTapTime   = 0;    // absolute timestamp of previous tap
+
+const LOOKAHEAD   = 0.1;   // seconds
+const SCHEDULE_MS = 25;    // ms
+
+// ── Audio ────────────────────────────────────────────────────────
+function getCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
+
+function synthKick(time, gain) {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.frequency.setValueAtTime(160, time);
+    osc.frequency.exponentialRampToValueAtTime(0.001, time + 0.48);
+    g.gain.setValueAtTime(gain, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.48);
+    osc.start(time); osc.stop(time + 0.5);
+}
+
+function synthSnare(time, gain) {
+    const ctx = getCtx();
+    const bLen = Math.ceil(ctx.sampleRate * 0.18);
+    const buf  = ctx.createBuffer(1, bLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bLen; i++) data[i] = Math.random() * 2 - 1;
+
+    const noise = ctx.createBufferSource(); noise.buffer = buf;
+    const hpf   = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 1400;
+    const ng    = ctx.createGain();
+    noise.connect(hpf); hpf.connect(ng); ng.connect(ctx.destination);
+    ng.gain.setValueAtTime(gain * 0.75, time);
+    ng.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+    noise.start(time); noise.stop(time + 0.18);
+
+    const osc = ctx.createOscillator();
+    const og  = ctx.createGain();
+    osc.connect(og); og.connect(ctx.destination);
+    osc.frequency.value = 185;
+    og.gain.setValueAtTime(gain * 0.45, time);
+    og.gain.exponentialRampToValueAtTime(0.001, time + 0.07);
+    osc.start(time); osc.stop(time + 0.1);
+}
+
+function synthHihat(time, gain) {
+    const ctx  = getCtx();
+    const dur  = 0.045;
+    const bLen = Math.ceil(ctx.sampleRate * dur);
+    const buf  = ctx.createBuffer(1, bLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bLen; i++) data[i] = Math.random() * 2 - 1;
+
+    const noise = ctx.createBufferSource(); noise.buffer = buf;
+    const hpf   = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 7500;
+    const g     = ctx.createGain();
+    noise.connect(hpf); hpf.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(gain * 0.55, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    noise.start(time); noise.stop(time + dur + 0.01);
+}
+
+// ── Scheduler ────────────────────────────────────────────────────
+function getStepDuration() {
+    if (timeSig === '6/8') return (60 / bpm) / 2;  // 8th note
+    return (60 / bpm) / 4;                          // 16th note
+}
+
+function getTotalSteps() { return (timeSig === '4/4') ? 16 : 12; }
+
+function getBeatIndex(step) {
+    if (timeSig === '6/8') return Math.floor(step / 2);
+    return Math.floor(step / 4);
+}
+
+function getNumBeats() {
+    if (timeSig === '4/4') return 4;
+    if (timeSig === '3/4') return 3;
+    return 6;
+}
+
+function getCurrentPattern() {
+    const bank = timeSig === '4/4' ? P44 : timeSig === '3/4' ? P34 : P68;
+    return bank[genre] || bank.rock;
+}
+
+function runScheduler() {
+    const ctx = getCtx();
+    while (nextStepTime < ctx.currentTime + LOOKAHEAD) {
+        scheduleNote(currentStep, nextStepTime);
+        nextStepTime += getStepDuration();
+        currentStep = (currentStep + 1) % getTotalSteps();
+        if (currentStep === 0) barCount++;
+    }
+}
+
+function scheduleNote(step, time) {
+    const ctx   = getCtx();
+    const delay = Math.max(0, (time - ctx.currentTime) * 1000);
+
+    // Visual update
+    setTimeout(() => updateStepVisual(step), delay);
+
+    // Ghost mute: silence every 4th bar
+    const isMuted = ghostMute && (barCount % 4 === 3);
+    if (step === 0) document.getElementById('muteBar').classList.toggle('visible', isMuted);
+    if (isMuted) return;
+
+    const p  = getCurrentPattern();
+    const hv = humanize ? (0.80 + Math.random() * 0.24) : 1.0;
+    const isDown = step % 4 === 0;
+
+    if (p.kick[step])  synthKick(time,  (isDown ? 0.95 : 0.82) * hv * vols.kick);
+    if (p.snare[step]) synthSnare(time, 0.88 * hv * vols.snare);
+    if (p.hihat[step]) {
+        const hhv = (isDown ? 0.85 : step % 2 === 0 ? 0.65 : 0.50) * hv * vols.hihat;
+        synthHihat(time, hhv);
+    }
+}
+
+function updateStepVisual(step) {
+    document.querySelectorAll('.groove-step').forEach((el, i) => {
+        el.classList.toggle('active', i === step);
+    });
+
+    const beatIdx = step >= 0 ? getBeatIndex(step) : -1;
+    document.querySelectorAll('.groove-beat-dot').forEach((el, i) => {
+        el.classList.toggle('active', i === beatIdx);
+    });
+
+    // Auto-scroll to keep active step in view
+    if (step >= 0) {
+        const active = document.querySelector('.groove-step.active');
+        const scroll = document.querySelector('.groove-grid-scroll');
+        if (active && scroll) {
+            const left = active.offsetLeft;
+            if (left < scroll.scrollLeft + 20 || left > scroll.scrollLeft + scroll.clientWidth - 50) {
+                scroll.scrollLeft = left - scroll.clientWidth / 2 + 15;
+            }
+        }
+    }
+}
+
+// ── Playback controls ────────────────────────────────────────────
+function togglePlay() {
+    if (isPlaying) stopGroove(); else startGroove();
+}
+
+function startGroove() {
+    const ctx = getCtx();
+    isPlaying   = true;
+    currentStep = 0;
+    barCount    = 0;
+    nextStepTime = ctx.currentTime + 0.06;
+    schedId = setInterval(runScheduler, SCHEDULE_MS);
+    document.getElementById('playBtn').classList.add('playing');
+    document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+}
+
+function stopGroove() {
+    isPlaying = false;
+    clearInterval(schedId); schedId = null;
+    updateStepVisual(-1);
+    document.getElementById('muteBar').classList.remove('visible');
+    document.getElementById('playBtn').classList.remove('playing');
+    document.getElementById('playIcon').innerHTML = '<path d="m8 5 12 7-12 7z"/>';
+}
+
+// ── BPM ─────────────────────────────────────────────────────────
+function setBPM(v) {
+    bpm = Math.max(40, Math.min(220, Math.round(v)));
+    document.getElementById('bpmDisplay').textContent = bpm;
+    document.getElementById('bpmSlider').value = bpm;
+    document.getElementById('tempoBadge').innerHTML = bpm + '<span>BPM</span>';
+}
+
+function adjBPM(delta) { setBPM(bpm + delta); }
+
+// Tap tempo — interval-buffer algorithm
+function tap() {
+    const now  = Date.now();
+    const btn  = document.getElementById('tapBtn');
+    const hint = document.getElementById('tapHint');
+
+    // Reset buffer if gap > 2 s (below ~30 BPM means new session)
+    if (lastTapTime > 0 && now - lastTapTime > 2000) {
+        tapIntervals = [];
+    }
+
+    // Record interval from previous tap (skip on very first tap)
+    if (lastTapTime > 0) {
+        tapIntervals.push(now - lastTapTime);
+        if (tapIntervals.length > 4) tapIntervals.shift(); // keep last 4
+    }
+
+    lastTapTime = now;
+
+    // Calculate BPM from average of stored intervals
+    if (tapIntervals.length > 0) {
+        const avg = tapIntervals.reduce((a, b) => a + b, 0) / tapIntervals.length;
+        setBPM(Math.round(60000 / avg));
+    }
+
+    // Feedback: show tap progress toward 4-tap calibration
+    const n = tapIntervals.length; // number of intervals collected so far
+    if (n === 0) {
+        hint.textContent = 'Sigue presionando...';
+    } else if (n < 4) {
+        hint.textContent = `${n + 1} / 4 taps`;
+    } else {
+        hint.textContent = `✓ ${bpm} BPM calibrado`;
+    }
+
+    // Flash
+    btn.classList.add('tapping');
+    setTimeout(() => btn.classList.remove('tapping'), 130);
+
+    // Auto-reset after 2.5 s of inactivity
+    clearTimeout(tap._reset);
+    tap._reset = setTimeout(() => {
+        tapIntervals = [];
+        lastTapTime  = 0;
+        hint.textContent = '';
+    }, 2500);
+}
+
+// ── Genre / Sig / Options ────────────────────────────────────────
+function setGenre(id) {
+    genre = id;
+    document.querySelectorAll('.groove-genre-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+    renderGrid();
+}
+
+function setSig(sig, btn) {
+    timeSig = sig;
+    document.querySelectorAll('.groove-sig-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sigDesc').textContent = SIG_DESC[sig];
+    if (isPlaying) { stopGroove(); startGroove(); }
+    renderGrid();
+}
+
+function toggleHumanize() {
+    humanize = !humanize;
+    document.getElementById('humanizeToggle').classList.toggle('on', humanize);
+}
+
+function toggleGhost() {
+    ghostMute = !ghostMute;
+    document.getElementById('ghostToggle').classList.toggle('on', ghostMute);
+    if (!ghostMute) document.getElementById('muteBar').classList.remove('visible');
+}
+
+function setVol(drum, val, sliderEl) {
+    vols[drum] = val;
+    const pct = Math.round(val * 100);
+    document.getElementById('lbl' + drum.charAt(0).toUpperCase() + drum.slice(1)).textContent = pct;
+    // Color accent on slider track
+    const pctStr = pct + '%';
+    sliderEl.style.background = `linear-gradient(to right, var(--accent) ${pctStr}, var(--surface-ss) ${pctStr})`;
+}
+
+// ── Render ───────────────────────────────────────────────────────
+function renderGenres() {
+    document.getElementById('genreRow').innerHTML = GENRES.map(g =>
+        `<button class="groove-genre-btn${g.id === genre ? ' active' : ''}" data-id="${g.id}" onclick="setGenre('${g.id}')">
+            ${g.name}<span class="g-sub">${g.sub}</span>
+        </button>`
+    ).join('');
+}
+
+function renderBeats() {
+    const n = getNumBeats();
+    document.getElementById('beatRow').innerHTML = Array.from({length: n}, (_, i) =>
+        `<div class="groove-beat-dot">${i+1}</div>`
+    ).join('');
+}
+
+function renderGrid() {
+    renderBeats();
+    const total = getTotalSteps();
+    const p     = getCurrentPattern();
+    const stepsPerBeat = timeSig === '6/8' ? 2 : 4;
+
+    document.getElementById('stepGrid').innerHTML = Array.from({length: total}, (_, s) => {
+        const isOnBeat = s % stepsPerBeat === 0;
+        const beatNum  = Math.floor(s / stepsPerBeat) + 1;
+        const subNum   = s % stepsPerBeat + 1;
+        const lbl      = subNum === 1 ? beatNum : '·';
+        return `<div class="groove-step${isOnBeat ? ' on-beat' : ''}" data-step="${s}">
+            <div class="groove-dot${p.hihat[s] ? ' hihat-on' : ''}"></div>
+            <div class="groove-dot${p.snare[s] ? ' snare-on' : ''}"></div>
+            <div class="groove-dot${p.kick[s]  ? ' kick-on'  : ''}"></div>
+            <span class="groove-step-num">${lbl}</span>
+        </div>`;
+    }).join('');
+}
+
+// Redraw on theme change (legend dot colors use CSS vars, grid uses class-based CSS)
+window.addEventListener('mt-theme-change', function() { initSliders(); });
+
+// Init volume slider styles
+function initSliders() {
+    ['Kick','Snare','Hihat'].forEach(name => {
+        const id = 'vol' + name;
+        const sl = document.getElementById(id);
+        if (sl) {
+            const pct = Math.round(+sl.value * 100) + '%';
+            sl.style.background = `linear-gradient(to right, var(--accent) ${pct}, var(--surface-ss) ${pct})`;
+        }
+    });
+}
+</script>
+<script src="../../shared/shell.js"></script>
+<script>
+window.addEventListener('load', function() {
+    renderGenres();
+    renderGrid();
+    initSliders();
+});
+</script>
+</body>
+</html>
