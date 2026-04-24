@@ -5,6 +5,34 @@
  * - 3-theme switcher: neon · minimal · amber, persisted in localStorage
  * - Font preloading for all 3 display fonts
  */
+
+/* ------------------------------------------------------------------ */
+/* iOS AUDIO UNLOCK — ejecuta buffer silencioso en primer gesto.        */
+/* Permite que cualquier AudioContext creado después suene aunque       */
+/* el interruptor de silencio del iPhone esté activado.                 */
+/* ------------------------------------------------------------------ */
+(function () {
+  var unlocked = false;
+  function iosUnlock() {
+    if (unlocked) return;
+    unlocked = true;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      var ctx = new AC();
+      var buf = ctx.createBuffer(1, 1, 22050);
+      var src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      ctx.resume().then(function () { setTimeout(function () { ctx.close(); }, 1000); }).catch(function () {});
+    } catch (_) {}
+  }
+  document.addEventListener('touchstart', iosUnlock, { capture: true, passive: true });
+  document.addEventListener('touchend',   iosUnlock, { capture: true, passive: true });
+  document.addEventListener('click',      iosUnlock, { capture: true });
+}());
+
 (function () {
   'use strict';
 
@@ -72,6 +100,9 @@
     headphones:'<path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="3" y="13" width="5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="16" y="13" width="5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>',
     flame:     '<path d="M12 2s4 4 4 8a4 4 0 0 1-8 0c0-2 2-3 2-6 2 1 2 3 2 3s0-3 0-5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 14a4 4 0 0 0 8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     drum:      '<ellipse cx="12" cy="10" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10v5c0 2.2 4 4 9 4s9-1.8 9-4v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="8.5" y1="2.5" x2="10.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15.5" y1="2.5" x2="13.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    swap:      '<path d="M7 16V4m0 0L3 8m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8v12m0 0 4-4m-4 4-4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    circle:    '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="3" x2="12" y2="9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="15" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   };
 
   function svg(name, size) {
@@ -112,9 +143,13 @@
     { id: 'acordes-guitarra',       name: 'Acordes Guitarra',   icon: 'chord',      href: ROOT + 'apps/acordes-guitarra/' },
     { id: 'acordes-ukulele',        name: 'Acordes Ukulele',    icon: 'uke',        href: ROOT + 'apps/acordes-ukulele/' },
     { id: 'acordes-bajo',           name: 'Acordes Bajo',       icon: 'bass',       href: ROOT + 'apps/acordes-bajo/' },
+    { id: 'acordes-piano',          name: 'Acordes Piano',      icon: 'piano',      href: ROOT + 'apps/acordes-piano/' },
     { id: 'escalas',                name: 'Escalas',            icon: 'piano',      href: ROOT + 'apps/escalas/' },
     { id: 'metronomo',              name: 'Metrónomo',          icon: 'metronome',  href: ROOT + 'apps/metronomo/' },
     { id: 'groove',                 name: 'Groove',             icon: 'drum',       href: ROOT + 'apps/groove/' },
+    { id: 'transponer',             name: 'Transponer',         icon: 'swap',       href: ROOT + 'apps/transponer/' },
+    { id: 'quinta',                 name: 'Quinta',             icon: 'circle',     href: ROOT + 'apps/quinta/' },
+    { id: 'progresiones',           name: 'Progresiones',       icon: 'book',       href: ROOT + 'apps/progresiones/' },
     { id: 'entrenamiento-auditivo', name: 'Entrenamiento auditivo', icon: 'headphones', href: ROOT + 'apps/entrenamiento-auditivo/' },
   ];
 

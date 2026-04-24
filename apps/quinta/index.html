@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quinta - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <style>
+        .quinta-screen {
+            display: flex; flex-direction: column; gap: 16px;
+            padding: 10px 0 calc(var(--bottomnav-h) + 32px);
+            color: var(--ink);
+        }
+        @media (min-width: 960px) { .quinta-screen { padding-bottom: 40px; } }
+
+        /* ── Hero ── */
+        .quinta-hero { text-align: center; padding: 10px 0 2px; }
+        .quinta-title {
+            font-family: var(--font-head);
+            font-size: clamp(34px, 9vw, 52px);
+            font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--ink);
+        }
+        .quinta-title .acc { color: var(--accent); text-shadow: var(--accent-glow); }
+        .quinta-sub { font-size: 12px; color: var(--ink-dim); margin-top: 5px; }
+
+        /* ── Mode toggles ── */
+        .quinta-mode-row { display: flex; gap: 7px; justify-content: center; }
+        .quinta-mode-btn {
+            padding: 7px 14px; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink-dim); font-family: var(--font-head);
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            transition: all 0.13s; touch-action: manipulation;
+        }
+        .quinta-mode-btn:hover { border-color: rgba(var(--accent-rgb),.3); color: var(--ink); }
+        .quinta-mode-btn.active { background: rgba(var(--accent-rgb),.16); border-color: var(--accent); color: var(--accent); }
+
+        /* ── Circle SVG wrapper ── */
+        .quinta-circle-wrap {
+            display: flex; justify-content: center; align-items: center;
+        }
+        #quinSvg {
+            max-width: 400px; width: 100%; cursor: pointer;
+            filter: drop-shadow(0 8px 32px rgba(0,0,0,.25));
+        }
+        .seg-clickable { cursor: pointer; }
+        .seg-clickable:hover { opacity: .85; }
+
+        /* ── Info panel ── */
+        .quinta-info {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px;
+            min-height: 70px;
+        }
+        .quinta-placeholder {
+            font-size: 14px; color: var(--muted); text-align: center;
+            padding: 14px 0; font-weight: 600; line-height: 1.5;
+        }
+
+        /* ── Info hero ── */
+        .quinta-info-top {
+            display: flex; align-items: flex-start;
+            justify-content: space-between; gap: 12px; margin-bottom: 12px;
+        }
+        .quinta-info-key {
+            font-family: var(--font-head);
+            font-size: 28px; font-weight: 900; color: var(--accent);
+            text-shadow: var(--accent-glow); line-height: 1;
+        }
+        .quinta-info-rel { font-size: 12px; color: var(--ink-dim); margin-top: 4px; }
+        .quinta-info-sig {
+            font-size: 11px; color: var(--muted); background: var(--surface-s);
+            border: 1px solid var(--border); border-radius: var(--radius-sm);
+            padding: 5px 10px; line-height: 1.5; flex-shrink: 0; text-align: right;
+        }
+
+        /* ── Scale ── */
+        .quinta-scale-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+        .quinta-scale-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 14px; }
+        .quinta-scale-note {
+            padding: 5px 9px; border-radius: 999px;
+            background: rgba(var(--accent-rgb),.1); color: var(--accent);
+            font-family: var(--font-head); font-size: 13px; font-weight: 700;
+            border: 1px solid rgba(var(--accent-rgb),.25);
+        }
+
+        /* ── Diatonic chord buttons ── */
+        .quinta-chords-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+        .quinta-chords-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .quinta-chord-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            padding: 9px 10px; border-radius: 10px; min-width: 44px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            cursor: pointer; transition: all 0.12s; touch-action: manipulation;
+        }
+        .quinta-chord-btn:hover { transform: translateY(-2px); }
+        .quinta-chord-btn:active { transform: scale(.94); }
+        .quinta-chord-btn.maj { border-color: rgba(var(--accent-rgb),.35); background: rgba(var(--accent-rgb),.07); }
+        .quinta-chord-btn.min { border-color: rgba(var(--accent2-rgb),.35); background: rgba(var(--accent2-rgb),.07); }
+        .quinta-chord-btn.dim { border-color: rgba(255,91,127,.3); background: rgba(255,91,127,.06); }
+        .quinta-chord-btn.maj:hover { background: rgba(var(--accent-rgb),.15); }
+        .quinta-chord-btn.min:hover { background: rgba(var(--accent2-rgb),.15); }
+        .quinta-chord-btn.dim:hover { background: rgba(255,91,127,.12); }
+        .qcb-roman { font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+        .qcb-name  { font-family: var(--font-head); font-size: 14px; font-weight: 800; color: var(--ink); }
+        .quinta-chord-btn.maj .qcb-name { color: var(--accent); }
+        .quinta-chord-btn.min .qcb-name { color: var(--accent2); }
+        .quinta-chord-btn.dim .qcb-name { color: var(--danger); }
+
+        /* ── Transponer link ── */
+        .quinta-transp-link {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+            padding: 7px 14px; border-radius: 999px;
+            border: 1px solid rgba(var(--accent-rgb),.3);
+            background: rgba(var(--accent-rgb),.07);
+            color: var(--accent); font-size: 12px; font-weight: 700;
+            font-family: var(--font-sans); text-decoration: none;
+            transition: background .15s;
+        }
+        .quinta-transp-link:hover { background: rgba(var(--accent-rgb),.15); }
+    </style>
+</head>
+<body data-tool-name="Quinta" data-page-id="quinta">
+
+<div class="quinta-screen">
+
+    <!-- Hero -->
+    <div class="quinta-hero">
+        <div class="quinta-title">Círculo de <span class="acc">Quintas</span></div>
+        <div class="quinta-sub">Toca una tonalidad para ver sus acordes y relativas</div>
+    </div>
+
+    <!-- Mode toggles -->
+    <div class="quinta-mode-row">
+        <button class="quinta-mode-btn active" onclick="setMode('notes',this)">Notas</button>
+        <button class="quinta-mode-btn" onclick="setMode('roman',this)">Grados</button>
+        <button class="quinta-mode-btn" onclick="setMode('sigs',this)">Armaduras</button>
+    </div>
+
+    <!-- SVG Circle -->
+    <div class="quinta-circle-wrap">
+        <svg id="quinSvg" viewBox="0 0 400 400"></svg>
+    </div>
+
+    <!-- Info panel -->
+    <div class="quinta-info" id="infoPanel">
+        <div class="quinta-placeholder">
+            Toca una tonalidad en el círculo<br>para ver sus acordes, escala y armadura
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ── Datos del círculo de quintas ──────────────────────────────────
+// Posición 0 = C (12 en punto), sentido horario = sostenidos
+const CIRCLE = [
+    { major:'C',  minor:'Am',  sigs:0, sigType:null,   sigList:[],
+      scale:['C','D','E','F','G','A','B'], dimChord:'Bdim' },
+    { major:'G',  minor:'Em',  sigs:1, sigType:'sharp', sigList:['F#'],
+      scale:['G','A','B','C','D','E','F#'], dimChord:'F#dim' },
+    { major:'D',  minor:'Bm',  sigs:2, sigType:'sharp', sigList:['F#','C#'],
+      scale:['D','E','F#','G','A','B','C#'], dimChord:'C#dim' },
+    { major:'A',  minor:'F#m', sigs:3, sigType:'sharp', sigList:['F#','C#','G#'],
+      scale:['A','B','C#','D','E','F#','G#'], dimChord:'G#dim' },
+    { major:'E',  minor:'C#m', sigs:4, sigType:'sharp', sigList:['F#','C#','G#','D#'],
+      scale:['E','F#','G#','A','B','C#','D#'], dimChord:'D#dim' },
+    { major:'B',  minor:'G#m', sigs:5, sigType:'sharp', sigList:['F#','C#','G#','D#','A#'],
+      scale:['B','C#','D#','E','F#','G#','A#'], dimChord:'A#dim' },
+    { major:'F#', minor:'D#m', sigs:6, sigType:'sharp', sigList:['F#','C#','G#','D#','A#','E#'],
+      scale:['F#','G#','A#','B','C#','D#','E#'], dimChord:'E#dim', altMajor:'Gb', altMinor:'Ebm' },
+    { major:'Db', minor:'Bbm', sigs:5, sigType:'flat',  sigList:['Bb','Eb','Ab','Db','Gb'],
+      scale:['Db','Eb','F','Gb','Ab','Bb','C'], dimChord:'Cdim', altMajor:'C#' },
+    { major:'Ab', minor:'Fm',  sigs:4, sigType:'flat',  sigList:['Bb','Eb','Ab','Db'],
+      scale:['Ab','Bb','C','Db','Eb','F','G'], dimChord:'Gdim', altMajor:'G#' },
+    { major:'Eb', minor:'Cm',  sigs:3, sigType:'flat',  sigList:['Bb','Eb','Ab'],
+      scale:['Eb','F','G','Ab','Bb','C','D'], dimChord:'Ddim' },
+    { major:'Bb', minor:'Gm',  sigs:2, sigType:'flat',  sigList:['Bb','Eb'],
+      scale:['Bb','C','D','Eb','F','G','A'], dimChord:'Adim' },
+    { major:'F',  minor:'Dm',  sigs:1, sigType:'flat',  sigList:['Bb'],
+      scale:['F','G','A','Bb','C','D','E'], dimChord:'Edim' },
+];
+
+const ROMAN_MAJ = { 0:'I', 11:'IV', 1:'V' };
+const ROMAN_MIN = { 0:'vi', 11:'ii', 1:'iii' };
+
+// ── Estado ────────────────────────────────────────────────────────
+let selectedIdx = -1;
+let mode = 'notes'; // 'notes' | 'roman' | 'sigs'
+let audioCtx = null;
+
+// ── Audio (Web Audio API — triángulo arpegiado) ───────────────────
+const FREQS = {
+    'C':261.63,'C#':277.18,'Db':277.18,'D':293.66,'D#':311.13,'Eb':311.13,
+    'E':329.63,'F':349.23,'F#':369.99,'Gb':369.99,'G':392.00,'G#':415.30,
+    'Ab':415.30,'A':440.00,'A#':466.16,'Bb':466.16,'B':493.88
+};
+const CHORD_INTS = { maj:[0,4,7], min:[0,3,7], dim:[0,3,6] };
+
+function playChord(root, type) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const base = FREQS[root]; if (!base) return;
+    const ints = CHORD_INTS[type] || CHORD_INTS.maj;
+    const now = audioCtx.currentTime;
+    ints.forEach((s, i) => {
+        const f = base * Math.pow(2, s / 12);
+        const osc = audioCtx.createOscillator();
+        const g   = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = f;
+        g.gain.setValueAtTime(0.12, now + i * 0.06);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.06 + 1.4);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now + i * 0.06); osc.stop(now + i * 0.06 + 1.5);
+    });
+}
+
+// ── SVG rendering ─────────────────────────────────────────────────
+const CX = 200, CY = 200;
+const R = {
+    majOut: 188, majIn: 146,
+    minOut: 142, minIn: 104,
+    sigOut: 100, sigIn:  62,
+    center:  58,
+};
+
+function polar(r, clockDeg) {
+    const rad = (clockDeg - 90) * Math.PI / 180;
+    return [CX + r * Math.cos(rad), CY + r * Math.sin(rad)];
+}
+
+function annSeg(r1, r2, iPos, gap = 1.8) {
+    const a0 = iPos * 30 - 15 + gap, a1 = iPos * 30 + 15 - gap;
+    const [x1,y1] = polar(r2, a0), [x2,y2] = polar(r2, a1);
+    const [x3,y3] = polar(r1, a1), [x4,y4] = polar(r1, a0);
+    return `M${x1} ${y1}A${r2} ${r2} 0 0 1 ${x2} ${y2}L${x3} ${y3}A${r1} ${r1} 0 0 0 ${x4} ${y4}Z`;
+}
+
+function renderCircle() {
+    const s   = getComputedStyle(document.documentElement);
+    const acc = s.getPropertyValue('--accent').trim();
+    const ac2 = s.getPropertyValue('--accent2').trim();
+    const ink = s.getPropertyValue('--ink').trim();
+    const mut = s.getPropertyValue('--muted').trim();
+    const sur = s.getPropertyValue('--surface').trim();
+    const surS= s.getPropertyValue('--surface-s').trim();
+    const brd = s.getPropertyValue('--border').trim();
+    const acR = s.getPropertyValue('--accent-rgb').trim();
+    const a2R = s.getPropertyValue('--accent2-rgb').trim();
+
+    // Compute diatonic sets
+    const dMaj = new Set(), dMin = new Set();
+    if (selectedIdx >= 0) {
+        [0, 1, 11].forEach(offset => {
+            dMaj.add((selectedIdx + offset + 12) % 12);
+            dMin.add((selectedIdx + offset + 12) % 12);
+        });
+    }
+
+    let h = '';
+
+    for (let i = 0; i < 12; i++) {
+        const d = CIRCLE[i], a = i * 30;
+        const isSel    = selectedIdx === i;
+        const isDMaj   = dMaj.has(i) && !isSel;
+        const isDMin   = dMin.has(i);
+
+        // --- Major segment ---
+        const majFill = isSel
+            ? acc
+            : isDMaj ? `rgba(${acR},.28)` : surS;
+        const majTextCol = isSel ? 'white' : isDMaj ? acc : ink;
+        const majFW = (isSel || isDMaj) ? '800' : '700';
+
+        h += `<path d="${annSeg(R.majIn, R.majOut, i)}" fill="${majFill}" stroke="${brd}" stroke-width="1.5" class="seg-clickable" onclick="selectKey(${i})"/>`;
+
+        // --- Minor segment ---
+        const minFill = isSel
+            ? `rgba(${a2R},.65)`
+            : isDMin ? `rgba(${a2R},.25)` : `rgba(${acR},.04)`;
+        const minCol = isDMin || isSel ? ac2 : mut;
+
+        h += `<path d="${annSeg(R.minIn, R.minOut, i)}" fill="${minFill}" stroke="${brd}" stroke-width="1" class="seg-clickable" onclick="selectKey(${i})"/>`;
+
+        // --- Sig ring ---
+        let sigFill = surS;
+        if (d.sigs > 0) {
+            const intensity = d.sigs / 7 * 0.22 + 0.04;
+            sigFill = d.sigType === 'sharp'
+                ? `rgba(${acR},${intensity})`
+                : `rgba(${a2R},${intensity})`;
+        }
+        h += `<path d="${annSeg(R.sigIn, R.sigOut, i)}" fill="${sigFill}" stroke="${brd}" stroke-width="1"/>`;
+
+        // --- Major label ---
+        const [mx, my] = polar((R.majIn + R.majOut) / 2, a);
+        let majLabel = d.major;
+        if (mode === 'roman' && selectedIdx >= 0) {
+            const rel = (i - selectedIdx + 12) % 12;
+            majLabel = ROMAN_MAJ[rel] || d.major;
+        } else if (mode === 'sigs') {
+            majLabel = d.sigs === 0 ? '♮' : (d.sigType === 'sharp' ? `${d.sigs}♯` : `${d.sigs}♭`);
+        }
+        h += `<text x="${mx.toFixed(1)}" y="${my.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-weight="${majFW}" font-size="14" fill="${majTextCol}" pointer-events="none">${majLabel}</text>`;
+
+        // --- Minor label ---
+        const [nx, ny] = polar((R.minIn + R.minOut) / 2, a);
+        let minLabel = d.minor;
+        if (mode === 'roman' && selectedIdx >= 0) {
+            const rel = (i - selectedIdx + 12) % 12;
+            minLabel = ROMAN_MIN[rel] || d.minor;
+        } else if (mode === 'sigs') {
+            minLabel = d.minor;
+        }
+        h += `<text x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-weight="600" font-size="10.5" fill="${minCol}" pointer-events="none">${minLabel}</text>`;
+
+        // --- Sig ring label ---
+        const [sx, sy] = polar((R.sigIn + R.sigOut) / 2, a);
+        let sigLabel = d.sigs === 0 ? '♮' : (d.sigType === 'sharp' ? `${d.sigs}♯` : `${d.sigs}♭`);
+        h += `<text x="${sx.toFixed(1)}" y="${sy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="ui-monospace,monospace" font-size="9.5" font-weight="700" fill="${mut}" pointer-events="none">${sigLabel}</text>`;
+    }
+
+    // Center circle
+    h += `<circle cx="${CX}" cy="${CY}" r="${R.center}" fill="${sur}" stroke="${brd}" stroke-width="1.5" class="seg-clickable" onclick="selectKey(-1)"/>`;
+
+    if (selectedIdx >= 0) {
+        const d = CIRCLE[selectedIdx];
+        h += `<text x="${CX}" y="${CY-9}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="20" font-weight="900" fill="${acc}">${d.major}</text>`;
+        h += `<text x="${CX}" y="${CY+12}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="11" font-weight="700" fill="${mut}">Mayor</text>`;
+    } else {
+        h += `<text x="${CX}" y="${CY-6}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="11" font-weight="700" fill="${mut}">Toca</text>`;
+        h += `<text x="${CX}" y="${CY+8}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="11" font-weight="700" fill="${mut}">una nota</text>`;
+    }
+
+    // Ring labels (outside)
+    const [lx, ly] = polar(R.majOut + 10, 0); // top label
+    h += `<text x="${CX}" y="8" text-anchor="middle" font-family="var(--font-head)" font-size="8" font-weight="700" fill="${mut}" pointer-events="none">MAYOR</text>`;
+
+    document.getElementById('quinSvg').innerHTML = h;
+}
+
+// ── Info panel ────────────────────────────────────────────────────
+function updateInfo() {
+    const panel = document.getElementById('infoPanel');
+    if (selectedIdx < 0) {
+        panel.innerHTML = '<div class="quinta-placeholder">Toca una tonalidad en el círculo<br>para ver sus acordes, escala y armadura</div>';
+        return;
+    }
+
+    const d   = CIRCLE[selectedIdx];
+    const IV  = CIRCLE[(selectedIdx - 1 + 12) % 12];
+    const V   = CIRCLE[(selectedIdx + 1) % 12];
+
+    // Key signature string
+    let sigStr = '';
+    if (d.sigs === 0) sigStr = '0 alteraciones';
+    else if (d.sigType === 'sharp') sigStr = `${d.sigs}♯ · ${d.sigList.join(' ')}`;
+    else sigStr = `${d.sigs}♭ · ${d.sigList.join(' ')}`;
+
+    // Alt enharmonic
+    const altNote = d.altMajor ? ` / ${d.altMajor}` : '';
+
+    // 7 diatonic chords
+    const diatonic = [
+        { roman:'I',    name:d.major,      type:'maj' },
+        { roman:'ii',   name:IV.minor,     type:'min' },
+        { roman:'iii',  name:V.minor,      type:'min' },
+        { roman:'IV',   name:IV.major,     type:'maj' },
+        { roman:'V',    name:V.major,      type:'maj' },
+        { roman:'vi',   name:d.minor,      type:'min' },
+        { roman:'vii°', name:d.dimChord,   type:'dim' },
+    ];
+
+    // Get root note for playback (strip accidental suffix)
+    function chordRoot(name) { return name.match(/^([A-G][b#]?)/)?.[1] || name; }
+
+    panel.innerHTML = `
+        <div class="quinta-info-top">
+            <div>
+                <div class="quinta-info-key">${d.major}${altNote} Mayor</div>
+                <div class="quinta-info-rel">Relativa menor: <strong>${d.minor}</strong></div>
+            </div>
+            <div class="quinta-info-sig">${sigStr}</div>
+        </div>
+        <div class="quinta-scale-label">Escala de ${d.major} Mayor</div>
+        <div class="quinta-scale-row">
+            ${d.scale.map(n => `<span class="quinta-scale-note">${n}</span>`).join('')}
+        </div>
+        <div class="quinta-chords-label">Acordes diatónicos · toca para escuchar</div>
+        <div class="quinta-chords-row">
+            ${diatonic.map(c => `
+                <button class="quinta-chord-btn ${c.type}" onclick="playChord('${chordRoot(c.name)}','${c.type}')">
+                    <span class="qcb-roman">${c.roman}</span>
+                    <span class="qcb-name">${c.name}</span>
+                </button>`).join('')}
+        </div>
+        <a class="quinta-transp-link" href="../transponer/" title="Abrir transpositor en esta tonalidad">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4"/></svg>
+            Transponer desde ${d.major}
+        </a>
+    `;
+}
+
+// ── Controles ─────────────────────────────────────────────────────
+function selectKey(idx) {
+    selectedIdx = selectedIdx === idx ? -1 : idx;
+    // Play the tonic when selecting
+    if (selectedIdx >= 0) {
+        const root = CIRCLE[selectedIdx].major.replace(/m$/, '');
+        playChord(root, 'maj');
+    }
+    renderCircle();
+    updateInfo();
+}
+
+function setMode(m, btn) {
+    mode = m;
+    document.querySelectorAll('.quinta-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCircle();
+}
+
+// Redraw on theme change
+window.addEventListener('mt-theme-change', renderCircle);
+</script>
+<script src="../../shared/shell.js"></script>
+<script>
+window.addEventListener('load', function() {
+    renderCircle();
+    updateInfo();
+});
+</script>
+</body>
+</html>

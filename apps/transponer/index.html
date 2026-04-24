@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transponer - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <style>
+        .transp-screen {
+            display: flex; flex-direction: column; gap: 18px;
+            padding: 12px 0 calc(var(--bottomnav-h) + 32px);
+            color: var(--ink);
+        }
+        @media (min-width: 960px) { .transp-screen { padding-bottom: 40px; max-width: 740px; } }
+
+        .transp-section-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+        }
+
+        /* ── Hero ── */
+        .transp-hero { text-align: center; padding: 14px 0 4px; }
+        .transp-title {
+            font-family: var(--font-head);
+            font-size: clamp(40px, 10vw, 60px);
+            font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--ink);
+        }
+        .transp-title .acc { color: var(--accent); text-shadow: var(--accent-glow); }
+        .transp-sub { font-size: 13px; color: var(--ink-dim); margin-top: 6px; }
+
+        /* ── Control card ── */
+        .transp-ctrl-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 18px 16px;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+
+        /* From / To key row */
+        .transp-key-row {
+            display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
+        }
+        .transp-key-block { display: flex; flex-direction: column; gap: 6px; }
+        .transp-key-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+        .transp-key-select {
+            padding: 10px 12px; border-radius: var(--radius-sm);
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink); font-family: var(--font-head); font-size: 15px; font-weight: 700;
+            cursor: pointer; transition: border-color 0.15s; width: 100%;
+            -webkit-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 10px center;
+            padding-right: 30px;
+        }
+        .transp-key-select:focus { outline: none; border-color: var(--accent); }
+
+        .transp-arrow-mid {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+        }
+
+        /* Semitone stepper */
+        .transp-semi-row {
+            display: flex; align-items: center; justify-content: center; gap: 14px;
+        }
+        .transp-semi-num {
+            font-family: var(--font-head);
+            font-size: clamp(52px, 14vw, 72px);
+            font-weight: 900; line-height: 1; letter-spacing: -0.04em;
+            color: var(--ink); min-width: 90px; text-align: center;
+            font-variant-numeric: tabular-nums; transition: color 0.2s;
+        }
+        .transp-semi-num.up   { color: var(--accent); text-shadow: var(--accent-glow); }
+        .transp-semi-num.down { color: var(--accent2); }
+        .transp-semi-lbl { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; min-height: 16px; }
+
+        .transp-adj {
+            width: 48px; height: 48px; border-radius: 50%;
+            background: var(--surface-s); border: 1px solid var(--border);
+            color: var(--ink); font-size: 22px; font-weight: 300; line-height: 1;
+            cursor: pointer; display: grid; place-items: center; flex-shrink: 0;
+            transition: all 0.12s; user-select: none; touch-action: manipulation;
+        }
+        .transp-adj:hover { background: var(--surface-ss); color: var(--accent); border-color: rgba(var(--accent-rgb),0.3); }
+        .transp-adj:active { transform: scale(0.9); }
+
+        .transp-quick-row {
+            display: flex; justify-content: center; gap: 6px; flex-wrap: wrap;
+        }
+        .transp-quick-btn {
+            padding: 6px 12px; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink-dim); font-size: 12px; font-weight: 700;
+            font-family: var(--font-head); cursor: pointer; transition: all 0.12s;
+            touch-action: manipulation;
+        }
+        .transp-quick-btn:hover { border-color: rgba(var(--accent-rgb),0.4); color: var(--accent); }
+        .transp-quick-btn:active { transform: scale(0.95); }
+
+        /* Enharmonic */
+        .transp-enharm-row {
+            display: flex; gap: 8px; justify-content: center;
+        }
+        .transp-enharm-btn {
+            flex: 1; padding: 8px 6px; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink-dim); font-size: 13px; font-weight: 700;
+            font-family: var(--font-head); cursor: pointer; transition: all 0.13s;
+            touch-action: manipulation;
+        }
+        .transp-enharm-btn:hover { border-color: rgba(var(--accent-rgb),0.3); color: var(--ink); }
+        .transp-enharm-btn.active { background: rgba(var(--accent-rgb),0.18); border-color: var(--accent); color: var(--accent); }
+
+        /* ── Input ── */
+        .transp-textarea {
+            width: 100%; min-height: 100px; padding: 14px;
+            border-radius: var(--radius-sm); border: 1px solid var(--border);
+            background: var(--surface-s); color: var(--ink);
+            font-family: var(--font-head); font-size: 16px; font-weight: 700;
+            line-height: 1.7; resize: vertical; box-sizing: border-box;
+            transition: border-color 0.15s;
+        }
+        .transp-textarea:focus { outline: none; border-color: rgba(var(--accent-rgb),0.5); }
+        .transp-textarea::placeholder { color: var(--muted); font-weight: 400; }
+        .transp-textarea-actions {
+            display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;
+        }
+        .transp-action-btn {
+            padding: 7px 14px; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink-dim); font-size: 12px; font-weight: 600;
+            font-family: var(--font-sans); cursor: pointer; transition: all 0.13s;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .transp-action-btn:hover { color: var(--ink); border-color: rgba(var(--accent-rgb),0.3); }
+
+        /* ── Output ── */
+        .transp-output-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px;
+            min-height: 90px;
+        }
+        .transp-output-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+        }
+        .transp-copy-btn {
+            padding: 6px 14px; border-radius: 999px;
+            border: 1px solid rgba(var(--accent-rgb),0.3);
+            background: rgba(var(--accent-rgb),0.08);
+            color: var(--accent); font-size: 12px; font-weight: 700;
+            font-family: var(--font-sans); cursor: pointer; transition: all 0.13s;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .transp-copy-btn:hover { background: rgba(var(--accent-rgb),0.16); }
+        .transp-copy-btn.copied { background: rgba(57,242,157,0.14); border-color: var(--success); color: var(--success); }
+
+        .transp-output {
+            font-family: var(--font-head); font-size: 16px; font-weight: 700; line-height: 1.8;
+        }
+        .transp-line { white-space: pre-wrap; word-break: break-word; }
+        .transp-placeholder { font-size: 14px; color: var(--muted); font-weight: 400; margin: 0; }
+
+        /* Chord highlighting */
+        .tc-chord { display: inline; }
+        .tc-root {
+            color: var(--accent); text-shadow: 0 0 20px rgba(var(--accent-rgb),0.3);
+            font-weight: 900;
+        }
+        .tc-same { color: var(--ink-dim); text-shadow: none; font-weight: 700; }
+
+        /* ── Capo helper ── */
+        .transp-capo-card {
+            background: rgba(var(--accent2-rgb),0.08);
+            border: 1px solid rgba(var(--accent2-rgb),0.25);
+            border-radius: var(--radius); padding: 16px;
+            display: none; align-items: flex-start; gap: 14px;
+        }
+        .transp-capo-card.visible { display: flex; }
+        .transp-capo-icon {
+            width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+            background: rgba(var(--accent2-rgb),0.15); color: var(--accent2);
+            display: grid; place-items: center;
+        }
+        .transp-capo-title { font-size: 13px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+        .transp-capo-text  { font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+        .transp-capo-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: var(--accent2); color: white;
+            font-family: var(--font-head); font-size: 14px; font-weight: 900;
+            vertical-align: middle; margin: 0 3px;
+        }
+    </style>
+</head>
+<body data-tool-name="Transponer" data-page-id="transponer">
+
+<div class="transp-screen">
+
+    <!-- Hero -->
+    <div class="transp-hero">
+        <div class="transp-title">Trans<span class="acc">poner</span></div>
+        <div class="transp-sub">Transporta acordes y progresiones en tiempo real</div>
+    </div>
+
+    <!-- Control card -->
+    <div class="transp-ctrl-card">
+
+        <!-- From / To dropdowns -->
+        <div class="transp-key-row">
+            <div class="transp-key-block">
+                <span class="transp-key-lbl">Desde</span>
+                <select class="transp-key-select" id="fromKey" onchange="onFromKey()"></select>
+            </div>
+            <div class="transp-arrow-mid">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="transp-key-block">
+                <span class="transp-key-lbl">Hasta</span>
+                <select class="transp-key-select" id="toKey" onchange="onToKey()"></select>
+            </div>
+        </div>
+
+        <!-- Semitone stepper -->
+        <div class="transp-semi-row">
+            <button class="transp-adj" onclick="adjSemi(-1)" title="-1 semitono">−</button>
+            <div style="text-align:center;">
+                <div class="transp-semi-num" id="semiNum">0</div>
+                <div class="transp-semi-lbl" id="semiLbl">semitonos</div>
+            </div>
+            <button class="transp-adj" onclick="adjSemi(+1)" title="+1 semitono">+</button>
+        </div>
+
+        <!-- Quick semitone shortcuts -->
+        <div class="transp-quick-row">
+            <button class="transp-quick-btn" onclick="setSemi(-7)">−7</button>
+            <button class="transp-quick-btn" onclick="setSemi(-5)">−5</button>
+            <button class="transp-quick-btn" onclick="setSemi(-3)">−3</button>
+            <button class="transp-quick-btn" onclick="setSemi(-1)">−1</button>
+            <button class="transp-quick-btn" onclick="setSemi(0)" style="font-weight:900;color:var(--ink);">0</button>
+            <button class="transp-quick-btn" onclick="setSemi(+1)">+1</button>
+            <button class="transp-quick-btn" onclick="setSemi(+3)">+3</button>
+            <button class="transp-quick-btn" onclick="setSemi(+5)">+5</button>
+            <button class="transp-quick-btn" onclick="setSemi(+7)">+7</button>
+        </div>
+
+        <!-- Enharmonic mode -->
+        <div>
+            <div class="transp-section-label" style="margin-bottom:8px;">Notación</div>
+            <div class="transp-enharm-row">
+                <button class="transp-enharm-btn active" onclick="setEnharm('auto',this)">Auto</button>
+                <button class="transp-enharm-btn" onclick="setEnharm('sharp',this)">♯ Sostenidos</button>
+                <button class="transp-enharm-btn" onclick="setEnharm('flat',this)">♭ Bemoles</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input -->
+    <div>
+        <div class="transp-section-label">Acordes originales</div>
+        <textarea class="transp-textarea" id="inputArea"
+            placeholder="Pega o escribe aquí:  Am  G  F  C&#10;Am7 - Dm7 - G7 - Cmaj7&#10;E  A/C#  F#m  D"
+            oninput="update()" rows="5"></textarea>
+        <div class="transp-textarea-actions">
+            <button class="transp-action-btn" onclick="loadExample()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                Ejemplo
+            </button>
+            <button class="transp-action-btn" onclick="document.getElementById('inputArea').value=''; update();">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                Limpiar
+            </button>
+        </div>
+    </div>
+
+    <!-- Output -->
+    <div class="transp-output-card">
+        <div class="transp-output-header">
+            <div class="transp-section-label" style="margin:0;">Resultado</div>
+            <button class="transp-copy-btn" id="copyBtn" onclick="copyOutput()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+            </button>
+        </div>
+        <div class="transp-output" id="outputArea">
+            <p class="transp-placeholder">El resultado aparece aquí en tiempo real…</p>
+        </div>
+    </div>
+
+    <!-- Capo helper -->
+    <div class="transp-capo-card" id="capoCard">
+        <div class="transp-capo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h16M4 16h16M8 4v16M16 4v16"/></svg>
+        </div>
+        <div>
+            <div class="transp-capo-title">Tip para guitarrista</div>
+            <div class="transp-capo-text" id="capoText"></div>
+        </div>
+    </div>
+
+</div><!-- /transp-screen -->
+
+<script>
+// ── Escala cromática ─────────────────────────────────────────────
+const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const FLATS  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+
+const TO_IDX = {
+    'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,
+    'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,
+    'A#':10,'Bb':10,'B':11
+};
+
+// Tonalidades que usan bemoles en su armadura
+const FLAT_KEY_IDX = new Set([5,10,3,8,1,6]); // F,Bb,Eb,Ab,Db,Gb
+
+// Para el dropdown: mostrar ambas opciones en las enarmonías
+const KEYS_DISPLAY = [
+    { note:'C',  label:'C' },
+    { note:'Db', label:'Db / C#' },
+    { note:'D',  label:'D' },
+    { note:'Eb', label:'Eb / D#' },
+    { note:'E',  label:'E' },
+    { note:'F',  label:'F' },
+    { note:'F#', label:'F# / Gb' },
+    { note:'G',  label:'G' },
+    { note:'Ab', label:'Ab / G#' },
+    { note:'A',  label:'A' },
+    { note:'Bb', label:'Bb / A#' },
+    { note:'B',  label:'B' },
+];
+
+const INTERVAL_NAMES = {
+    0:'Unísono', 1:'2ª menor ↑', 2:'2ª mayor ↑', 3:'3ª menor ↑',
+    4:'3ª mayor ↑', 5:'4ª justa ↑', 6:'Tritono',
+    7:'5ª justa ↑', 8:'6ª menor ↑', 9:'6ª mayor ↑',
+    10:'7ª menor ↑', 11:'7ª mayor ↑',
+};
+
+// ── Estado ───────────────────────────────────────────────────────
+let semitones  = 0;
+let fromKeyIdx = 0;   // índice 0-11
+let enharm     = 'auto';
+
+// ── Helpers ──────────────────────────────────────────────────────
+function noteIdx(note) {
+    return TO_IDX[note] !== undefined ? TO_IDX[note] : -1;
+}
+
+function useFlats(semi) {
+    if (enharm === 'sharp') return false;
+    if (enharm === 'flat')  return true;
+    const destIdx = ((fromKeyIdx + semi) % 12 + 12) % 12;
+    return FLAT_KEY_IDX.has(destIdx);
+}
+
+function transpNote(note, n, flats) {
+    const i = noteIdx(note);
+    if (i < 0) return note;
+    const j = ((i + n) % 12 + 12) % 12;
+    return flats ? FLATS[j] : SHARPS[j];
+}
+
+// Detecta si un token es un acorde (heurístico)
+function parseChord(token) {
+    const m = token.match(/^([A-G][b#]?)(.*)$/);
+    if (!m) return null;
+    const [, root, rest] = m;
+    if (noteIdx(root) < 0) return null;
+    // Descartar si el sufijo tiene 4+ letras minúsculas consecutivas
+    // excepto palabras clave de acordes
+    const suffix = rest.replace(/\/[A-G][b#]?.*/, '');
+    if (/[a-z]{4,}/.test(suffix) &&
+        !/(maj|min|sus|dim|aug|add|dom)/.test(suffix)) return null;
+    return { root, rest };
+}
+
+// ── Transposición ────────────────────────────────────────────────
+function renderOutput(text, n) {
+    if (!text.trim()) {
+        return '<p class="transp-placeholder">El resultado aparece aquí en tiempo real…</p>';
+    }
+
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const flats = useFlats(n);
+
+    return text.split('\n').map(line => {
+        if (!line.trim()) return '<div class="transp-line">&nbsp;</div>';
+
+        const rendered = line.split(/(\s+)/).map(tok => {
+            if (/^\s+$/.test(tok)) return esc(tok);
+
+            const chord = parseChord(tok);
+            if (!chord) return esc(tok);
+
+            const { root, rest } = chord;
+            const newRoot = transpNote(root, n, flats);
+
+            // Transponer también la nota del bajo en acordes slash (Am/E)
+            const newRest = rest.replace(/\/([A-G][b#]?)/, (_, bass) => {
+                const bi = noteIdx(bass);
+                if (bi < 0) return '/' + bass;
+                const ni = ((bi + n) % 12 + 12) % 12;
+                return '/' + (flats ? FLATS[ni] : SHARPS[ni]);
+            });
+
+            const rootCls = n !== 0 ? 'tc-root' : 'tc-same';
+            return `<span class="tc-chord"><span class="${rootCls}">${esc(newRoot)}</span>${esc(newRest)}</span>`;
+        });
+
+        return `<div class="transp-line">${rendered.join('')}</div>`;
+    }).join('');
+}
+
+// ── Actualizar UI ────────────────────────────────────────────────
+function update() {
+    const text = document.getElementById('inputArea').value;
+    document.getElementById('outputArea').innerHTML = renderOutput(text, semitones);
+
+    // Semitone display
+    const numEl = document.getElementById('semiNum');
+    const lblEl = document.getElementById('semiLbl');
+    const abs = Math.abs(semitones);
+
+    numEl.textContent = semitones > 0 ? '+' + semitones : semitones;
+    numEl.className   = 'transp-semi-num' + (semitones > 0 ? ' up' : semitones < 0 ? ' down' : '');
+
+    if (semitones === 0) {
+        lblEl.textContent = 'semitonos · sin cambio';
+    } else if (semitones < 0) {
+        const name = INTERVAL_NAMES[abs] || (abs + ' semitonos');
+        lblEl.textContent = name.replace('↑','↓');
+    } else {
+        lblEl.textContent = INTERVAL_NAMES[abs] || (abs + ' semitonos');
+    }
+
+    // Sync fromKey / toKey dropdowns
+    const toIdx = ((fromKeyIdx + semitones) % 12 + 12) % 12;
+    document.getElementById('fromKey').value = fromKeyIdx;
+    document.getElementById('toKey').value   = toIdx;
+
+    // Capo helper (guitarristas): útil en trastes 1-7
+    const capoCard = document.getElementById('capoCard');
+    if (semitones >= 1 && semitones <= 7) {
+        const origKey = SHARPS[fromKeyIdx] || FLATS[fromKeyIdx];
+        document.getElementById('capoText').innerHTML =
+            `Pon la cejilla en el traste <span class="transp-capo-badge">${semitones}</span> ` +
+            `y toca los acordes originales en <strong>${origKey}</strong>. Sonarás en ` +
+            `<strong>${SHARPS[toIdx]}</strong> sin aprender nuevos acordes.`;
+        capoCard.classList.add('visible');
+    } else {
+        capoCard.classList.remove('visible');
+    }
+}
+
+// ── Controles ────────────────────────────────────────────────────
+function setSemi(n) {
+    semitones = Math.max(-11, Math.min(11, n));
+    update();
+}
+
+function adjSemi(delta) { setSemi(semitones + delta); }
+
+function onFromKey() {
+    fromKeyIdx = parseInt(document.getElementById('fromKey').value);
+    update();
+}
+
+function onToKey() {
+    const toIdx = parseInt(document.getElementById('toKey').value);
+    // Calcular el semitono más corto (−6 a +6)
+    let diff = (toIdx - fromKeyIdx + 12) % 12;
+    if (diff > 6) diff -= 12;
+    semitones = diff;
+    update();
+}
+
+function setEnharm(mode, btn) {
+    enharm = mode;
+    document.querySelectorAll('.transp-enharm-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    update();
+}
+
+// ── Copy to clipboard ────────────────────────────────────────────
+function copyOutput() {
+    const text = document.getElementById('outputArea').innerText;
+    if (!text.trim()) return;
+    navigator.clipboard?.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg> Copiado';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar';
+        }, 2000);
+    });
+}
+
+// ── Ejemplo ──────────────────────────────────────────────────────
+function loadExample() {
+    document.getElementById('inputArea').value =
+        'Am  G  F  C\nAm7 - Dm7 - G7 - Cmaj7\nE  A/C#  F#m  D\nBb  Gm  Eb  F';
+    update();
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+function init() {
+    const fromSel = document.getElementById('fromKey');
+    const toSel   = document.getElementById('toKey');
+    KEYS_DISPLAY.forEach((k, i) => {
+        fromSel.add(new Option(k.label, i));
+        toSel.add(new Option(k.label, i));
+    });
+    fromSel.value = 0;
+    toSel.value   = 0;
+    update();
+}
+</script>
+<script src="../../shared/shell.js"></script>
+<script>
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

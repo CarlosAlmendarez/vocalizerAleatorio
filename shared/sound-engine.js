@@ -6,11 +6,47 @@
  * Los instrumentos se cargan una sola vez y quedan cacheados en memoria.
  *
  * Requiere: soundfont-player cargado previamente en la página.
+ *
+ * iOS Silent Mode: el primer touchstart en cualquier parte de la pantalla
+ * ejecuta un buffer silencioso que desbloquea el AudioContext y permite
+ * que el audio suene aunque el interruptor de silencio esté activado.
  */
 class SoundEngine {
     constructor() {
         this._ac    = null;   // AudioContext (único, compartido)
         this._cache = {};     // { instrumentName: Promise<Instrument> }
+        this._initIOSUnlock();
+    }
+
+    /**
+     * Registra listeners de gestos para desbloquear el AudioContext lo antes
+     * posible — antes incluso de que el usuario pulse un botón de reproducción.
+     * El buffer silencioso es el mecanismo estándar para pasar por encima del
+     * hardware silent switch de iOS.
+     */
+    _initIOSUnlock() {
+        const onGesture = () => {
+            if (!this._ac) {
+                this._ac = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            // Si está suspendido (nuevo contexto o vuelta de segundo plano) → reanudar
+            if (this._ac.state !== 'running') {
+                this._ac.resume().catch(() => {});
+            }
+            // Buffer silencioso de 1 muestra: señal a iOS de que el audio es intencional.
+            // Esto permite reproducir con el silent switch activado.
+            try {
+                const buf = this._ac.createBuffer(1, 1, 22050);
+                const src = this._ac.createBufferSource();
+                src.buffer = buf;
+                src.connect(this._ac.destination);
+                src.start(0);
+            } catch (_) {}
+        };
+        // capture:true → se ejecuta antes que cualquier otro handler
+        // passive:true → no bloquea el scroll en móvil
+        document.addEventListener('touchstart', onGesture, { capture: true, passive: true });
+        document.addEventListener('click',      onGesture, { capture: true });
     }
 
     // Inicializa o reanuda el AudioContext. Debe llamarse desde un gesto del usuario.
