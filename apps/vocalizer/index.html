@@ -6,6 +6,7 @@
     <title>Vocalizer - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/transport.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Layout root ─────────────────────────── */
@@ -532,7 +533,12 @@ let isPlaying       = false;
 let isLoading       = false;
 let metEnabled      = false;
 let pianoInst       = null;
-let scheduledTimers = [];
+let transport       = null;   // reloj compartido (shared/transport.js)
+let seq             = [];     // sequence (note names) currently sounding
+let seqCursor       = 0;      // position within seq (+ GAP_STEPS de silencio)
+let uiQ             = [];     // per-step UI payloads, drained by onDraw al ritmo del audio
+let pendingStop     = false;  // true cuando el modo ya terminó; se para al vaciar uiQ
+const GAP_STEPS     = 2;      // pasos de silencio entre repeticiones (= stepTime * 2)
 let currentSequence = [];   // notes being played this sequence
 let currentStepIdx  = -1;   // index in currentSequence
 let currentLayout   = 'radial';
@@ -803,15 +809,105 @@ async function startExercise() {
     };
 
     currentBaseIdx = currentConfig.start;
-    cycleDir = 1;
+    cycleDir  = 1;
+    pendingStop = false;
+    uiQ = [];
+    seq = buildSequence(currentBaseIdx, currentConfig);
+    seqCursor = 0;
+    currentSequence = seq;
+    currentStepIdx  = -1;
+    renderDisplay(seq, -1);
     updateChips();
-    runSequence(currentBaseIdx, currentConfig);
+
+    if (!transport) {
+        transport = createTransport({
+            // Una nota por paso: stepTime = 60/bpm. El BPM se fija al pulsar
+            // Play (igual que antes); todo se agenda con el reloj de audio.
+            getBpm: () => (currentConfig ? currentConfig.bpm : 100),
+            subdiv: 1,
+            onStep: vocOnStep,
+            onDraw: vocOnDraw,
+        });
+    }
+    await transport.start();
+}
+
+// Construye la secuencia de notas (nombres) para una nota base dada.
+function buildSequence(baseNoteIdx, config) {
+    const scaleInt      = scales[config.scale];
+    const patternGrades = patterns[config.pattern];
+    return patternGrades.map(grade => {
+        const octaveShift  = Math.floor(grade / 8);
+        const scaleDegree  = grade % 8;
+        const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
+        return notes[baseNoteIdx + semitoneJump];
+    });
+}
+
+// Decide la siguiente nota base según el modo. Devuelve 'stop' al terminar.
+function nextBase() {
+    const c = currentConfig;
+    if (c.mode === 'single') return 'stop';
+    if (c.mode === 'cycle') {
+        if (currentBaseIdx >= c.end)   cycleDir = -1;
+        if (currentBaseIdx <= c.start) cycleDir =  1;
+        return currentBaseIdx + cycleDir;
+    }
+    const nx = c.mode === 'loop' ? currentBaseIdx + 1 : currentBaseIdx - 1;
+    if (c.mode === 'loop'      && nx > c.end)   return 'stop';
+    if (c.mode === 'loop-desc' && nx < c.start) return 'stop';
+    return nx;
+}
+
+// Un paso = una nota. Se llama con el tiempo exacto de audio.
+function vocOnStep(step, time, stepDur) {
+    if (!isPlaying || pendingStop) return;
+
+    // ¿Terminó la secuencia actual (+ silencio)? → pasa a la siguiente base.
+    if (seqCursor >= seq.length + GAP_STEPS) {
+        const nb = nextBase();
+        if (nb === 'stop') { pendingStop = true; return; }
+        currentBaseIdx = nb;
+        seq = buildSequence(currentBaseIdx, currentConfig);
+        seqCursor = 0;
+    }
+
+    const idx = seqCursor++;
+    if (idx >= seq.length) { uiQ.push(null); return; }   // paso de silencio
+
+    const note    = seq[idx];
+    const isMessa = currentConfig.pattern === 'messa';
+    const dur     = isMessa ? 4 : stepDur * 0.8;
+    if (pianoInst) pianoInst.play(note, time, { duration: dur, gain: 0.9 });
+    if (metEnabled) soundEngine.clickAt(time);
+
+    const vowelList = vowelSets[currentConfig.vowels];
+    uiQ.push({ seq, idx, note, base: currentBaseIdx, vowel: vowelList[idx % vowelList.length] });
+}
+
+// La UI se drena al ritmo del audio (el Transport llama a onDraw en el
+// momento en que suena cada paso), nunca con setTimeout.
+function vocOnDraw() {
+    if (uiQ.length) {
+        const it = uiQ.shift();
+        if (!it) return;                 // silencio: sin cambio visual
+        currentSequence = it.seq;
+        currentStepIdx  = it.idx;
+        document.getElementById('currentNote').innerText  = it.note;
+        document.getElementById('currentVowel').innerText = it.vowel;
+        document.getElementById('progressInfo').innerText = `Base: ${notes[it.base]}`;
+        updateChips();
+        renderDisplay(it.seq, it.idx);
+    } else if (pendingStop) {
+        stopExercise();
+    }
 }
 
 function stopExercise() {
-    isPlaying = false;
-    scheduledTimers.forEach(clearTimeout);
-    scheduledTimers = [];
+    isPlaying   = false;
+    pendingStop = false;
+    uiQ = [];
+    if (transport) transport.stop();
     if (pianoInst) pianoInst.stop();
 
     setPlayBtnState('idle');
@@ -829,76 +925,12 @@ function shiftNote(delta) {
     const newIdx = currentBaseIdx + delta;
     if (newIdx < currentConfig.start || newIdx > currentConfig.end) return;
 
-    scheduledTimers.forEach(clearTimeout);
-    scheduledTimers = [];
-    if (pianoInst) pianoInst.stop();
-
     currentBaseIdx = newIdx;
-    runSequence(currentBaseIdx, currentConfig);
-}
-
-function runSequence(baseNoteIdx, config) {
-    if (!isPlaying) return;
-    if (config.mode === 'loop'      && baseNoteIdx > config.end)   return stopExercise();
-    if (config.mode === 'loop-desc' && baseNoteIdx < config.start) return stopExercise();
-
-    const scaleInt      = scales[config.scale];
-    const patternGrades = patterns[config.pattern];
-    const vowelList     = vowelSets[config.vowels];
-
-    const sequence = patternGrades.map(grade => {
-        const octaveShift  = Math.floor(grade / 8);
-        const scaleDegree  = grade % 8;
-        const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
-        return notes[baseNoteIdx + semitoneJump];
-    });
-
-    // Store for display
-    currentSequence = sequence;
-    currentStepIdx  = -1;
-    renderDisplay(sequence, -1);
-
-    const stepTime  = 60 / config.bpm;
-    const isMessa   = config.pattern === 'messa';
-    const duration  = isMessa ? 4 : stepTime * 0.8;
-    const startTime = soundEngine.now + 0.05;
-
-    sequence.forEach((note, i) => {
-        const noteTime = startTime + i * stepTime;
-        pianoInst.play(note, noteTime, { duration, gain: 0.9 });
-        if (metEnabled) soundEngine.clickAt(noteTime);
-
-        const uiDelay = Math.max(0, (noteTime - soundEngine.now) * 1000);
-        const tid = setTimeout(() => {
-            if (!isPlaying) return;
-            currentStepIdx = i;
-            document.getElementById('currentNote').innerText  = note;
-            document.getElementById('currentVowel').innerText = vowelList[i % vowelList.length];
-            document.getElementById('progressInfo').innerText = `Base: ${notes[baseNoteIdx]}`;
-            updateChips();
-            renderDisplay(sequence, i);
-        }, uiDelay);
-        scheduledTimers.push(tid);
-    });
-
-    const nextDelay = (sequence.length * stepTime + stepTime * 2) * 1000;
-    const nextTid = setTimeout(() => {
-        if (!isPlaying) return;
-        if (config.mode === 'single') {
-            stopExercise();
-        } else if (config.mode === 'cycle') {
-            if (baseNoteIdx >= config.end)   cycleDir = -1;
-            if (baseNoteIdx <= config.start) cycleDir =  1;
-            const nextIdx = baseNoteIdx + cycleDir;
-            currentBaseIdx = nextIdx;
-            runSequence(nextIdx, config);
-        } else {
-            const nextIdx = config.mode === 'loop' ? baseNoteIdx + 1 : baseNoteIdx - 1;
-            currentBaseIdx = nextIdx;
-            runSequence(nextIdx, config);
-        }
-    }, nextDelay);
-    scheduledTimers.push(nextTid);
+    if (pianoInst) pianoInst.stop();
+    seq = buildSequence(currentBaseIdx, currentConfig);
+    seqCursor = 0;
+    uiQ = [];
+    renderDisplay(seq, -1);
 }
 
 // Redraw on theme change

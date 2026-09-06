@@ -6,6 +6,7 @@
     <title>Progresiones - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/transport.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .prog-screen {
@@ -419,20 +420,18 @@ const DRUM_PATTERNS = {
 let drumVol  = 0.8;
 let instVol  = 0.8;
 
-let drumCtx = null;
-function getDrumCtx() {
-    if (!drumCtx) drumCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (drumCtx.state === 'suspended') drumCtx.resume();
-    return drumCtx;
-}
+// El AudioContext lo provee el Transport compartido (shared/transport.js),
+// que reutiliza el de soundEngine → un solo reloj para acordes y batería.
+function getDrumCtx() { return transport ? transport.ctx : null; }
 function synthKick(t, g) {
-    const c = getDrumCtx(), o = c.createOscillator(), gn = c.createGain();
+    const c = getDrumCtx(); if (!c) return;
+    const o = c.createOscillator(), gn = c.createGain();
     o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(.001,t+.45);
     gn.gain.setValueAtTime(g,t); gn.gain.exponentialRampToValueAtTime(.001,t+.45);
     o.connect(gn); gn.connect(c.destination); o.start(t); o.stop(t+.5);
 }
 function synthSnare(t, g) {
-    const c = getDrumCtx();
+    const c = getDrumCtx(); if (!c) return;
     const bl = c.sampleRate * .16, buf = c.createBuffer(1,bl,c.sampleRate);
     const d = buf.getChannelData(0); for (let i=0;i<bl;i++) d[i]=Math.random()*2-1;
     const n = c.createBufferSource(); n.buffer = buf;
@@ -444,7 +443,8 @@ function synthSnare(t, g) {
     o.connect(og); og.connect(c.destination); o.start(t); o.stop(t+.1);
 }
 function synthHihat(t, g) {
-    const c = getDrumCtx(), dur=.04;
+    const c = getDrumCtx(); if (!c) return;
+    const dur=.04;
     const bl = Math.ceil(c.sampleRate*dur), buf = c.createBuffer(1,bl,c.sampleRate);
     const d = buf.getChannelData(0); for (let i=0;i<bl;i++) d[i]=Math.random()*2-1;
     const n = c.createBufferSource(); n.buffer = buf;
@@ -458,16 +458,16 @@ let keyIdx      = 0;      // current key (0=C)
 let selectedMood= 'all';
 let activeProg  = null;
 let isPlaying   = false;
-let chordIdx    = 0;
 let bpm         = 90;
 let loopOn      = true;
 let playStyle   = 'block'; // 'block' | 'arpeggio'
 let instrument  = 'piano'; // 'piano' | 'guitar'
 let drumsOn     = false;
-let drumStep    = 0;
-let chordTimer  = null;
-let drumTimer   = null;
+let transport   = null;    // reloj compartido (shared/transport.js)
+let progEnded   = false;   // true cuando una progresión sin loop ya terminó
 let pianoInst   = null;
+
+const CHORD_STEPS = 4;     // corcheas por acorde (= 2 tiempos)
 let guitarInst  = null;
 
 // ── Instrument loading ────────────────────────────────────────────
@@ -481,64 +481,79 @@ async function ensureInst() {
 function getInst() { return instrument === 'piano' ? pianoInst : guitarInst; }
 
 // ── Playback ──────────────────────────────────────────────────────
+// Un solo Transport (corcheas) mueve acordes Y batería, así van
+// siempre en fase y a tiempo exacto con el BPM configurado.
 async function startPlay(prog) {
     stopPlay();
     activeProg = prog;
-    chordIdx   = 0;
-    drumStep   = 0;
+    progEnded  = false;
     isPlaying  = true;
     await ensureInst();
     updatePlayBtn();
-    playChordNow();
-    if (drumsOn) drumTick();
+
+    if (!transport) {
+        transport = createTransport({
+            getBpm: () => bpm,
+            subdiv: 2,               // 2 pasos por negra = corcheas
+            onStep:  onProgStep,
+            onDraw:  onProgDraw,
+        });
+    }
+    await transport.start();
 }
 
-function playChordNow() {
-    if (!isPlaying || !activeProg) return;
+// Se ejecuta una vez por corchea, con el tiempo exacto de audio.
+function onProgStep(step, time, stepDur) {
+    if (!isPlaying || !activeProg || progEnded) return;
 
-    const prog = activeProg;
-    const deg  = prog.degrees[chordIdx];
-    const type = prog.types[chordIdx];
-    const root = rootNote(keyIdx, deg);
-    const notes = getChordNotes(root, type, 4);
+    const n       = activeProg.degrees.length;
+    const atChord = step % CHORD_STEPS === 0;
+
+    if (atChord && (step / CHORD_STEPS) >= n && !loopOn) {
+        progEnded = true;     // deja de alimentar audio; onProgDraw hará el stop
+        return;
+    }
+
+    if (drumsOn) {
+        const pat = DRUM_PATTERNS[activeProg.groove] || DRUM_PATTERNS.pop;
+        const i   = step % pat.kick.length;
+        if (pat.kick[i])  synthKick(time,  .82 * drumVol);
+        if (pat.snare[i]) synthSnare(time, .78 * drumVol);
+        if (pat.hihat[i]) synthHihat(time, .48 * drumVol);
+    }
+
+    if (atChord) playChordAudio((step / CHORD_STEPS) % n, time, stepDur);
+}
+
+function playChordAudio(idx, time, stepDur) {
+    const prog  = activeProg;
+    const root  = rootNote(keyIdx, prog.degrees[idx]);
+    const notes = getChordNotes(root, prog.types[idx], 4);
     const inst  = getInst();
+    if (!inst) return;
 
-    if (inst) {
-        if (playStyle === 'arpeggio') {
-            notes.forEach((n, i) => {
-                setTimeout(() => inst.play(n, soundEngine.now, { duration: 1.5, gain: 0.7 * instVol }), i * 80);
-            });
-        } else {
-            notes.forEach(n => inst.play(n, soundEngine.now, { duration: 1.4, gain: 0.65 * instVol }));
-        }
+    if (playStyle === 'arpeggio') {
+        const spread = Math.min(0.09, (stepDur || 0.2) / 3);
+        notes.forEach((n, i) => inst.play(n, time + i * spread, { duration: 1.5, gain: 0.7 * instVol }));
+    } else {
+        notes.forEach(n => inst.play(n, time, { duration: 1.4, gain: 0.65 * instVol }));
     }
-
-    highlightChord(prog.id, chordIdx);
-
-    chordIdx++;
-    if (chordIdx >= prog.degrees.length) {
-        if (loopOn) { chordIdx = 0; }
-        else { setTimeout(() => stopPlay(), (60000 / bpm) * 2); return; }
-    }
-
-    chordTimer = setTimeout(playChordNow, (60000 / bpm) * 2);
 }
 
-function drumTick() {
-    if (!isPlaying || !drumsOn) return;
-    const pat = DRUM_PATTERNS[activeProg?.groove] || DRUM_PATTERNS.pop;
-    const t = getDrumCtx().currentTime;
-    if (pat.kick[drumStep])  synthKick(t, .82 * drumVol);
-    if (pat.snare[drumStep]) synthSnare(t, .78 * drumVol);
-    if (pat.hihat[drumStep]) synthHihat(t, .48 * drumVol);
-    drumStep = (drumStep + 1) % pat.kick.length;
-    drumTimer = setTimeout(drumTick, 60000 / (bpm * 2));
+// Sincronizado al audio por el Transport (nada de setTimeout).
+function onProgDraw(step) {
+    if (!activeProg) return;
+    const n = activeProg.degrees.length;
+    if (step % CHORD_STEPS !== 0) return;
+    const ci = step / CHORD_STEPS;
+    if (progEnded && ci >= n) { stopPlay(); return; }
+    if (!progEnded) highlightChord(activeProg.id, ci % n);
 }
 
 function stopPlay() {
     isPlaying = false;
-    clearTimeout(chordTimer); clearTimeout(drumTimer);
-    chordTimer = null; drumTimer = null;
+    progEnded = false;
+    if (transport) transport.stop();
     if (activeProg) {
         highlightChord(activeProg.id, -1);
     }
@@ -627,10 +642,10 @@ async function setInstrument(inst, btn) {
     }
 }
 function toggleDrums(btn) {
+    // El Transport ya está corriendo; onProgStep consulta drumsOn en cada paso,
+    // así que basta con cambiar la bandera.
     drumsOn = !drumsOn;
     btn.classList.toggle('on', drumsOn);
-    if (drumsOn && isPlaying) drumTick();
-    else { clearTimeout(drumTimer); drumTimer = null; drumStep = 0; }
 }
 
 function setDrumVol(v) {

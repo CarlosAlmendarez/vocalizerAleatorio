@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metrónomo - MusicTools</title>
     <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/transport.js"></script>
     <style>
         /* BPM display */
         .bpm-display { text-align:center; margin:6px 0 4px; }
@@ -164,27 +165,39 @@ let beatUnit      = 4;
 let currentBeat   = 0;
 let isPlaying     = false;
 
-// Web Audio
-let audioCtx      = null;
-let masterGain    = null;
-let schedulerId   = null;
-let nextBeatTime  = 0;
+// Web Audio — el timing lo lleva el Transport compartido (shared/transport.js).
+// Todo lo que suena se agenda con el reloj de AudioContext, así que el
+// tempo real coincide siempre con el BPM configurado, sin deriva.
+let transport   = null;
+let _master     = null;
+
+function tctx() { return transport ? transport.ctx : null; }
+
+// GainNode maestro, creado sobre el contexto que use el Transport.
+function master() {
+    const c = tctx();
+    if (!c) return null;
+    if (!_master || _master.context !== c) {
+        _master = c.createGain();
+        _master.gain.value = 1.0;
+        _master.connect(c.destination);
+    }
+    return _master;
+}
 
 // Tap tempo — interval-buffer algorithm
 let tapIntervals   = [];   // stores last 4 intervals in ms
 let lastTapTime    = 0;    // absolute timestamp of previous tap
 const TAP_RESET_MS = 2500; // inactivity auto-reset timer
 
-// Scheduler lookahead (Chris Wilson pattern)
-const LOOKAHEAD_MS   = 25;    // Timer interval
-const SCHEDULE_AHEAD = 0.12;  // Seconds to schedule ahead
-
 // ══════════════════════════════════════════════
 //  SÍNTESIS DE SONIDO CLÁSICO DE METRÓNOMO
 //  (clic de madera con ataque nítido y decay corto)
 // ══════════════════════════════════════════════
 function scheduleClick(time, isAccent) {
+    const audioCtx = tctx();
     if (!audioCtx) return;
+    const out = master();
 
     // ── Componente 1: Cuerpo resonante (sinusoide con barrido de frecuencia)
     //    Simula la resonancia de la caja de madera del metrónomo
@@ -201,7 +214,7 @@ function scheduleClick(time, isAccent) {
     oscGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.07);
 
     osc.connect(oscGain);
-    oscGain.connect(masterGain);
+    oscGain.connect(out);
     osc.start(time);
     osc.stop(time + 0.08);
 
@@ -231,29 +244,10 @@ function scheduleClick(time, isAccent) {
 
     noiseNode.connect(bpFilter);
     bpFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
+    noiseGain.connect(out);
 
     noiseNode.start(time);
     noiseNode.stop(time + clickDur + 0.002);
-
-    // ── Animar el beat dot correspondiente
-    const beatIdx = currentBeat % beatsPerBar;
-    const delayMs = Math.max(0, (time - audioCtx.currentTime) * 1000);
-    setTimeout(() => flashBeat(beatIdx), delayMs);
-}
-
-// ══════════════════════════════════════════════
-//  SCHEDULER (lookahead para timing preciso)
-// ══════════════════════════════════════════════
-function scheduler() {
-    const secondsPerBeat = (beatUnit / 4) * (60.0 / bpm);
-
-    while (nextBeatTime < audioCtx.currentTime + SCHEDULE_AHEAD) {
-        const isAccent = (currentBeat % beatsPerBar === 0);
-        scheduleClick(nextBeatTime, isAccent);
-        currentBeat++;
-        nextBeatTime += secondsPerBeat;
-    }
 }
 
 // ══════════════════════════════════════════════
@@ -268,22 +262,21 @@ async function toggleMetronome() {
 }
 
 async function startMetronome() {
-    // Crear contexto de audio la primera vez
-    if (!audioCtx) {
-        audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 1.0;
-        masterGain.connect(audioCtx.destination);
-    }
-    if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
+    if (!transport) {
+        transport = createTransport({
+            getBpm: () => bpm,
+            subdiv: 1,   // un clic por pulso — el BPM ES la velocidad del clic
+            onStep: (step, time) => {
+                // Acento en el primer tiempo del compás (independiente del
+                // denominador: 6/8 a 120 BPM = 120 clics/min, como 4/4).
+                scheduleClick(time, step % beatsPerBar === 0);
+            },
+            onDraw: (step) => flashBeat(step % beatsPerBar),
+        });
     }
 
-    isPlaying    = true;
-    currentBeat  = 0;
-    nextBeatTime = audioCtx.currentTime + 0.05;
-
-    schedulerId  = setInterval(scheduler, LOOKAHEAD_MS);
+    isPlaying = true;
+    await transport.start();
 
     document.getElementById('mainBtn').innerHTML =
         '<i class="ti ti-player-stop-filled"></i> Detener';
@@ -292,8 +285,7 @@ async function startMetronome() {
 
 function stopMetronome() {
     isPlaying = false;
-    clearInterval(schedulerId);
-    schedulerId = null;
+    if (transport) transport.stop();
 
     // Apagar todos los beat dots
     document.querySelectorAll('.beat-dot').forEach(d => d.classList.remove('active'));
@@ -391,8 +383,10 @@ function tapTempo() {
 // ══════════════════════════════════════════════
 function setTimeSig(beats, unit, btn) {
     beatsPerBar = beats;
-    beatUnit    = unit;
+    beatUnit    = unit;        // solo informativo: el BPM es siempre la
+                               // velocidad del clic, en cualquier compás
     currentBeat = 0;
+    if (transport) transport.resetStep(0);   // el acento vuelve al tiempo 1
 
     document.querySelectorAll('.sig-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');

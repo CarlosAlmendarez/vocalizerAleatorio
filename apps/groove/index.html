@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Groove - MusicTools</title>
     <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/transport.js"></script>
     <style>
         /* ── Screen ── */
         .groove-screen {
@@ -432,26 +433,21 @@ let humanize  = true;
 let ghostMute = false;
 let vols      = { kick: 0.85, snare: 0.80, hihat: 0.60 };
 
-let audioCtx      = null;
-let schedId       = null;
-let currentStep   = 0;
-let nextStepTime  = 0;
+let transport     = null;   // reloj compartido (shared/transport.js)
 let barCount      = 0;
 let tapIntervals  = [];   // stores last 4 intervals in ms
 let lastTapTime   = 0;    // absolute timestamp of previous tap
 
-const LOOKAHEAD   = 0.1;   // seconds
-const SCHEDULE_MS = 25;    // ms
+// Subdivisiones por negra según el compás: 16avos (4/4, 3/4) u 8avos (6/8).
+function subdivForSig() { return timeSig === '6/8' ? 2 : 4; }
 
 // ── Audio ────────────────────────────────────────────────────────
-function getCtx() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-}
+// El AudioContext lo provee el Transport; todo se agenda con su reloj.
+function getCtx() { return transport ? transport.ctx : null; }
 
 function synthKick(time, gain) {
     const ctx = getCtx();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const g   = ctx.createGain();
     osc.connect(g); g.connect(ctx.destination);
@@ -464,6 +460,7 @@ function synthKick(time, gain) {
 
 function synthSnare(time, gain) {
     const ctx = getCtx();
+    if (!ctx) return;
     const bLen = Math.ceil(ctx.sampleRate * 0.18);
     const buf  = ctx.createBuffer(1, bLen, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -488,6 +485,7 @@ function synthSnare(time, gain) {
 
 function synthHihat(time, gain) {
     const ctx  = getCtx();
+    if (!ctx) return;
     const dur  = 0.045;
     const bLen = Math.ceil(ctx.sampleRate * dur);
     const buf  = ctx.createBuffer(1, bLen, ctx.sampleRate);
@@ -504,11 +502,6 @@ function synthHihat(time, gain) {
 }
 
 // ── Scheduler ────────────────────────────────────────────────────
-function getStepDuration() {
-    if (timeSig === '6/8') return (60 / bpm) / 2;  // 8th note
-    return (60 / bpm) / 4;                          // 16th note
-}
-
 function getTotalSteps() { return (timeSig === '4/4') ? 16 : 12; }
 
 function getBeatIndex(step) {
@@ -527,23 +520,15 @@ function getCurrentPattern() {
     return bank[genre] || bank.rock;
 }
 
-function runScheduler() {
-    const ctx = getCtx();
-    while (nextStepTime < ctx.currentTime + LOOKAHEAD) {
-        scheduleNote(currentStep, nextStepTime);
-        nextStepTime += getStepDuration();
-        currentStep = (currentStep + 1) % getTotalSteps();
-        if (currentStep === 0) barCount++;
-    }
+// Recibe el nº de paso libre del Transport → lo envolvemos al patrón.
+function onTransportStep(rawStep, time) {
+    const total = getTotalSteps();
+    const step  = ((rawStep % total) + total) % total;
+    barCount    = Math.floor(rawStep / total);
+    scheduleNote(step, time);
 }
 
 function scheduleNote(step, time) {
-    const ctx   = getCtx();
-    const delay = Math.max(0, (time - ctx.currentTime) * 1000);
-
-    // Visual update
-    setTimeout(() => updateStepVisual(step), delay);
-
     // Ghost mute: silence every 4th bar
     const isMuted = ghostMute && (barCount % 4 === 3);
     if (step === 0) document.getElementById('muteBar').classList.toggle('visible', isMuted);
@@ -589,20 +574,29 @@ function togglePlay() {
     if (isPlaying) stopGroove(); else startGroove();
 }
 
-function startGroove() {
-    const ctx = getCtx();
-    isPlaying   = true;
-    currentStep = 0;
-    barCount    = 0;
-    nextStepTime = ctx.currentTime + 0.06;
-    schedId = setInterval(runScheduler, SCHEDULE_MS);
+async function startGroove() {
+    if (!transport) {
+        transport = createTransport({
+            getBpm: () => bpm,
+            subdiv: subdivForSig(),
+            onStep: onTransportStep,
+            onDraw: (rawStep) => {
+                const total = getTotalSteps();
+                updateStepVisual(((rawStep % total) + total) % total);
+            },
+        });
+    }
+    transport.subdiv = subdivForSig();
+    isPlaying = true;
+    barCount  = 0;
+    await transport.start();
     document.getElementById('playBtn').classList.add('playing');
     document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
 }
 
 function stopGroove() {
     isPlaying = false;
-    clearInterval(schedId); schedId = null;
+    if (transport) transport.stop();
     updateStepVisual(-1);
     document.getElementById('muteBar').classList.remove('visible');
     document.getElementById('playBtn').classList.remove('playing');
