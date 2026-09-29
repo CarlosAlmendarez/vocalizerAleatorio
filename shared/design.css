@@ -144,6 +144,12 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Móvil: sin retardo de doble-tap/zoom ni flash gris al tocar controles */
+button, select, input, label, a, [onclick], [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background: var(--bg-gradient);
   color: var(--ink);

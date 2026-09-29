@@ -154,7 +154,14 @@
 
   Transport.prototype._tick = function () {
     if (!this.running || !this._ac) return;
-    var horizon = this._ac.currentTime + this.lookahead;
+    // Móvil: si el contexto está suspendido/interrumpido (pantalla bloqueada,
+    // llamada, app en segundo plano) no se agenda nada; se espera a que vuelva.
+    if (this._ac.state !== 'running') return;
+    var now = this._ac.currentTime;
+    // Si el hilo estuvo congelado y el reloj nos adelantó, NO agendar en
+    // ráfaga todos los pasos perdidos (sonarían amontonados): retomar desde ya.
+    if (this._nextTime < now - 0.05) this._nextTime = now + 0.05;
+    var horizon = now + this.lookahead;
     // Se agendan todos los pasos que caen dentro de la ventana de lookahead.
     while (this._nextTime < horizon) {
       var dur = this._stepDur();

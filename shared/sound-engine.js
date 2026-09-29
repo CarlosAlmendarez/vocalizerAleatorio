@@ -15,7 +15,50 @@ class SoundEngine {
     constructor() {
         this._ac    = null;   // AudioContext (único, compartido)
         this._cache = {};     // { instrumentName: Promise<Instrument> }
+        this._wakeLock = null;
+        this._wantAwake = false;
+        // Safari 16.4+: sesión de reproducción → suena aunque el interruptor de silencio esté activado
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
         this._initIOSUnlock();
+        this._initLifecycle();
+    }
+
+    /**
+     * En móvil el AudioContext se suspende/interrumpe al bloquear la pantalla,
+     * recibir una llamada o cambiar de app. Al volver lo reanudamos, y
+     * re-adquirimos el wake lock (el sistema lo libera al ocultar la página).
+     */
+    _initLifecycle() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (this._ac && this._ac.state !== 'running') this._ac.resume().catch(() => {});
+            if (this._wantAwake) this._requestWakeLock();
+        });
+        window.addEventListener('pageshow', () => {
+            if (this._ac && this._ac.state !== 'running') this._ac.resume().catch(() => {});
+        });
+    }
+
+    async _requestWakeLock() {
+        if (!('wakeLock' in navigator) || this._wakeLock) return;
+        try {
+            this._wakeLock = await navigator.wakeLock.request('screen');
+            this._wakeLock.addEventListener('release', () => { this._wakeLock = null; });
+        } catch (_) { this._wakeLock = null; }
+    }
+
+    /**
+     * Mantiene la pantalla encendida mientras se practica (Screen Wake Lock API).
+     * Si el navegador no lo soporta, no hace nada.
+     */
+    keepAwake(on) {
+        this._wantAwake = on;
+        if (on) {
+            this._requestWakeLock();
+        } else if (this._wakeLock) {
+            this._wakeLock.release().catch(() => {});
+            this._wakeLock = null;
+        }
     }
 
     /**
@@ -54,8 +97,12 @@ class SoundEngine {
         if (!this._ac) {
             this._ac = new (window.AudioContext || window.webkitAudioContext)();
         }
-        if (this._ac.state === 'suspended') {
-            await this._ac.resume();
+        if (this._ac.state !== 'running') {
+            // 'suspended' o 'interrupted' (iOS). No bloquear para siempre si iOS no responde.
+            await Promise.race([
+                this._ac.resume().catch(() => {}),
+                new Promise(r => setTimeout(r, 1500))
+            ]);
         }
     }
 
@@ -97,6 +144,7 @@ class SoundEngine {
      * Programa un click de metrónomo en un momento absoluto del AudioContext.
      * Usa un oscilador nativo (sin cargar soundfont).
      * @param {number} absoluteTime - Tiempo absoluto del AudioContext (ac.currentTime + X)
+     * @returns {OscillatorNode|undefined} el nodo, por si se quiere cancelar con .stop()
      */
     clickAt(absoluteTime) {
         if (!this._ac) return;
@@ -109,6 +157,7 @@ class SoundEngine {
         gain.gain.exponentialRampToValueAtTime(0.001, absoluteTime + 0.04);
         osc.start(absoluteTime);
         osc.stop(absoluteTime + 0.05);
+        return osc;
     }
 
     // Versión con delay relativo (shorthand de clickAt).
