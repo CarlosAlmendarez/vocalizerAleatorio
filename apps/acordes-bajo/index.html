@@ -110,7 +110,24 @@
             border-left: 3px solid var(--accent2);
             font-size: 12px; color: var(--ink-dim); line-height: 1.6;
         }
-    </style>
+            /* Posiciones y cejillo */
+        .voicing-bar {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            margin: 8px 0 4px; font-size: 12px; font-weight: 600; color: var(--ink-dim);
+        }
+        .voicing-bar button {
+            width: 34px; height: 34px; border-radius: 50%;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink); font-size: 14px; cursor: pointer;
+        }
+        .voicing-bar button:disabled { opacity: .3; cursor: default; }
+        .voicing-lbl { min-width: 150px; text-align: center; }
+        .capo-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+        .capo-row select {
+            padding: 5px 8px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--surface-s); color: var(--ink); font: 600 12px var(--font-sans);
+        }
+</style>
 </head>
 <body data-tool-name="Acordes Bajo" data-page-id="acordes-bajo">
 
@@ -128,6 +145,11 @@
     <!-- Fretboard diagram -->
     <div class="chord-diagram-wrap">
         <canvas id="chordCanvas" width="200" height="270"></canvas>
+    </div>
+    <div class="voicing-bar">
+        <button id="vPrev" onclick="changeVoicing(-1)" aria-label="Posición anterior">◀</button>
+        <span class="voicing-lbl" id="voicingLbl">Posición 1</span>
+        <button id="vNext" onclick="changeVoicing(1)" aria-label="Posición siguiente">▶</button>
     </div>
 
     <!-- Note pills -->
@@ -254,12 +276,43 @@ function chordFor(rootIdx, type) {
     return Theory.chord(Theory.bestRoot(rootIdx, t), t);
 }
 
-function getShape(rootIdx, type) {
+let voicingIdx = 0;   // posición elegida con ◀ ▶
+let capo = 0;         // traste del cejillo (0 = sin cejillo)
+
+// Todas las posiciones del acorde: la de la tabla (si suena exacto) y otras en
+// distintas zonas del mástil calculadas por shared/theory.js.
+function getShapes(rootIdx, type) {
     const c = chordFor(rootIdx, type);
-    const optional = c.pcs.length === 4 ? [c.pcs[2]] : [];   // en 4 notas la 5ª se puede omitir
+    // Solo la 5ª JUSTA se puede omitir (en m7♭5 y °7 la 5ª disminuida es esencial)
+    const optional = c.pcs.length === 4 && c.semitones[2] === 7 ? [c.pcs[2]] : [];
+    const found = Theory.findVoicings(Object.assign({ tuning: OPEN_MIDI, pcs: c.pcs, optional }, VOICING_OPTS), 4);
     const table = SHAPES[NOTE_EN[rootIdx] + '_' + type];
-    if (table && Theory.checkVoicing(table.frets, OPEN_MIDI, c.pcs, optional, VOICING_OPTS.rootInBass)) return table;
-    return Theory.findVoicing(Object.assign({ tuning: OPEN_MIDI, pcs: c.pcs, optional }, VOICING_OPTS));
+    const list = [];
+    if (table && Theory.checkVoicing(table.frets, OPEN_MIDI, c.pcs, optional, VOICING_OPTS.rootInBass)) list.push(table);
+    found.forEach(v => { if (!list.some(x => x.frets.join() === v.frets.join())) list.push(v); });
+    return list;
+}
+
+function getShape(rootIdx, type) {
+    const list = getShapes(rootIdx, type);
+    return list[Math.min(voicingIdx, list.length - 1)] || null;
+}
+
+function changeVoicing(delta) {
+    const n = getShapes(shapeRootIdx(), chordType).length;
+    voicingIdx = (voicingIdx + delta + n) % n;
+    update();
+}
+
+// Con cejillo, la forma que se toca es la del acorde que queda "debajo":
+// cejillo en 2 + forma de G = suena A.
+function shapeRootIdx() { return (rootIdx - capo + 120) % 12; }
+
+function setCapo(n) {
+    capo = n;
+    store.set('capo', n);
+    voicingIdx = 0;
+    update();
 }
 
 // Fundamental y tipo recordados entre visitas (shared/settings.js)
@@ -281,7 +334,7 @@ function midiToNoteName(midi) {
 
 async function playChord() {
     await initAudio();
-    const shape  = getShape(rootIdx, chordType);
+    const shape  = getShape(shapeRootIdx(), chordType);
     const btn    = document.getElementById('strumBtn');
     const isArp  = chordType.startsWith('arp_');
     btn.classList.add('strumming');
@@ -295,7 +348,7 @@ async function playChord() {
     order.forEach(s => {
         const fret = shape.frets[s];
         if (fret < 0) return;
-        bass.note(midiToNoteName(OPEN_MIDI[s] + fret), now + played * stepSec, { dur, gain: 0.9 });
+        bass.note(midiToNoteName(OPEN_MIDI[s] + capo + fret), now + played * stepSec, { dur, gain: 0.9 });
         played++;
     });
 }
@@ -324,7 +377,7 @@ function getCanvasTheme() {
         fretLine:  kind === 'light' ? 'rgba(26,26,26,0.1)' : 'rgba(255,255,255,0.12)',
         strings:   kind === 'light' ? 'rgba(26,26,26,0.3)' : 'rgba(255,255,255,0.3)',
         labelFill: kind === 'light' ? 'rgba(26,26,26,0.6)' : 'rgba(238,240,255,0.6)',
-        xColor:    kind === 'light' ? '#c73c3c' : '#ff5b7f',
+        xColor:    s.getPropertyValue('--danger').trim() || '#ff5b7f',
         oColor:    kind === 'light' ? 'rgba(26,26,26,0.7)' : 'rgba(238,240,255,0.7)',
         strLabel:  kind === 'light' ? 'rgba(26,26,26,0.4)' : 'rgba(238,240,255,0.4)',
     };
@@ -412,6 +465,7 @@ function renderRootGrid() {
 function selectRoot(i) {
     rootIdx = i;
     store.set('root', i);
+    voicingIdx = 0;
     document.querySelectorAll('.chord-root-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.chord-root-btn')[i].classList.add('active');
     update();
@@ -419,6 +473,7 @@ function selectRoot(i) {
 
 function setType(type, btn) {
     chordType = type;
+    voicingIdx = 0;
     store.set('type', type);
     document.querySelectorAll('.chord-type-chip').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -426,7 +481,8 @@ function setType(type, btn) {
 }
 
 function update() {
-    const shape     = getShape(rootIdx, chordType);
+    const shapes    = getShapes(shapeRootIdx(), chordType);
+    const shape     = shapes[Math.min(voicingIdx, shapes.length - 1)];
     const chord     = chordFor(rootIdx, chordType);
     const noteNames = chord.notes.map(n => Theory.display(n, 'es'));
 
@@ -442,6 +498,22 @@ function update() {
     ).join('');
 
     drawDiagram(shape);
+
+    // Posición y cejillo
+    const pos = shape.position !== undefined ? shape.position : Math.min(...shape.frets.filter(f => f > 0).concat(99));
+    document.getElementById('voicingLbl').textContent =
+        `Posición ${Math.min(voicingIdx, shapes.length - 1) + 1}/${shapes.length} · ` + (pos <= 3 && shape.frets.includes(0) ? 'abierta' : 'traste ' + (pos === 99 ? 1 : pos));
+    document.getElementById('vPrev').disabled = document.getElementById('vNext').disabled = shapes.length < 2;
+    if (capo) {
+        const shapeChord = chordFor(shapeRootIdx(), chordType);
+        document.getElementById('dispNotes').textContent += ` · forma de ${Theory.display(shapeChord.root, 'en')}${shapeChord.suffix} con cejillo en ${capo}`;
+    }
+}
+</script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    playChord();
 }
 </script>
 <script src="../../shared/shell.js"></script>

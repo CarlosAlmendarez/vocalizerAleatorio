@@ -46,12 +46,12 @@
             overflow: hidden;
         }
         .ear-feedback-card.ds-correct {
-            background: rgba(57,242,157,0.1) !important;
-            border-color: rgba(57,242,157,0.4) !important;
+            background: rgba(var(--success-rgb),0.1) !important;
+            border-color: rgba(var(--success-rgb),0.4) !important;
         }
         .ear-feedback-card.ds-wrong {
-            background: rgba(255,91,127,0.1) !important;
-            border-color: rgba(255,91,127,0.4) !important;
+            background: rgba(var(--danger-rgb),0.1) !important;
+            border-color: rgba(var(--danger-rgb),0.4) !important;
         }
 
         /* ── Game header (lives / score / streak) ── */
@@ -108,6 +108,11 @@
 
         /* ── Difficulty chips ── */
         .ear-diff-row { display: flex; gap: 8px; }
+        .ear-record { margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--accent); }
+        .ear-record:empty, .ear-weak:empty { display: none; }
+        .ear-go-record { text-align: center; font-size: 15px; margin-top: 14px; }
+        .ear-weak { margin-top: 8px; font-size: 12px; color: var(--ink-dim); line-height: 1.45; }
+        .ear-weak b { color: var(--warning); font-weight: 700; }
         .ear-diff-chip {
             flex: 1; padding: 10px 4px; border-radius: 999px;
             border: 1px solid var(--border); background: var(--surface-s);
@@ -173,8 +178,8 @@
 
         /* ── Key states ── */
         .k-root    { background: rgba(var(--accent-rgb),0.55) !important; }
-        .k-correct { background: rgba(57,242,157,0.65) !important; }
-        .k-wrong   { background: rgba(255,91,127,0.65) !important; }
+        .k-correct { background: rgba(var(--success-rgb),0.65) !important; }
+        .k-wrong   { background: rgba(var(--danger-rgb),0.65) !important; }
         .k-reveal  { background: rgba(255,183,74,0.65) !important; }
         .k-ping    { background: rgba(var(--accent2-rgb),0.65) !important; }
         .k-selected{ background: rgba(255,183,74,0.55) !important; }
@@ -207,8 +212,8 @@
             transition: all 0.12s; min-height: 54px; box-shadow: var(--card-shadow);
         }
         .ear-ans-btn:hover:not(:disabled) { border-color: rgba(var(--accent-rgb),0.4); color: var(--accent); background: var(--surface-s); }
-        .ear-ans-btn.a-correct { background: rgba(57,242,157,0.14); border-color: var(--success); color: var(--success); }
-        .ear-ans-btn.a-wrong   { background: rgba(255,91,127,0.14); border-color: var(--danger);  color: var(--danger); }
+        .ear-ans-btn.a-correct { background: rgba(var(--success-rgb),0.14); border-color: var(--success); color: var(--success); }
+        .ear-ans-btn.a-wrong   { background: rgba(var(--danger-rgb),0.14); border-color: var(--danger);  color: var(--danger); }
         .ear-ans-btn:disabled  { cursor: default; }
 
         /* ── Game Over ── */
@@ -267,12 +272,12 @@
         .ear-btn-next {
             display: none; align-items: center; gap: 8px;
             padding: 14px 28px; border-radius: 999px;
-            background: rgba(57,242,157,0.15); border: 1px solid var(--success);
+            background: rgba(var(--success-rgb),0.15); border: 1px solid var(--success);
             color: var(--success); font-weight: 800; font-size: 15px;
             font-family: var(--font-head); cursor: pointer; min-height: 52px;
             transition: all 0.15s;
         }
-        .ear-btn-next:hover { background: rgba(57,242,157,0.25); }
+        .ear-btn-next:hover { background: rgba(var(--success-rgb),0.25); }
 
         .ear-btn-retry {
             display: none; align-items: center; gap: 8px;
@@ -365,10 +370,22 @@
             </div>
         </div>
 
+        <!-- Dirección (solo intervalos) -->
+        <div id="dirBlock" style="display:none;">
+            <div class="ear-section-label">Dirección del intervalo</div>
+            <div class="ear-diff-row">
+                <button class="ear-dir-chip ear-diff-chip active" onclick="selDir('up',this)">Ascendente</button>
+                <button class="ear-dir-chip ear-diff-chip"        onclick="selDir('down',this)">Descendente</button>
+                <button class="ear-dir-chip ear-diff-chip"        onclick="selDir('harm',this)">Armónico</button>
+            </div>
+        </div>
+
         <!-- Rules -->
         <div class="section-card">
             <div class="section-title">Cómo jugar</div>
             <ul class="ear-rules" id="rulesList"></ul>
+            <div class="ear-record" id="recordLine"></div>
+            <div class="ear-weak" id="weakLine"></div>
         </div>
 
         <!-- Reference piano -->
@@ -427,6 +444,8 @@
                 <div class="ear-go-lbl">Preguntas</div>
             </div>
         </div>
+        <div class="ear-record ear-go-record" id="goRecord"></div>
+        <div class="ear-weak" id="goWeak"></div>
     </div><!-- /goView -->
 
 </div><!-- /ear-screen -->
@@ -502,7 +521,7 @@ const RULES = {
     intervals: {
         beginner:     ['Escucha el intervalo (dos notas)','Elige el nombre del intervalo','5 intervalos básicos · 10 vidas'],
         intermediate: ['Escucha el intervalo melódico','Elige el nombre del intervalo','9 intervalos · 8 vidas'],
-        expert:       ['Toca la segunda nota en el teclado','Los 12 intervalos posibles · 5 vidas'],
+        expert:       ['Toca la segunda nota en el teclado (arriba o abajo según la dirección)','Los 12 intervalos posibles · 5 vidas'],
     },
     chords: {
         beginner:     ['Escucha el acorde','Elige Mayor o Menor','2 opciones · 10 vidas'],
@@ -512,8 +531,9 @@ const RULES = {
 };
 
 // ── Estado ──────────────────────────────────────────────────────
+const store = createStore('entrenamiento-auditivo');   // modo, dificultad, récords y puntos débiles
 let G = {
-    mode: 'notes', diff: 'beginner',
+    mode: 'notes', diff: 'beginner', dir: 'up',   // dir: up | down | harm (intervalos)
     lives: 5, score: 0, streak: 0, maxStreak: 0,
     qTotal: 0, qCorrect: 0,
     phase: 'lobby',
@@ -551,19 +571,17 @@ async function playChord(rootNote, type) {
     chordNotes.forEach(n => pingKey('piano2', n, 'k-ping', 700));
 }
 
-async function playInterval(rootNote, semitones) {
+async function playInterval(rootNote, targetNote, dir) {
     await ensureAudio();
-    const rootMidi   = noteToMidi(rootNote);
-    const targetMidi = rootMidi + semitones;
-    const targetNote = NOTE_NAMES[targetMidi%12] + (Math.floor(targetMidi/12)-1);
     const expertIntervals = G.mode === 'intervals' && G.diff === 'expert';
     piano.cancel();   // repetir la pregunta no se mezcla con la anterior
     const now = piano.now;
-    piano.note(rootNote,   now,        { dur: 1.0, gain: 0.85 });
-    piano.note(targetNote, now + 0.65, { dur: 1.2, gain: 0.85 });
+    const gap = dir === 'harm' ? 0 : 0.65;   // armónico: las dos notas a la vez
+    piano.note(rootNote,   now,       { dur: dir === 'harm' ? 1.6 : 1.0, gain: 0.85 });
+    piano.note(targetNote, now + gap, { dur: 1.2, gain: 0.85 });
     pingKey('piano2', rootNote, 'k-ping', 350);
     // el resaltado de la segunda nota llega cuando esa nota suena de verdad
-    if (!expertIntervals) piano.ui(now + 0.65, () => pingKey('piano2', targetNote, 'k-ping', 350));
+    if (!expertIntervals) piano.ui(now + gap, () => pingKey('piano2', targetNote, 'k-ping', 350));
 }
 
 // ── Piano ────────────────────────────────────────────────────────
@@ -679,11 +697,17 @@ function makeQuestion() {
     if (G.mode === 'intervals') {
         const semitones = randNoRepeat(cfg.intervals);
         recordKey(semitones);
-        const validRoots = cfg.notes.filter(n => noteToMidi(n) + semitones <= 83);
-        const root = rand(validRoots);
-        const targetMidi = noteToMidi(root) + semitones;
-        const targetNote = NOTE_NAMES[targetMidi%12] + (Math.floor(targetMidi/12)-1);
-        return { type:'intervals', root, semitones, targetNote,
+        // El teclado va de Do4 (60) a Si5 (83). Descendente: la fundamental arriba;
+        // si no cabe, se sube una octava.
+        const down = G.dir === 'down';
+        const midiName = m => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+        const roots = cfg.notes.map(noteToMidi)
+            .map(m => down ? (m - semitones >= 60 ? m : m + 12) : m)
+            .filter(m => down ? (m - semitones >= 60 && m <= 83) : m + semitones <= 83);
+        const rootMidi = rand(roots);
+        const root = midiName(rootMidi);
+        const targetNote = midiName(down ? rootMidi - semitones : rootMidi + semitones);
+        return { type:'intervals', root, semitones, targetNote, dir: G.dir,
                  text:'¿Qué intervalo es este?',
                  choices: buildIntervalChoices(semitones, cfg.intervals) };
     }
@@ -779,7 +803,7 @@ async function playQuestion() {
     const q = G.question;
     if (!q) return;
     if (q.type === 'notes')     playNote(q.note);
-    if (q.type === 'intervals') playInterval(q.root, q.semitones);
+    if (q.type === 'intervals') playInterval(q.root, q.targetNote, q.dir);
     if (q.type === 'chords')    playChord(q.root, q.chordType);
 }
 
@@ -816,12 +840,12 @@ function handleKeyClick(note, midi) {
         document.getElementById('confirmCard').style.display = 'block';
     }
     if (G.mode === 'intervals' && G.diff === 'expert') {
-        if (midi === noteToMidi(q.root)) {
+        if (midi === noteToMidi(q.root) && q.semitones !== 0) {
             ensureAudio().then(() => { piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
             return;
         }
         // El intervalo suena ascendente (fundamental → nota superior): solo vale la de arriba
-        const correct = midi - noteToMidi(q.root) === q.semitones;
+        const correct = midi === noteToMidi(q.targetNote);
         markAnswer(correct, q.targetNote);
         setKeyState('piano2', note, correct ? 'k-correct' : 'k-wrong');
         if (!correct) setKeyState('piano2', q.targetNote, 'k-reveal');
@@ -872,8 +896,34 @@ function highlightAnswerBtns(selected, correct) {
     });
 }
 
+// Qué se preguntó, para saber qué fallas más (se acumula entre sesiones)
+function questionItem(q) {
+    if (q.type === 'intervals') return INTERVAL_NAMES[q.semitones] + (q.dir === 'down' ? ' ↓' : q.dir === 'harm' ? ' (armónico)' : '');
+    if (q.type === 'chords')    return CHORD_INTERVALS[q.chordType];
+    return noteToSpanish(q.note).replace(/\d+$/, '');
+}
+function recordItem(q, correct) {
+    const key = 'weak:' + G.mode;
+    const all = store.get(key, {});
+    const it = questionItem(q);
+    all[it] = all[it] || { n: 0, ok: 0 };
+    all[it].n++; if (correct) all[it].ok++;
+    store.set(key, all);
+}
+function weakText() {
+    const all = store.get('weak:' + G.mode, {});
+    const weak = Object.entries(all)
+        .filter(([, v]) => v.n >= 3 && v.ok / v.n < 0.8)
+        .sort((a, b) => a[1].ok / a[1].n - b[1].ok / b[1].n)
+        .slice(0, 3)
+        .map(([k, v]) => `<b>${k}</b> ${Math.round(100 * v.ok / v.n)} %`);
+    return weak.length ? 'A repasar: ' + weak.join(' · ') : '';
+}
+function bestKey() { return 'best:' + G.mode + ':' + G.diff + (G.mode === 'intervals' ? ':' + G.dir : ''); }
+
 function markAnswer(correct, correctLabel) {
     G.answered = true;
+    recordItem(G.question, correct);
     if (correct) {
         G.qCorrect++; G.streak++; G.maxStreak = Math.max(G.maxStreak, G.streak);
         const mult = multiplier(), pts = 100 * mult;
@@ -914,6 +964,11 @@ function showGameOver() {
     document.getElementById('goAcc').textContent    = acc + '%';
     document.getElementById('goStreak').textContent = G.maxStreak;
     document.getElementById('goQ').textContent      = G.qTotal;
+    const prev = store.get(bestKey(), 0);
+    if (G.score > prev) store.set(bestKey(), G.score);
+    document.getElementById('goRecord').textContent = G.score > prev && G.score > 0
+        ? `🏆 ¡Nuevo récord! (antes ${prev})` : `Récord en este nivel: ${Math.max(prev, G.score)}`;
+    document.getElementById('goWeak').innerHTML = weakText();
     show('btnListen', false); show('btnNext', false); show('btnRetry', true);
 }
 
@@ -931,7 +986,6 @@ function showLobby() {
 }
 
 // ── Selección ────────────────────────────────────────────────────
-const store = createStore('entrenamiento-auditivo');   // modo y dificultad recordados
 function selMode(mode, btn) {
     G.mode = mode;
     store.set('mode', mode);
@@ -939,10 +993,17 @@ function selMode(mode, btn) {
     btn.classList.add('active');
     updateRules();
 }
+function selDir(dir, btn) {
+    G.dir = dir;
+    store.set('dir', dir);
+    document.querySelectorAll('.ear-dir-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateRules();
+}
 function selDiff(diff, btn) {
     G.diff = diff;
     store.set('diff', diff);
-    document.querySelectorAll('.ear-diff-chip').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.ear-diff-chip:not(.ear-dir-chip)').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     updateRules();
 }
@@ -966,11 +1027,24 @@ function updateStats() {
 function updateRules() {
     const items = (RULES[G.mode]||{})[G.diff] || [];
     document.getElementById('rulesList').innerHTML = items.map(r => `<li>${r}</li>`).join('');
+    document.getElementById('dirBlock').style.display = G.mode === 'intervals' ? '' : 'none';
+    const best = store.get(bestKey(), 0);
+    document.getElementById('recordLine').textContent = best ? `🏆 Tu récord en este nivel: ${best}` : '';
+    document.getElementById('weakLine').innerHTML = weakText();
 }
 
 function noteToSpanish(n) {
     const m = n?.match(/^([A-G]#?)(\d+)$/);
     return m ? (NOTE_ES[m[1]] || m[1]) + m[2] : n;
+}
+</script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    const visible = id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; };
+    if (visible('btnStart')) startGame();
+    else if (visible('btnNext')) nextQ();
+    else if (visible('btnListen')) replayQ();
 }
 </script>
 <script src="../../shared/shell.js"></script>
@@ -981,8 +1055,10 @@ window.addEventListener('load', function() {
     // Restaurar modo y dificultad de la última sesión
     const m = [...document.querySelectorAll('.ear-mode-card')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('mode', G.mode)}'`));
     if (m) selMode(store.get('mode', G.mode), m);
-    const d = [...document.querySelectorAll('.ear-diff-chip')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('diff', G.diff)}'`));
+    const d = [...document.querySelectorAll('.ear-diff-chip:not(.ear-dir-chip)')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('diff', G.diff)}'`));
     if (d) selDiff(store.get('diff', G.diff), d);
+    const dr = [...document.querySelectorAll('.ear-dir-chip')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('dir', G.dir)}'`));
+    if (dr) selDir(store.get('dir', G.dir), dr);
     updateRules();
 });
 </script>

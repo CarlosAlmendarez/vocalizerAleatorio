@@ -20,12 +20,10 @@
     var data = {};
     try { data = JSON.parse(localStorage.getItem(key)) || {}; } catch (_) { data = {}; }
 
-    var timer = null;
+    // Escritura inmediata: es barata y un guardado diferido se perdía si el
+    // usuario salía de la página justo después de cambiar algo.
     function save() {
-      clearTimeout(timer);
-      timer = setTimeout(function () {
-        try { localStorage.setItem(key, JSON.stringify(data)); } catch (_) {}
-      }, 150);
+      try { localStorage.setItem(key, JSON.stringify(data)); } catch (_) {}
     }
 
     return {

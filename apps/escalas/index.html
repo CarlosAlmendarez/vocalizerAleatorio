@@ -78,6 +78,16 @@
             border: 1px solid var(--border);
             transition: background 0.15s, color 0.15s;
         }
+        .scale-note-pill { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+        .pill-deg { font-size: 10px; font-weight: 700; opacity: .6; margin-top: 1px; font-family: var(--font-head); }
+        .scale-dir {
+            display: flex; gap: 6px; justify-content: center; margin-bottom: 8px;
+        }
+        .scale-dir button {
+            padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border);
+            background: var(--surface); color: var(--muted); font: 600 12px var(--font-sans); cursor: pointer;
+        }
+        .scale-dir button.on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb), .14); }
         .scale-note-pill.root {
             background: rgba(var(--accent-rgb), 0.22);
             color: var(--accent);
@@ -290,6 +300,8 @@
             <button class="scale-chip" onclick="setScaleType('frigio', this)">Frigio</button>
             <button class="scale-chip" onclick="setScaleType('lidio', this)">Lidio</button>
             <button class="scale-chip" onclick="setScaleType('mixolidio', this)">Mixolidio</button>
+            <button class="scale-chip" onclick="setScaleType('menor-arm', this)">Menor armónica</button>
+            <button class="scale-chip" onclick="setScaleType('locrio', this)">Locrio</button>
         </div>
     </div>
 
@@ -303,6 +315,10 @@
 
 <!-- Floating play transport -->
 <div class="scale-transport">
+    <div class="scale-dir" role="group" aria-label="Dirección">
+        <button data-dir="up" onclick="setDir('up')">Subir</button>
+        <button data-dir="updown" onclick="setDir('updown')">Subir y bajar</button>
+    </div>
     <button class="scale-play-btn" id="playScaleBtn" onclick="playScale()">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M6 4.5L15.5 10L6 15.5V4.5Z" fill="currentColor"/>
@@ -323,17 +339,30 @@
         frigio:       { label: 'Frigio',         intervals: [0,1,3,5,7,8,10,12], pattern: 's-T-T-T-s-T-T'   },
         lidio:        { label: 'Lidio',          intervals: [0,2,4,6,7,9,11,12], pattern: 'T-T-T-s-T-T-s'   },
         mixolidio:    { label: 'Mixolidio',      intervals: [0,2,4,5,7,9,10,12], pattern: 'T-T-s-T-T-s-T'   },
+        'menor-arm':  { label: 'Menor armónica', intervals: [0,2,3,5,7,8,11,12], pattern: 'T-s-T-T-s-3s-s'  },
+        locrio:       { label: 'Locrio',         intervals: [0,1,3,5,6,8,10,12], pattern: 's-T-T-s-T-T-T'   },
     };
     // Tipo equivalente en shared/theory.js (escribe cada grado con su letra: Fa mayor → Si♭, no La#)
     const THEORY_SCALE = {
         mayor: 'major', menor: 'minor', pentatonica: 'pentMajor', 'pent-menor': 'pentMinor',
-        blues: 'blues', 'dórico': 'dorian', frigio: 'phrygian', lidio: 'lydian', mixolidio: 'mixolydian'
+        blues: 'blues', 'dórico': 'dorian', frigio: 'phrygian', lidio: 'lydian', mixolidio: 'mixolydian',
+        'menor-arm': 'harmMinor', locrio: 'locrian'
     };
     function spelledScale() {
         const t = THEORY_SCALE[currentScaleKey];
         return Theory.scale(Theory.bestScaleRoot(currentRootIdx, t), t);
     }
     // Nombre escrito de cada clase de altura de la escala actual: { 10: 'Bb', … }
+    // Grado respecto a la escala mayor: 1, 2, ♭3, ♯4… (la octava vuelve a ser 1)
+    const MAJOR_SEMIS = [0, 2, 4, 5, 7, 9, 11];
+    function degreeLabel(interval, i) {
+        if (interval === 12) return '1';
+        const t = THEORY_SCALE[currentScaleKey];
+        const deg = Theory.SCALES[t].ivs[i][1];
+        const acc = interval - MAJOR_SEMIS[deg - 1];
+        return (acc < 0 ? '♭'.repeat(-acc) : '♯'.repeat(acc)) + deg;
+    }
+
     function spelledByPc() {
         const map = {};
         spelledScale().notes.forEach(n => { map[Theory.pc(n)] = n; });
@@ -357,6 +386,12 @@
     piano.preload().catch(() => {});   // el primer toque no espera a la red
     const SCALE_STEP_S  = 0.45;
     let isPlayingScale  = false;
+    let playDir         = store.get('dir', 'up');   // 'up' | 'updown'
+    function setDir(d) {
+        playDir = d;
+        store.set('dir', d);
+        document.querySelectorAll('.scale-dir button').forEach(b => b.classList.toggle('on', b.dataset.dir === d));
+    }
 
     function intervalToNote(interval) {
         const abs    = currentRootIdx + interval;
@@ -440,7 +475,7 @@
             const pill    = document.createElement('div');
             pill.className = 'scale-note-pill' + (i === 0 ? ' root' : '');
             pill.id = 'pill-' + i;
-            pill.textContent = Theory.display(spelled[noteIdx], 'es');
+            pill.innerHTML = `${Theory.display(spelled[noteIdx], 'es')}<span class="pill-deg">${degreeLabel(interval, i)}</span>`;
             list.appendChild(pill);
         });
     }
@@ -493,7 +528,10 @@
         await piano.ready();
         if (!isPlayingScale) return;   // se detuvo mientras cargaba
         const scale = SCALES[currentScaleKey];
-        const notes = scale.intervals.map(i => intervalToNote(i));
+        const up    = scale.intervals.map(i => intervalToNote(i));
+        // Subir y bajar: la bajada repite las notas al revés (sin repetir la cima)
+        const idxs  = playDir === 'updown' ? [...up.keys(), ...[...up.keys()].reverse().slice(1)] : [...up.keys()];
+        const notes = idxs.map(k => up[k]);
 
         const btn = document.getElementById('playScaleBtn');
         btn.disabled    = true;
@@ -516,7 +554,7 @@
             piano.note(note, t, { dur: 0.4, gain: 0.9 });
             piano.ui(t, () => {
                 clearPlaying();
-                const pill = document.getElementById('pill-' + i);
+                const pill = document.getElementById('pill-' + idxs[i]);
                 if (pill) pill.classList.add('playing');
                 const key = document.querySelector(`[data-note="${note}"]`);
                 if (key) key.classList.add('playing');
@@ -548,9 +586,16 @@
     }
 
 </script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    if (isPlayingScale) stopPlayback(); else playScale();
+}
+</script>
 <script src="../../shared/shell.js"></script>
 <script>
     window.addEventListener('load', function() {
+        setDir(playDir);
         renderRootGrid();
         // Marcar el tipo de escala restaurado
         document.querySelectorAll('.scale-chip').forEach(b =>

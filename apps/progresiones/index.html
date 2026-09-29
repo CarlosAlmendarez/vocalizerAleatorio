@@ -176,7 +176,7 @@
         }
         .prog-play-btn:hover { transform: scale(1.06); }
         .prog-play-btn:active { transform: scale(.93); }
-        .prog-play-btn.stop-mode { background: linear-gradient(135deg,#ff3366,#ff5b7f); box-shadow: 0 8px 24px -6px rgba(255,51,102,.6); }
+        .prog-play-btn.stop-mode { background: linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75)); box-shadow: 0 8px 24px -6px rgba(var(--danger-rgb), .6); }
 
         /* Copy button */
         .prog-copy-btn {
@@ -213,7 +213,27 @@
             font-size: 11px; color: var(--ink-dim); width: 32px;
             text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0;
         }
-    </style>
+            /* Editor de progresiones */
+        .prog-builder { margin-bottom: 14px; }
+        .pb-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+        .pb-degrees { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pb-deg {
+            min-width: 46px; padding: 8px 10px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--surface-s);
+            color: var(--ink); font: 700 13px var(--font-head); cursor: pointer;
+        }
+        .pb-deg small { display: block; font: 600 10px var(--font-sans); color: var(--muted); }
+        .pb-current { display: flex; align-items: center; gap: 10px; margin-top: 12px; min-height: 44px; }
+        .pb-current .prog-chord-preview { flex: 1; margin: 0; }
+        .pb-current .prog-chord-pill { cursor: pointer; }
+        .pb-empty { font-size: 12px; color: var(--muted); }
+        .pb-actions { display: flex; gap: 6px; margin-top: 10px; }
+        .pb-actions input {
+            flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--surface-s); color: var(--ink); font: 13px var(--font-sans);
+        }
+        .prog-del-btn { margin-left: auto; }
+</style>
 </head>
 <body data-tool-name="Progresiones" data-page-id="progresiones">
 
@@ -239,6 +259,24 @@
         <div class="prog-mood-row" id="moodRow"></div>
     </div>
 
+    <!-- Editor de progresiones propias -->
+    <div class="section-card prog-builder">
+        <div class="section-title">Crea tu progresión</div>
+        <div class="pb-hint">Toca los grados en orden (2 a 8 acordes). Toca un acorde de abajo para quitarlo.</div>
+        <div class="pb-degrees" id="pbDegrees"></div>
+        <div class="pb-current" data-prog="__builder">
+            <div class="prog-chord-preview" id="pbCurrent"></div>
+            <button class="prog-play-btn" id="pbPlay" onclick="pbPreview()" aria-label="Probar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg>
+            </button>
+        </div>
+        <div class="pb-actions">
+            <input id="pbName" maxlength="30" placeholder="Nombre (opcional)">
+            <button class="btn-mini" onclick="pbSave()">Guardar</button>
+            <button class="btn-mini" onclick="pbClear()">Borrar</button>
+        </div>
+    </div>
+
     <!-- Progression list -->
     <div class="prog-list" id="progList"></div>
 
@@ -255,6 +293,7 @@ const MOODS = [
     { id:'epic',  label:'Épico · Cine' },
     { id:'sad',   label:'Triste'       },
     { id:'latin', label:'Latin'        },
+    { id:'mine',  label:'Mis progresiones' },
 ];
 
 const PROGRESSIONS = [
@@ -493,6 +532,7 @@ function getInst() { return players[instrument]; }
 // siempre en fase y a tiempo exacto con el BPM configurado.
 async function startPlay(prog) {
     stopPlay();
+    MT.keepAwake(true);   // pantalla encendida mientras suena
     activeProg = prog;
     progEnded  = false;
     isPlaying  = true;
@@ -558,6 +598,7 @@ function onProgDraw(step) {
 }
 
 function stopPlay() {
+    MT.keepAwake(false);
     isPlaying = false;
     progEnded = false;
     if (transport) transport.stop();
@@ -567,6 +608,15 @@ function stopPlay() {
         highlightChord(activeProg.id, -1);
     }
     updatePlayBtn();
+}
+
+// Barra espaciadora: detiene lo que suena o reproduce la última progresión
+// usada (o la primera visible con el filtro actual).
+function mtPlayToggle() {
+    if (isPlaying) { stopPlay(); return; }
+    const visible = [...document.querySelectorAll('.prog-card[data-prog]')].map(el => el.dataset.prog);
+    const id = (activeProg && visible.includes(activeProg.id)) ? activeProg.id : visible[0];
+    if (id) togglePlay(id);
 }
 
 function togglePlay(progId) {
@@ -704,6 +754,7 @@ function copyChords(progId) {
 function setKey(idx) {
     keyIdx = idx;
     store.set('key', idx);
+    renderBuilder();
     document.querySelectorAll('.prog-chord-pill').forEach(el => {
         const cardEl = el.closest('[data-prog]');
         const progId = cardEl?.dataset.prog;
@@ -731,11 +782,7 @@ function openCard(progId) {
         const prog = PROGRESSIONS.find(p => p.id === progId);
         if (prog) {
             if (isPlaying) stopPlay();
-            playStyle  = 'block';
-            instrument = 'piano';
-            loopOn     = true;
-            drumsOn    = false;
-            setBPM(prog.bpm);
+            setBPM(prog.bpm);      // estilo, instrumento, loop y batería: los que el usuario eligió
             syncCardUI(cardEl);
         }
     } else {
@@ -753,6 +800,62 @@ function playRandom() {
 }
 
 // ── Render ────────────────────────────────────────────────────────
+// ── Progresiones propias (shared/settings.js) ──────────────────────
+// Paleta: grado + tipo por defecto (en mayor; i, iv y los ♭ para sonido menor/modal)
+const PB_PALETTE = [
+    ['I','maj'], ['ii','min'], ['iii','min'], ['IV','maj'], ['V','maj'], ['V','dom7'],
+    ['vi','min'], ['vii°','dim'], ['i','min'], ['iv','min'], ['bIII','maj'], ['bVI','maj'], ['bVII','maj'],
+];
+let pbChords = [];   // [{ degree, type }]
+
+function renderBuilder() {
+    document.getElementById('pbDegrees').innerHTML = PB_PALETTE.map(([d, t], i) =>
+        `<button class="pb-deg" onclick="pbAdd(${i})">${romanLabel(d, t)}<small>${chordLabel(keyIdx, d, t, { degrees: [pbChords[0]?.degree || d] })}</small></button>`
+    ).join('');
+    const tmp = builderProg();
+    document.getElementById('pbCurrent').innerHTML = pbChords.length
+        ? pbChords.map((c, i) => `<span class="prog-chord-pill" onclick="pbRemove(${i})" title="Quitar">${chordLabel(keyIdx, c.degree, c.type, tmp)}</span>`).join('')
+        : '<span class="pb-empty">Aún no hay acordes</span>';
+}
+function builderProg() {
+    return { id: '__builder', degrees: pbChords.map(c => c.degree), types: pbChords.map(c => c.type), bpm: bpm, groove: 'pop' };
+}
+function pbAdd(i) {
+    if (pbChords.length >= 8) return;
+    const [degree, type] = PB_PALETTE[i];
+    pbChords.push({ degree, type });
+    renderBuilder();
+}
+function pbRemove(i) { pbChords.splice(i, 1); if (isPlaying && activeProg?.id === '__builder') stopPlay(); renderBuilder(); }
+function pbClear()   { pbChords = []; if (isPlaying && activeProg?.id === '__builder') stopPlay(); document.getElementById('pbName').value = ''; renderBuilder(); }
+function pbPreview() {
+    if (isPlaying && activeProg?.id === '__builder') { stopPlay(); return; }
+    if (pbChords.length < 2) return;
+    startPlay(builderProg());
+}
+function customProgs() { return store.get('customProgs', []); }
+function pbSave() {
+    if (pbChords.length < 2) { document.getElementById('pbCurrent').innerHTML = '<span class="pb-empty">Añade al menos 2 acordes</span>'; return; }
+    const name = document.getElementById('pbName').value.trim() || pbChords.map(c => romanLabel(c.degree, c.type)).join(' – ');
+    const prog = {
+        id: 'mine_' + Date.now(), custom: true, name, mood: 'mine', moodLabel: 'Mía',
+        degrees: pbChords.map(c => c.degree), types: pbChords.map(c => c.type),
+        emotion: 'Creada por ti', desc: 'Progresión propia: cambia la tonalidad arriba y se transpone sola.',
+        famous: [], bpm: bpm, groove: 'pop',
+    };
+    store.set('customProgs', [...customProgs(), prog]);
+    PROGRESSIONS.push(prog);
+    pbClear();
+    setMood('mine');
+}
+function deleteCustom(id) {
+    if (isPlaying && activeProg?.id === id) stopPlay();
+    store.set('customProgs', customProgs().filter(p => p.id !== id));
+    const i = PROGRESSIONS.findIndex(p => p.id === id);
+    if (i >= 0) PROGRESSIONS.splice(i, 1);
+    renderList();
+}
+
 function renderMoods() {
     document.getElementById('moodRow').innerHTML = MOODS.map(m =>
         `<button class="prog-mood-btn${m.id === selectedMood ? ' active' : ''}" data-id="${m.id}" onclick="setMood('${m.id}')">${m.label}</button>`
@@ -761,6 +864,10 @@ function renderMoods() {
 
 function renderList() {
     const list = selectedMood === 'all' ? PROGRESSIONS : PROGRESSIONS.filter(p => p.mood === selectedMood);
+    if (!list.length) {
+        document.getElementById('progList').innerHTML = '<p class="pb-empty" style="text-align:center;padding:20px 0">Todavía no guardaste progresiones. Créalas arriba.</p>';
+        return;
+    }
     document.getElementById('progList').innerHTML = list.map(prog => `
         <div class="prog-card${activeProg?.id === prog.id ? ' active' : ''}" data-prog="${prog.id}">
             <div class="prog-card-head" onclick="openCard('${prog.id}')">
@@ -776,6 +883,7 @@ function renderList() {
             </div>
             <div class="prog-player">
                 <div class="prog-desc">${prog.desc}</div>
+                ${prog.custom ? `<button class="prog-toggle-btn prog-del-btn" onclick="deleteCustom('${prog.id}')">Eliminar progresión</button>` : ''}
                 ${prog.famous.length ? `<div class="prog-famous">${prog.famous.map(f => `<span class="prog-famous-tag">🎵 ${f}</span>`).join('')}</div>` : ''}
                 <div class="prog-controls">
                     <!-- BPM row -->
@@ -837,8 +945,10 @@ function init() {
     const sel = document.getElementById('keySelect');
     KEY_LABELS.forEach((k, i) => sel.add(new Option(k, i)));
     sel.value = keyIdx;
+    PROGRESSIONS.push(...customProgs());
     renderMoods();
     renderList();
+    renderBuilder();
 }
 </script>
 <script src="../../shared/shell.js"></script>

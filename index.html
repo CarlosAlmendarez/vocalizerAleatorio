@@ -63,6 +63,20 @@
       box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.3);
     }
 
+    /* ---- Secciones (menú inferior: Herramientas · Práctica · Ajustes) ---- */
+    .home-section { scroll-margin-top: calc(var(--topbar-h) + 12px); }
+    .home-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 24px 0; }
+    .home-setting { margin: 0 0 12px; }
+    .hs-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .hs-desc { font-size: 12px; color: var(--muted); margin: 4px 0 12px; line-height: 1.4; }
+    .hs-themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .hs-theme {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 6px; border-radius: var(--radius-sm);
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--ink-dim); font: 600 12px var(--font-sans); cursor: pointer;
+    }
+    .hs-theme.active { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
     /* ---- Footer ---- */
     .home-footer {
       text-align: center; padding: 32px 0 16px;
@@ -77,6 +91,7 @@
     <div class="greeting-title">¿Qué vas a practicar hoy?</div>
   </div>
 
+  <div id="tools" class="home-section">
   <!-- Featured: Vocalizer -->
   <a class="featured-card" href="apps/vocalizer/">
     <div class="featured-glow"></div>
@@ -298,19 +313,81 @@
 
   </div>
 
-  <div class="section-label">Sin conexión</div>
-  <div class="section-card" style="margin:0 0 20px">
-    <div style="font-size:14px;font-weight:700;color:var(--ink)">Descargar sonidos</div>
-    <div style="font-size:12px;color:var(--muted);margin:4px 0 12px;line-height:1.4">
-      Piano, guitarra y bajo (~6 MB). Después las herramientas suenan al instante y funcionan sin internet.
+  </div><!-- /#tools -->
+
+  <p class="home-empty" id="searchEmpty" hidden>No hay herramientas que coincidan con la búsqueda.</p>
+
+  <!-- ── Práctica ── -->
+  <section id="practice" class="home-section">
+    <div class="section-label">Práctica</div>
+    <div class="tools-grid-nm">
+      <a class="tool-card-nm" href="apps/vocalizer/?rutina=warmup">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+        </div>
+        <div>
+          <div class="tc-name">Calentamiento vocal</div>
+          <div class="tc-desc">Rutina de 4 ejercicios encadenados</div>
+        </div>
+      </a>
+      <a class="tool-card-nm" href="apps/metronomo/?entrenador=1">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 18H5z"/><path d="m13 21-4-14"/></svg>
+        </div>
+        <div>
+          <div class="tc-name">Entrenador de tempo</div>
+          <div class="tc-desc">El metrónomo sube el BPM cada pocos compases</div>
+        </div>
+      </a>
+      <a class="tool-card-nm" href="apps/entrenamiento-auditivo/" style="grid-column:1/-1;">
+        <div class="tc-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="5" height="7" rx="2"/><rect x="16" y="13" width="5" height="7" rx="2"/></svg>
+        </div>
+        <div>
+          <div class="tc-name">Oído musical</div>
+          <div class="tc-desc" id="earRecord">Notas, intervalos y acordes · supera tu récord</div>
+        </div>
+      </a>
     </div>
-    <button class="btn-mini" id="offlineBtn" onclick="downloadSounds()" style="width:100%">Descargar para usar sin conexión</button>
-  </div>
+  </section>
+
+  <!-- ── Ajustes ── -->
+  <section id="settings" class="home-section">
+    <div class="section-label">Ajustes</div>
+
+    <div class="section-card home-setting">
+      <div class="hs-title">Tema</div>
+      <div class="hs-themes" id="themeChoices"></div>
+    </div>
+
+    <div class="section-card home-setting">
+      <div class="hs-title">Usar sin conexión</div>
+      <div class="hs-desc">Descarga piano, guitarra y bajo (~6 MB). Después las herramientas suenan al instante y funcionan sin internet.</div>
+      <button class="btn-mini" id="offlineBtn" onclick="downloadSounds()" style="width:100%">Descargar sonidos</button>
+    </div>
+
+    <div class="section-card home-setting">
+      <div class="hs-title">Ajustes guardados</div>
+      <div class="hs-desc">Cada herramienta recuerda tu última configuración (tesitura, BPM, instrumento…). Puedes volver a los valores iniciales.</div>
+      <button class="btn-mini" id="resetBtn" onclick="resetSettings()" style="width:100%">Restablecer todas las herramientas</button>
+    </div>
+  </section>
 
   <div class="home-footer">MusicTools · Herramientas libres para músicos</div>
 
   <script src="shared/shell.js"></script>
   <script>
+  // ── Ajustes: tema ──
+  function renderThemes() {
+      const current = MT.getTheme();
+      document.getElementById('themeChoices').innerHTML = MT.THEMES.map(t =>
+          `<button class="hs-theme${t.id === current ? ' active' : ''}" onclick="MT.setTheme('${t.id}'); renderThemes();">
+               <span class="mt-dot" style="background:${t.accent}"></span>${t.name}
+           </button>`).join('');
+  }
+  window.addEventListener('mt-theme-change', renderThemes);
+
+  // ── Ajustes: sonidos sin conexión ──
   async function downloadSounds() {
       const btn = document.getElementById('offlineBtn');
       if (!('serviceWorker' in navigator)) { btn.textContent = 'Tu navegador no permite el modo sin conexión'; return; }
@@ -325,6 +402,44 @@
           btn.disabled = false;
       }
   }
+
+  // ── Ajustes: restablecer lo que recuerdan las herramientas ──
+  function resetSettings() {
+      const btn = document.getElementById('resetBtn');
+      if (btn.dataset.confirm !== '1') {
+          btn.dataset.confirm = '1';
+          btn.textContent = 'Toca otra vez para confirmar';
+          setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Restablecer todas las herramientas'; }, 3000);
+          return;
+      }
+      try { Object.keys(localStorage).filter(k => k.startsWith('mt-settings:')).forEach(k => localStorage.removeItem(k)); } catch (_) {}
+      btn.dataset.confirm = '';
+      btn.textContent = '✓ Ajustes restablecidos';
+      showRecord();
+  }
+
+  // ── Práctica: récord de entrenamiento auditivo ──
+  function showRecord() {
+      let best = 0;
+      try {
+          const data = JSON.parse(localStorage.getItem('mt-settings:entrenamiento-auditivo') || '{}');
+          Object.keys(data).filter(k => k.startsWith('best:')).forEach(k => { best = Math.max(best, data[k] || 0); });
+      } catch (_) {}
+      document.getElementById('earRecord').textContent = best
+          ? `Tu récord: ${best} puntos · ¿lo superas hoy?`
+          : 'Notas, intervalos y acordes · supera tu récord';
+  }
+
+  // ── Búsqueda: aviso si no hay resultados ──
+  const _filter = MT.filterTools;
+  MT.filterTools = q => {
+      _filter(q);
+      const any = [...document.querySelectorAll('#tools .tool-card-nm, #tools .featured-card')].some(c => c.style.display !== 'none');
+      document.getElementById('searchEmpty').hidden = any;
+  };
+
+  renderThemes();
+  showRecord();
   </script>
 </body>
 </html>

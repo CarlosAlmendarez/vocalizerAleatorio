@@ -19,27 +19,27 @@
         .pendulum-wrap { display:flex; justify-content:center; margin:14px 0 6px; height:44px; align-items:center; }
         .beat-dots { display:flex; gap:10px; }
         .beat-dot { width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,0.14); border:1px solid var(--border); transition:background 0.05s, transform 0.05s, box-shadow 0.05s; }
-        .beat-dot.accent { background:rgba(157,107,255,0.25); border-color:rgba(157,107,255,0.4); width:18px; height:18px; }
+        .beat-dot.accent { background:rgba(var(--accent-rgb),0.25); border-color:rgba(var(--accent-rgb),0.4); width:18px; height:18px; }
         .beat-dot.active { background:var(--ink); transform:scale(1.3); box-shadow:0 0 14px rgba(238,240,255,0.7); }
-        .beat-dot.accent.active { background:var(--accent); border-color:var(--accent); box-shadow:0 0 18px rgba(157,107,255,0.9); }
+        .beat-dot.accent.active { background:var(--accent); border-color:var(--accent); box-shadow:0 0 18px rgba(var(--accent-rgb),0.9); }
 
         /* BPM controls */
         .bpm-control-row { display:flex; align-items:center; gap:10px; }
         .bpm-btn { width:44px; height:44px; border-radius:50%; border:1px solid var(--border); background:var(--surface-s); font-size:22px; font-weight:700; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; transition:all 0.12s; flex-shrink:0; color:var(--ink-dim); line-height:1; }
-        .bpm-btn:hover { border-color:rgba(157,107,255,0.4); color:var(--accent); background:rgba(157,107,255,0.1); }
+        .bpm-btn:hover { border-color:rgba(var(--accent-rgb),0.4); color:var(--accent); background:rgba(var(--accent-rgb),0.1); }
         .bpm-btn:active { transform:scale(0.92); }
         .bpm-btn.large { width:52px; height:52px; font-size:26px; }
 
         .bpm-slider-wrap { flex:1; }
         input[type=range].bpm-slider { width:100%; height:6px; -webkit-appearance:none; appearance:none; background:linear-gradient(to right, var(--accent) var(--pct), var(--surface-ss) var(--pct)); border-radius:6px; outline:none; cursor:pointer; }
-        input[type=range].bpm-slider::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); box-shadow:0 2px 6px rgba(157,107,255,0.5); cursor:pointer; }
+        input[type=range].bpm-slider::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); box-shadow:0 2px 6px rgba(var(--accent-rgb),0.5); cursor:pointer; }
         input[type=range].bpm-slider::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:var(--accent); border:none; cursor:pointer; }
 
         /* Time signature */
         .time-sig-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
         .sig-btn { padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:var(--surface-s); color:var(--ink-dim); font-size:14px; font-weight:700; cursor:pointer; font-family:var(--font-sans); text-align:center; transition:all 0.15s; }
-        .sig-btn:hover  { border-color:rgba(157,107,255,0.4); color:var(--ink); }
-        .sig-btn.active { background:rgba(157,107,255,0.22); border-color:var(--accent); color:var(--accent); }
+        .sig-btn:hover  { border-color:rgba(var(--accent-rgb),0.4); color:var(--ink); }
+        .sig-btn.active { background:rgba(var(--accent-rgb),0.22); border-color:var(--accent); color:var(--accent); }
 
         /* Tap tempo */
         .tap-btn {
@@ -63,11 +63,29 @@
         /* Preset grid */
         .preset-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
         .preset-btn { padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-s); color:var(--ink-dim); cursor:pointer; font-family:var(--font-sans); text-align:left; transition:all 0.12s; display:flex; justify-content:space-between; align-items:center; }
-        .preset-btn:hover  { border-color:rgba(157,107,255,0.4); background:var(--surface-ss); color:var(--ink); }
-        .preset-btn.active { background:rgba(157,107,255,0.14); border-color:var(--accent); }
+        .preset-btn:hover  { border-color:rgba(var(--accent-rgb),0.4); background:var(--surface-ss); color:var(--ink); }
+        .preset-btn.active { background:rgba(var(--accent-rgb),0.14); border-color:var(--accent); }
         .preset-name { font-size:13px; font-weight:700; color:var(--ink); }
         .preset-range { font-size:11px; color:var(--muted); }
-    </style>
+            /* Subdivisión, volumen, contador y entrenador de tempo */
+        .bar-counter { margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-align: center; }
+        .opt-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--ink-dim); }
+        .opt-row label { flex: 1; }
+        .opt-row input[type=range] { flex: 1.4; accent-color: var(--accent); }
+        .sub-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .trainer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+        .trainer-grid label { display: block; font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+        .trainer-grid input {
+            width: 100%; padding: 8px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--surface-s); color: var(--ink); font: 700 15px var(--font-head); text-align: center;
+        }
+        .trainer-status { margin-top: 10px; font-size: 12px; color: var(--accent); font-weight: 600; min-height: 16px; }
+        .switch-btn {
+            padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
+            background: var(--surface-s); color: var(--muted); font: 700 12px var(--font-sans); cursor: pointer;
+        }
+        .switch-btn.on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb), .14); }
+</style>
 </head>
 <body data-tool-name="Metrónomo" data-page-id="metronomo">
 <div class="app-card">
@@ -83,6 +101,7 @@
         <div class="pendulum-wrap">
             <div class="beat-dots" id="beatDots"></div>
         </div>
+        <div class="bar-counter" id="barCounter">Compás —</div>
     </div>
 
     <!-- ── Controles ── -->
@@ -125,6 +144,35 @@
             </div>
         </div>
 
+        <!-- Subdivisión y volumen -->
+        <div class="section-card">
+            <div class="section-title">Subdivisión</div>
+            <div class="sub-grid" id="subGrid">
+                <button class="sig-btn active" onclick="setSubdiv(1,this)" title="Un clic por pulso">♩</button>
+                <button class="sig-btn" onclick="setSubdiv(2,this)" title="Corcheas">♫</button>
+                <button class="sig-btn" onclick="setSubdiv(3,this)" title="Tresillos">3</button>
+                <button class="sig-btn" onclick="setSubdiv(4,this)" title="Semicorcheas">4</button>
+            </div>
+            <div class="opt-row">
+                <label for="volSlider">Volumen</label>
+                <input type="range" id="volSlider" min="0" max="100" value="80" oninput="setVolume(+this.value)">
+            </div>
+        </div>
+
+        <!-- Entrenador de tempo -->
+        <div class="section-card" id="trainerCard">
+            <div class="opt-row" style="margin-top:0">
+                <div class="section-title" style="margin:0;flex:1">Entrenador de tempo</div>
+                <button class="switch-btn" id="trainerBtn" onclick="toggleTrainer()">Apagado</button>
+            </div>
+            <div class="trainer-grid">
+                <div><label for="trInc">Subir BPM</label><input type="number" id="trInc" min="1" max="20" value="5"></div>
+                <div><label for="trBars">Cada (compases)</label><input type="number" id="trBars" min="1" max="32" value="4"></div>
+                <div><label for="trMax">Hasta BPM</label><input type="number" id="trMax" min="30" max="300" value="160"></div>
+            </div>
+            <div class="trainer-status" id="trainerStatus"></div>
+        </div>
+
         <!-- Presets de tempo -->
         <div class="section-card">
             <div class="section-title">Indicaciones de tempo</div>
@@ -162,6 +210,10 @@ const TEMPO_PRESETS = [
 // ══════════════════════════════════════════════
 const store       = createStore('metronomo');
 let bpm           = 120;
+let subdiv        = 1;      // clics por pulso: 1 negras, 2 corcheas, 3 tresillos, 4 semicorcheas
+let volume        = 0.8;
+let barCount      = 0;
+let trainer       = { on: false, startBpm: 0, bars: 0 };
 let beatsPerBar   = 4;
 let beatUnit      = 4;
 let currentBeat   = 0;
@@ -181,7 +233,7 @@ function master() {
     if (!c) return null;
     if (!_master || _master.context !== c) {
         _master = c.createGain();
-        _master.gain.value = 1.0;
+        _master.gain.value = volume;
         _master.connect(c.destination);
     }
     return _master;
@@ -263,6 +315,9 @@ function scheduleClick(time, isAccent, isSecondary = false) {
 // ══════════════════════════════════════════════
 //  CONTROL DE REPRODUCCIÓN
 // ══════════════════════════════════════════════
+// Barra espaciadora (shell.js)
+function mtPlayToggle() { toggleMetronome(); }
+
 async function toggleMetronome() {
     if (isPlaying) {
         stopMetronome();
@@ -275,34 +330,49 @@ async function startMetronome() {
     if (!transport) {
         transport = createTransport({
             getBpm: () => bpm,
-            subdiv: 1,   // un clic por pulso — el BPM ES la velocidad del clic
+            subdiv: subdiv,   // el BPM es la velocidad del pulso; la subdivisión añade clics suaves
             onStep: (step, time) => {
                 // Acento en el primer tiempo del compás (independiente del
                 // denominador: 6/8 a 120 BPM = 120 clics/min, como 4/4).
-                const beat = step % beatsPerBar;
+                if (step % subdiv !== 0) { scheduleSubClick(time); return; }
+                const beat = (step / subdiv) % beatsPerBar;
+                if (beat === 0 && step > 0) onNewBar();
                 scheduleClick(time, beat === 0, beatGroupStarts().includes(beat));
             },
-            onDraw: (step) => flashBeat(step % beatsPerBar),
+            onDraw: (step) => {
+                if (step % subdiv !== 0) return;
+                const beat = (step / subdiv) % beatsPerBar;
+                flashBeat(beat);
+                if (beat === 0) document.getElementById('barCounter').textContent = 'Compás ' + (barCount + 1);
+            },
         });
     }
 
     isPlaying = true;
+    MT.keepAwake(true);   // pantalla encendida mientras suena
+    barCount = 0;
+    transport.subdiv = subdiv;
+    if (trainer.on) { trainer.startBpm = bpm; trainer.bars = 0; updateTrainerStatus(); }
     await transport.start();
 
     document.getElementById('mainBtn').innerHTML =
-        '<i class="ti ti-player-stop-filled"></i> Detener';
-    document.getElementById('mainBtn').className = 'btn btn-primary'; document.getElementById('mainBtn').style.background='linear-gradient(135deg,#ff5b7f,#ff416c)';
+        '■ Detener';
+    document.getElementById('mainBtn').className = 'btn btn-primary'; document.getElementById('mainBtn').style.background='linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75))';
 }
 
 function stopMetronome() {
     isPlaying = false;
+    MT.keepAwake(false);
+    document.getElementById('barCounter').textContent = 'Compás —';
+    // El entrenador deja el tempo donde empezó, para repetir el ejercicio
+    if (trainer.on && trainer.startBpm) { setBpm(trainer.startBpm); renderPresets(); updateTrainerStatus(); }
     if (transport) transport.stop();
 
     // Apagar todos los beat dots
     document.querySelectorAll('.beat-dot').forEach(d => d.classList.remove('active'));
 
     document.getElementById('mainBtn').innerHTML =
-        '<i class="ti ti-player-play-filled"></i> Iniciar';
+        '▶ Iniciar';
     document.getElementById('mainBtn').className = 'btn btn-primary'; document.getElementById('mainBtn').style.background='';
 }
 
@@ -391,6 +461,69 @@ function tapTempo() {
 }
 
 // ══════════════════════════════════════════════
+//  SUBDIVISIÓN · VOLUMEN · COMPASES · ENTRENADOR
+// ══════════════════════════════════════════════
+// Clic de subdivisión: corto y suave, para no confundirse con el pulso
+function scheduleSubClick(time) {
+    const c = tctx(); if (!c) return;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.frequency.value = 2400;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.linearRampToValueAtTime(0.22, time + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
+    osc.connect(g); g.connect(master());
+    osc.start(time); osc.stop(time + 0.04);
+}
+
+function setSubdiv(n, btn) {
+    subdiv = n;
+    store.set('subdiv', n);
+    document.querySelectorAll('#subGrid .sig-btn').forEach(b => b.classList.toggle('active', b === btn));
+    if (transport) { transport.subdiv = n; transport.resetStep(0); }   // el acento vuelve al tiempo 1
+}
+
+function setVolume(v) {
+    volume = v / 100;
+    store.set('volume', v);
+    const m = master();
+    if (m) m.gain.setTargetAtTime(volume, m.context.currentTime, 0.02);
+}
+
+// Se llama al empezar cada compás (desde el reloj de audio)
+function onNewBar() {
+    barCount++;
+    if (!trainer.on) return;
+    trainer.bars++;
+    const every = Math.max(1, +document.getElementById('trBars').value || 4);
+    const inc   = Math.max(1, +document.getElementById('trInc').value || 5);
+    const max   = Math.max(30, +document.getElementById('trMax').value || 160);
+    if (trainer.bars % every === 0 && bpm < max) {
+        setBpm(Math.min(max, bpm + inc));
+        renderPresets();
+    }
+    updateTrainerStatus();
+}
+
+function toggleTrainer(force) {
+    trainer.on = force !== undefined ? force : !trainer.on;
+    trainer.bars = 0;
+    trainer.startBpm = isPlaying ? bpm : 0;
+    const btn = document.getElementById('trainerBtn');
+    btn.classList.toggle('on', trainer.on);
+    btn.textContent = trainer.on ? 'Activado' : 'Apagado';
+    updateTrainerStatus();
+}
+
+function updateTrainerStatus() {
+    const el = document.getElementById('trainerStatus');
+    if (!trainer.on) { el.textContent = ''; return; }
+    const max = +document.getElementById('trMax').value || 160;
+    el.textContent = !isPlaying
+        ? `Empieza en ${bpm} BPM y sube ${document.getElementById('trInc').value} cada ${document.getElementById('trBars').value} compases`
+        : bpm >= max ? `Llegaste a ${max} BPM 🎯 · ${barCount} compases` : `Ahora ${bpm} BPM · meta ${max} BPM`;
+}
+
+// ══════════════════════════════════════════════
 //  COMPÁS
 // ══════════════════════════════════════════════
 function setTimeSig(beats, unit, btn) {
@@ -454,6 +587,16 @@ setBpm(store.get('bpm', 120));
 const savedSig = [...document.querySelectorAll('.sig-btn')].find(b => b.textContent.trim() === store.get('sig', '4/4'));
 if (savedSig) savedSig.click(); else renderBeatDots();
 renderPresets();
+const subBtn = document.querySelectorAll('#subGrid .sig-btn')[[1,2,3,4].indexOf(store.get('subdiv', 1))];
+if (subBtn) setSubdiv(store.get('subdiv', 1), subBtn);
+document.getElementById('volSlider').value = store.get('volume', 80);
+setVolume(store.get('volume', 80));
+store.bindInputs(['trInc', 'trBars', 'trMax']);
+['trInc', 'trBars', 'trMax'].forEach(id => document.getElementById(id).addEventListener('input', updateTrainerStatus));
+if (new URLSearchParams(location.search).has('entrenador')) {
+    toggleTrainer(true);
+    setTimeout(() => document.getElementById('trainerCard').scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+}
 </script>
 <script src="../../shared/shell.js"></script>
 </body>

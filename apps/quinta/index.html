@@ -101,10 +101,10 @@
         .quinta-chord-btn:active { transform: scale(.94); }
         .quinta-chord-btn.maj { border-color: rgba(var(--accent-rgb),.35); background: rgba(var(--accent-rgb),.07); }
         .quinta-chord-btn.min { border-color: rgba(var(--accent2-rgb),.35); background: rgba(var(--accent2-rgb),.07); }
-        .quinta-chord-btn.dim { border-color: rgba(255,91,127,.3); background: rgba(255,91,127,.06); }
+        .quinta-chord-btn.dim { border-color: rgba(var(--danger-rgb),.3); background: rgba(var(--danger-rgb),.06); }
         .quinta-chord-btn.maj:hover { background: rgba(var(--accent-rgb),.15); }
         .quinta-chord-btn.min:hover { background: rgba(var(--accent2-rgb),.15); }
-        .quinta-chord-btn.dim:hover { background: rgba(255,91,127,.12); }
+        .quinta-chord-btn.dim:hover { background: rgba(var(--danger-rgb),.12); }
         .qcb-roman { font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
         .qcb-name  { font-family: var(--font-head); font-size: 14px; font-weight: 800; color: var(--ink); }
         .quinta-chord-btn.maj .qcb-name { color: var(--accent); }
@@ -122,7 +122,12 @@
             transition: background .15s;
         }
         .quinta-transp-link:hover { background: rgba(var(--accent-rgb),.15); }
-    </style>
+            .quinta-scale-play {
+            margin-left: 8px; padding: 3px 10px; border-radius: 12px;
+            border: 1px solid rgba(var(--accent-rgb), .4); background: rgba(var(--accent-rgb), .1);
+            color: var(--accent); font: 700 11px var(--font-sans); cursor: pointer; vertical-align: middle;
+        }
+</style>
 </head>
 <body data-tool-name="Quinta" data-page-id="quinta">
 
@@ -199,6 +204,30 @@ const piano = createNotePlayer('acoustic_grand_piano');
 piano.preload().catch(() => {});
 const CHORD_INTS = { maj:[0,4,7], min:[0,3,7], dim:[0,3,6] };
 const SHARP_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+// Nombre para mostrar con ♭/♯ reales (los datos usan b/# para el audio)
+function disp(name) {
+    const m = /^([A-G][b#]?)(.*)$/.exec(name);
+    return m ? Theory.display(m[1], 'en') + m[2] : name;
+}
+
+// Escala de la tonalidad, subiendo desde la tónica (alrededor de Do4)
+async function playScale() {
+    if (selectedIdx < 0) return;
+    try { await piano.ready(); } catch (_) { return; }
+    piano.cancel();
+    const sc = CIRCLE[selectedIdx].scale;
+    const start = 60 + Theory.pc(sc[0]);
+    let prev = start - 1;
+    const now = piano.now;
+    sc.concat(sc[0]).forEach((n, i) => {
+        let m = start + ((Theory.pc(n) - Theory.pc(sc[0]) + 12) % 12);
+        if (i === sc.length) m = start + 12;       // la octava
+        while (m <= prev) m += 12;
+        prev = m;
+        piano.note(SHARP_NAMES[m % 12] + (Math.floor(m / 12) - 1), now + i * 0.32, { dur: 0.5, gain: 0.8 });
+    });
+}
 
 async function playChord(root, type) {
     const pc = Theory.pc(root);          // entiende E#, Cb, Gb…
@@ -291,10 +320,10 @@ function renderCircle() {
 
         // --- Major label ---
         const [mx, my] = polar((R.majIn + R.majOut) / 2, a);
-        let majLabel = d.major;
+        let majLabel = disp(d.major);
         if (mode === 'roman' && selectedIdx >= 0) {
             const rel = (i - selectedIdx + 12) % 12;
-            majLabel = ROMAN_MAJ[rel] || d.major;
+            majLabel = ROMAN_MAJ[rel] || disp(d.major);
         } else if (mode === 'sigs') {
             majLabel = d.sigs === 0 ? '♮' : (d.sigType === 'sharp' ? `${d.sigs}♯` : `${d.sigs}♭`);
         }
@@ -302,12 +331,12 @@ function renderCircle() {
 
         // --- Minor label ---
         const [nx, ny] = polar((R.minIn + R.minOut) / 2, a);
-        let minLabel = d.minor;
+        let minLabel = disp(d.minor);
         if (mode === 'roman' && selectedIdx >= 0) {
             const rel = (i - selectedIdx + 12) % 12;
-            minLabel = ROMAN_MIN[rel] || d.minor;
+            minLabel = ROMAN_MIN[rel] || disp(d.minor);
         } else if (mode === 'sigs') {
-            minLabel = d.minor;
+            minLabel = disp(d.minor);
         }
         h += `<text x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-weight="600" font-size="10.5" fill="${minCol}" pointer-events="none">${minLabel}</text>`;
 
@@ -322,7 +351,7 @@ function renderCircle() {
 
     if (selectedIdx >= 0) {
         const d = CIRCLE[selectedIdx];
-        h += `<text x="${CX}" y="${CY-9}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="20" font-weight="900" fill="${acc}">${d.major}</text>`;
+        h += `<text x="${CX}" y="${CY-9}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="20" font-weight="900" fill="${acc}">${disp(d.major)}</text>`;
         h += `<text x="${CX}" y="${CY+12}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="11" font-weight="700" fill="${mut}">Mayor</text>`;
     } else {
         h += `<text x="${CX}" y="${CY-6}" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-head)" font-size="11" font-weight="700" fill="${mut}">Toca</text>`;
@@ -349,11 +378,11 @@ function updateInfo() {
     // Key signature string
     let sigStr = '';
     if (d.sigs === 0) sigStr = '0 alteraciones';
-    else if (d.sigType === 'sharp') sigStr = `${d.sigs}♯ · ${d.sigList.join(' ')}`;
-    else sigStr = `${d.sigs}♭ · ${d.sigList.join(' ')}`;
+    else if (d.sigType === 'sharp') sigStr = `${d.sigs}♯ · ${d.sigList.map(disp).join(' ')}`;
+    else sigStr = `${d.sigs}♭ · ${d.sigList.map(disp).join(' ')}`;
 
     // Alt enharmonic
-    const altNote = d.altMajor ? ` / ${d.altMajor}` : '';
+    const altNote = d.altMajor ? ` / ${disp(d.altMajor)}` : '';
 
     // 7 acordes diatónicos, escritos desde la escala de la tonalidad (cada grado
     // con su letra). Antes se tomaban de las casillas vecinas del círculo y en
@@ -375,26 +404,28 @@ function updateInfo() {
     panel.innerHTML = `
         <div class="quinta-info-top">
             <div>
-                <div class="quinta-info-key">${d.major}${altNote} Mayor</div>
-                <div class="quinta-info-rel">Relativa menor: <strong>${d.minor}</strong></div>
+                <div class="quinta-info-key">${disp(d.major)}${altNote} Mayor</div>
+                <div class="quinta-info-rel">Relativa menor: <strong>${disp(d.minor)}</strong></div>
             </div>
             <div class="quinta-info-sig">${sigStr}</div>
         </div>
-        <div class="quinta-scale-label">Escala de ${d.major} Mayor</div>
+        <div class="quinta-scale-label">Escala de ${disp(d.major)} Mayor
+            <button class="quinta-scale-play" onclick="playScale()" aria-label="Escuchar escala">▶ Escuchar</button>
+        </div>
         <div class="quinta-scale-row">
-            ${d.scale.map(n => `<span class="quinta-scale-note">${n}</span>`).join('')}
+            ${d.scale.map(n => `<span class="quinta-scale-note">${disp(n)}</span>`).join('')}
         </div>
         <div class="quinta-chords-label">Acordes diatónicos · toca para escuchar</div>
         <div class="quinta-chords-row">
             ${diatonic.map(c => `
                 <button class="quinta-chord-btn ${c.type}" onclick="playChord('${chordRoot(c.name)}','${c.type}')">
                     <span class="qcb-roman">${c.roman}</span>
-                    <span class="qcb-name">${c.name}</span>
+                    <span class="qcb-name">${disp(c.name)}</span>
                 </button>`).join('')}
         </div>
-        <a class="quinta-transp-link" href="../transponer/" title="Abrir transpositor en esta tonalidad">
+        <a class="quinta-transp-link" href="../transponer/?desde=${Theory.pc(d.major)}" title="Abrir transpositor en esta tonalidad">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4"/></svg>
-            Transponer desde ${d.major}
+            Transponer desde ${disp(d.major)}
         </a>
     `;
 }
@@ -420,6 +451,12 @@ function setMode(m, btn) {
 
 // Redraw on theme change
 window.addEventListener('mt-theme-change', renderCircle);
+</script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    if (selectedIdx >= 0) playChord(CIRCLE[selectedIdx].major, 'maj');
+}
 </script>
 <script src="../../shared/shell.js"></script>
 <script>

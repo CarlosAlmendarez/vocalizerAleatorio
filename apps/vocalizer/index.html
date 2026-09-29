@@ -10,6 +10,7 @@
     <script src="../../shared/note-player.js"></script>
     <script src="../../shared/theory.js"></script>
     <script src="../../shared/settings.js"></script>
+    <script src="../../shared/pitch.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Layout root ─────────────────────────── */
@@ -402,6 +403,69 @@
         }
         .voc-range-warn.show { display: block; }
 
+        /* Micrófono: afinación de tu voz */
+        .voc-mic-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--ink-dim);
+            font: 600 12px var(--font-sans);
+            cursor: pointer;
+        }
+        .voc-mic-btn[aria-pressed="true"] {
+            color: var(--accent);
+            border-color: rgba(var(--accent-rgb), 0.45);
+            background: rgba(var(--accent-rgb), 0.12);
+        }
+        .voc-pitch {
+            max-width: 280px;
+            margin: 10px auto 0;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .voc-pitch[hidden] { display: none; }
+        .voc-pitch-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-family: var(--font-head);
+        }
+        .voc-pitch-row #pitchSung { font-size: 20px; font-weight: 800; color: var(--ink); }
+        .voc-pitch-row #pitchCents { font-size: 13px; font-weight: 700; color: var(--muted); }
+        .voc-pitch[data-state="ok"]    #pitchCents { color: var(--success); }
+        .voc-pitch[data-state="close"] #pitchCents { color: var(--warning); }
+        .voc-pitch[data-state="off"]   #pitchCents { color: var(--danger); }
+        .voc-pitch-bar {
+            position: relative;
+            height: 6px;
+            margin: 8px 0 6px;
+            border-radius: 3px;
+            background: linear-gradient(to right, rgba(var(--danger-rgb), .35), rgba(var(--success-rgb), .5) 40%, rgba(var(--success-rgb), .5) 60%, rgba(var(--danger-rgb), .35));
+        }
+        .voc-pitch-center {
+            position: absolute; left: 50%; top: -3px; bottom: -3px;
+            width: 2px; margin-left: -1px;
+            background: var(--ink);
+            opacity: 0.5;
+        }
+        .voc-pitch-dot {
+            position: absolute; top: 50%; left: 50%;
+            width: 14px; height: 14px; margin: -7px 0 0 -7px;
+            border-radius: 50%;
+            background: var(--ink);
+            box-shadow: 0 0 10px rgba(var(--accent-rgb), .6);
+            transition: left 0.08s linear;
+        }
+        .voc-pitch[data-state="none"] .voc-pitch-dot { opacity: 0.25; }
+        .voc-pitch-foot { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
         /* Rutinas */
         .voc-routine-tag {
             display: inline-block;
@@ -496,6 +560,15 @@
         <div class="voc-note-big" id="currentNote">—</div>
         <div class="voc-vocal-row">
             Vocal · <span id="currentVowel">—</span>
+        </div>
+        <button type="button" class="voc-mic-btn" id="micBtn" onclick="toggleMic()" aria-pressed="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            <span id="micBtnText">Afinación de tu voz</span>
+        </button>
+        <div class="voc-pitch" id="pitchBox" data-state="none" hidden>
+            <div class="voc-pitch-row"><span id="pitchSung">—</span><span id="pitchCents">canta…</span></div>
+            <div class="voc-pitch-bar"><div class="voc-pitch-center"></div><div class="voc-pitch-dot" id="pitchDot"></div></div>
+            <div class="voc-pitch-foot" id="pitchFoot">Usa audífonos: sin ellos el micrófono también oye el piano.</div>
         </div>
         <div class="voc-progress-tag" id="progressInfo">Selecciona y presiona ▶</div>
         <button type="button" class="voc-engine" id="engineStatus" data-kind="wait" onclick="onEngineStatusTap()">
@@ -1000,6 +1073,101 @@ function setMet(v) {
 }
 
 /* ════════════════════════════════════════════════════
+   MICRÓFONO — afinación de tu voz en vivo (YIN, shared/pitch.js)
+   Compara lo que cantas con la nota que suena. Si cantas una octava
+   arriba o abajo (voces de hombre/mujer) cuenta igual y lo indica.
+   ════════════════════════════════════════════════════ */
+const VOICE_MIN_HZ = 65;      // ~Do2: lo más grave que canta un bajo
+const TUNE_OK = 25, TUNE_CLOSE = 50;   // cents: tolerancia habitual al cantar
+let micOn = false, micStream = null, micSource = null, micAnalyser = null, micBuf = null;
+let micRaf = null, micLast = 0, micTarget = null;
+let micStats = { total: 0, ok: 0 };
+
+async function toggleMic() {
+    if (micOn) { stopMic(); return; }
+    const btnText = document.getElementById('micBtnText');
+    try {
+        await soundEngine.start();   // mismo AudioContext que el piano
+        micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false }
+        });
+    } catch (err) {
+        btnText.textContent = location.protocol === 'https:' || location.hostname === 'localhost'
+            ? 'Permite el micrófono para usarlo' : 'El micrófono requiere HTTPS';
+        return;
+    }
+    const ac = soundEngine.ac;
+    micSource   = ac.createMediaStreamSource(micStream);
+    micAnalyser = ac.createAnalyser();
+    micAnalyser.fftSize = 4096;
+    micSource.connect(micAnalyser);   // solo se analiza, no se reproduce
+    micBuf = new Float32Array(micAnalyser.fftSize);
+    micOn = true;
+    resetMicStats();
+    document.getElementById('micBtn').setAttribute('aria-pressed', 'true');
+    btnText.textContent = 'Micrófono activo';
+    document.getElementById('pitchBox').hidden = false;
+    micRaf = requestAnimationFrame(micLoop);
+}
+
+function stopMic() {
+    micOn = false;
+    cancelAnimationFrame(micRaf);
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (micSource) micSource.disconnect();
+    micStream = micSource = micAnalyser = null;
+    document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
+    document.getElementById('micBtnText').textContent = 'Afinación de tu voz';
+    document.getElementById('pitchBox').hidden = true;
+}
+
+function resetMicStats() { micStats = { total: 0, ok: 0 }; }
+
+function micLoop(now) {
+    if (!micOn) return;
+    micRaf = requestAnimationFrame(micLoop);
+    if (now - micLast < 60) return;   // ~16 lecturas por segundo
+    micLast = now;
+
+    micAnalyser.getFloatTimeDomainData(micBuf);
+    const hz  = Pitch.detect(micBuf, soundEngine.ac.sampleRate, VOICE_MIN_HZ);
+    const box = document.getElementById('pitchBox');
+    const dot = document.getElementById('pitchDot');
+    if (hz < 0) {
+        box.dataset.state = 'none';
+        document.getElementById('pitchCents').textContent = 'canta…';
+        return;
+    }
+    const sung = Pitch.freqToMidi(hz);
+    const r = Math.round(sung);
+    document.getElementById('pitchSung').textContent =
+        Theory.display(NOTE_NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1), 'en');
+
+    // Sin ejercicio en marcha: solo muestra la nota cantada (modo libre)
+    const target = state === 'playing' ? micTarget : null;
+    const ref = target !== null ? target : r;
+    const diff = sung - ref;
+    const oct = Math.round(diff / 12);
+    const cents = Math.round((diff - oct * 12) * 100);
+    const abs = Math.abs(cents);
+
+    box.dataset.state = target === null ? 'none' : abs <= TUNE_OK ? 'ok' : abs <= TUNE_CLOSE ? 'close' : 'off';
+    dot.style.left = (50 + Math.max(-50, Math.min(50, cents))) + '%';
+    const octTxt = target !== null && oct !== 0 ? ` · ${oct > 0 ? '+' : ''}${oct} oct` : '';
+    document.getElementById('pitchCents').textContent =
+        target === null ? `${cents >= 0 ? '+' : ''}${cents}¢` : (abs <= TUNE_OK ? 'afinado' : (cents > 0 ? `alto +${cents}¢` : `bajo ${cents}¢`)) + octTxt;
+
+    if (target !== null) {
+        micStats.total++;
+        if (abs <= TUNE_CLOSE) micStats.ok++;
+        if (micStats.total >= 8) {
+            document.getElementById('pitchFoot').textContent =
+                `Afinado el ${Math.round(100 * micStats.ok / micStats.total)} % de esta repetición`;
+        }
+    }
+}
+
+/* ════════════════════════════════════════════════════
    RUTINAS — varios ejercicios encadenados sin detener el reloj
    ════════════════════════════════════════════════════ */
 const ROUTINES = {
@@ -1264,7 +1432,7 @@ function vocOnStep(step, time, stepDur) {
         seq = buildSequence(currentBaseIdx, currentConfig);
         seqCursor = -refSteps();
         const b = nb;
-        player.ui(time, () => { showHint(''); renderRangeBar(b); });
+        player.ui(time, () => { showHint(''); renderRangeBar(b); resetMicStats(); });
     }
 
     const idx = seqCursor++;
@@ -1290,6 +1458,7 @@ function vocOnStep(step, time, stepDur) {
         currentSequence = s;
         currentStepIdx  = idx;
         document.getElementById('currentNote').innerText  = label;
+        micTarget = Theory.midi(note);   // la nota que deberías estar cantando
         document.getElementById('currentVowel').innerText = vowel;
         document.getElementById('progressInfo').innerText = `Base: ${baseTxt}${arrow}`;
         renderDisplay(s, idx);
@@ -1500,6 +1669,12 @@ window.addEventListener('mt-theme-change', () => {
 });
 
 window.onload = init;
+</script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    handlePlayBtn();
+}
 </script>
 <script src="../../shared/shell.js"></script>
 </body>

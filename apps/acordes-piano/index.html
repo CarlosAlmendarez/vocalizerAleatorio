@@ -131,7 +131,7 @@
         }
         .piano-play-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 36px -8px rgba(var(--accent-rgb),.55); }
         .piano-play-btn:active { transform: scale(.97); }
-        .piano-play-btn.playing { background: linear-gradient(135deg,#ff3366,#ff5b7f); box-shadow: 0 8px 24px -6px rgba(255,51,102,.6); }
+        .piano-play-btn.playing { background: linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75)); box-shadow: 0 8px 24px -6px rgba(var(--danger-rgb), .6); }
 
         /* ── Theory card ── */
         .piano-theory-card {
@@ -230,6 +230,12 @@
         <div class="finger-legend-pills" id="fingerPills"></div>
     </div>
 
+    <!-- Modo de escucha -->
+    <div class="hand-toggle play-style" role="group" aria-label="Cómo suena el acorde">
+        <button class="hand-btn on" data-style="block" onclick="setPlayStyle('block')">Plaqué</button>
+        <button class="hand-btn" data-style="arp" onclick="setPlayStyle('arp')">Arpegio</button>
+    </div>
+
     <!-- Listen button -->
     <button class="piano-play-btn" id="playBtn" onclick="playChord()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg>
@@ -263,6 +269,10 @@ const CHORD_TYPES = [
     { id:'sus4', label:'sus4',   suffix:'sus4', fullName:'Sus4'          },
     { id:'dim',  label:'dim',    suffix:'°',    fullName:'Disminuido'    },
     { id:'aug',  label:'aug',    suffix:'+',    fullName:'Aumentado'     },
+    { id:'sus2', label:'sus2',   suffix:'sus2', fullName:'Sus2'          },
+    { id:'m7b5', label:'m7♭5',   suffix:'m7♭5', fullName:'Semidisminuido'},
+    { id:'dim7', label:'°7',     suffix:'°7',   fullName:'Disminuido 7'  },
+    { id:'add9', label:'add9',   suffix:'add9', fullName:'Add 9'         },
 ];
 
 const CHORD_INTERVALS = {
@@ -274,9 +284,21 @@ const CHORD_INTERVALS = {
     sus4: [0,5,7],
     dim:  [0,3,6],
     aug:  [0,4,8],
+    sus2: [0,2,7],
+    m7b5: [0,3,6,10],
+    dim7: [0,3,6,9],
+    add9: [0,4,7,14],
 };
 
 const THEORY = {
+    sus2: { formula: 'Raíz  +  2ª Mayor  +  5ª Justa', intervals: ['1','2M','5J'],
+            desc: 'Sin tercera: la 2ª la reemplaza. Sonido abierto y ambiguo, ni mayor ni menor. Muy usado en pop y rock moderno.' },
+    m7b5: { formula: 'Raíz  +  3ª Menor  +  5ª Disminuida  +  7ª Menor', intervals: ['1','3m','5d','7m'],
+            desc: 'Semidisminuido: el acorde del VII grado en tonalidad mayor y del ii en menor. Clave en el ii–V–i menor del jazz.' },
+    dim7: { formula: 'Raíz  +  3ª Menor  +  5ª Disminuida  +  7ª Disminuida', intervals: ['1','3m','5d','7d'],
+            desc: 'Tres terceras menores apiladas: divide la octava en partes iguales, así que cualquiera de sus notas puede ser la fundamental. Muy tenso; sirve de paso cromático.' },
+    add9: { formula: 'Raíz  +  3ª Mayor  +  5ª Justa  +  9ª Mayor', intervals: ['1','3M','5J','9M'],
+            desc: 'Acorde mayor con la 9ª añadida (sin 7ª). Brillante y luminoso; muy común en baladas y pop.' },
     maj:  { formula: 'Raíz  +  3ª Mayor  +  5ª Justa', intervals: ['1','3M','5J'],
             desc: 'La triada mayor. Sonido alegre, estable y brillante. Punto de partida para todo músico.' },
     min:  { formula: 'Raíz  +  3ª Menor  +  5ª Justa', intervals: ['1','3m','5J'],
@@ -316,6 +338,13 @@ let rootIdx   = Number.isInteger(store.get('root')) ? store.get('root') : 0;
 let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'maj';
 let inversion = 0;
 let leftHand  = false;
+let playStyle = store.get('style', 'block');   // 'block' (plaqué) | 'arp'
+
+function setPlayStyle(style) {
+    playStyle = style;
+    store.set('style', style);
+    document.querySelectorAll('.play-style .hand-btn').forEach(b => b.classList.toggle('on', b.dataset.style === style));
+}
 const piano = createNotePlayer('acoustic_grand_piano');
 piano.preload().catch(() => {});   // el primer toque no espera a la red
 let isPlaying = false;
@@ -324,7 +353,12 @@ let isPlaying = false;
 const BASE_MIDI = 60; // C4
 
 function baseNotes() {
-    return CHORD_INTERVALS[chordType].map(s => BASE_MIDI + rootIdx + s);
+    // Lo que se saldría del teclado dibujado (Do4–Si5) baja una octava:
+    // la 9ª de Si add9 se muestra como 2ª en vez de desaparecer.
+    return CHORD_INTERVALS[chordType]
+        .map(s => BASE_MIDI + rootIdx + s)
+        .map(m => m > BASE_MIDI + 12 * DISPLAY_OCTS - 1 ? m - 12 : m)
+        .sort((a, b) => a - b);
 }
 
 function applyInv(notes, inv) {
@@ -554,15 +588,22 @@ async function playChord() {
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg> Sonando…';
 
     try { await piano.ready(); } catch (_) {}
+    let arpLen = 2.4;
 
     const now = piano.now;
     if (piano.status !== 'error') {
         const midis = currentMidis();
         const noteNames = midis.map(m => SHARP_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1));
-        // Arpegiado suave: 65 ms entre notas, agendado con el reloj de audio
-        noteNames.forEach((n, i) => {
-            piano.note(n, now + i * 0.065, { dur: 2.2, gain: 0.72 });
-        });
+        if (playStyle === 'arp') {
+            // Arpegio: sube y vuelve a la fundamental, nota a nota
+            const seq = noteNames.concat(noteNames.slice(0, -1).reverse());
+            seq.forEach((n, i) => piano.note(n, now + i * 0.28, { dur: 0.6, gain: 0.72 }));
+            arpLen = seq.length * 0.28 + 0.4;
+        } else {
+            // Plaqué: todas juntas con un rasgueo mínimo (15 ms) para que suene natural
+            noteNames.forEach((n, i) => piano.note(n, now + i * 0.015, { dur: 2.2, gain: 0.72 }));
+            arpLen = 2.4;
+        }
     }
 
     const resetBtn = () => {
@@ -571,7 +612,7 @@ async function playChord() {
         btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg> Escuchar Acorde';
     };
     if (piano.status === 'error') resetBtn();
-    else piano.ui(now + 2.4, resetBtn);
+    else piano.ui(now + arpLen, resetBtn);
 }
 
 // ── UI updates ────────────────────────────────────────────────────
@@ -654,7 +695,7 @@ function selectInversion(inv) {
 function setHand(hand, btn) {
     leftHand = hand === 'left';
     store.set('hand', hand);
-    document.querySelectorAll('.hand-btn').forEach(b =>
+    document.querySelectorAll('.hand-btn[data-hand]').forEach(b =>
         b.classList.toggle('on', b.dataset.hand === hand)
     );
     update();
@@ -685,6 +726,7 @@ function renderInvButtons() {
 
 // ── Init ──────────────────────────────────────────────────────────
 function init() {
+    setPlayStyle(playStyle);
     const hb = document.querySelector(`.hand-btn[data-hand="${store.get('hand', 'right')}"]`);
     if (hb) setHand(hb.dataset.hand, hb);
     renderRootGrid();
@@ -694,6 +736,12 @@ function init() {
 
     window.addEventListener('resize', drawKeyboard);
     window.addEventListener('mt-theme-change', drawKeyboard);
+}
+</script>
+<script>
+// Barra espaciadora = acción principal (la escucha shell.js)
+function mtPlayToggle() {
+    playChord();
 }
 </script>
 <script src="../../shared/shell.js"></script>

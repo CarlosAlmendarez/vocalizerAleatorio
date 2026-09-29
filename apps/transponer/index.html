@@ -151,7 +151,7 @@
             display: flex; align-items: center; gap: 5px;
         }
         .transp-copy-btn:hover { background: rgba(var(--accent-rgb),0.16); }
-        .transp-copy-btn.copied { background: rgba(57,242,157,0.14); border-color: var(--success); color: var(--success); }
+        .transp-copy-btn.copied { background: rgba(var(--success-rgb),0.14); border-color: var(--success); color: var(--success); }
 
         .transp-output {
             font-family: var(--font-head); font-size: 16px; font-weight: 700; line-height: 1.8;
@@ -189,7 +189,29 @@
             font-family: var(--font-head); font-size: 14px; font-weight: 900;
             vertical-align: middle; margin: 0 3px;
         }
-    </style>
+            /* Tonalidad detectada y digitaciones */
+        .transp-detect {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm);
+            background: rgba(var(--accent-rgb), .1); border: 1px solid rgba(var(--accent-rgb), .3);
+            font-size: 12px; color: var(--ink-dim);
+        }
+        .transp-detect[hidden] { display: none; }
+        .transp-detect strong { color: var(--accent); }
+        .transp-detect button {
+            margin-left: auto; padding: 5px 10px; border-radius: 14px; border: 1px solid var(--accent);
+            background: none; color: var(--accent); font: 700 11px var(--font-sans); cursor: pointer;
+        }
+        .transp-output-card[hidden] { display: none; }
+        .transp-finger-note { font-size: 10px; color: var(--muted); }
+        .transp-fingers { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-top: 10px; }
+        .transp-finger {
+            padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+            text-align: center;
+        }
+        .transp-finger b { display: block; font: 800 15px var(--font-head); color: var(--ink); }
+        .transp-finger code { font: 600 13px ui-monospace, Menlo, Consolas, monospace; color: var(--accent); letter-spacing: .08em; }
+</style>
 </head>
 <body data-tool-name="Transponer" data-page-id="transponer">
 
@@ -269,6 +291,7 @@
                 Limpiar
             </button>
         </div>
+        <div class="transp-detect" id="keyDetect" hidden></div>
     </div>
 
     <!-- Output -->
@@ -283,6 +306,15 @@
         <div class="transp-output" id="outputArea">
             <p class="transp-placeholder">El resultado aparece aquí en tiempo real…</p>
         </div>
+    </div>
+
+    <!-- Digitaciones de guitarra de los acordes transpuestos -->
+    <div class="transp-output-card" id="fingerCard" hidden>
+        <div class="transp-output-header">
+            <div class="transp-section-label" style="margin:0;">Digitaciones de guitarra</div>
+            <span class="transp-finger-note">6ª → 1ª cuerda · x = no tocar</span>
+        </div>
+        <div class="transp-fingers" id="fingerList"></div>
     </div>
 
     <!-- Capo helper -->
@@ -415,12 +447,119 @@ function renderOutput(text, n) {
     }).join('');
 }
 
+// ── Acordes del texto (misma regla que el resultado: líneas de acordes y [Am]) ──
+function isChordLine(line) {
+    const words = line.trim().split(/\s+/).filter(w => !/^[|/\-–()x\d.:]+$/i.test(w));
+    return words.length > 0 && words.filter(w => parseChord(w)).length / words.length >= 0.5;
+}
+function extractChords(text) {
+    const out = [];
+    text.split('\n').forEach(line => {
+        if (!line.trim()) return;
+        if (isChordLine(line)) line.trim().split(/\s+/).forEach(w => { const c = parseChord(w); if (c) out.push(c); });
+        else (line.match(/\[([A-G][^\]\s]*)\]/g) || []).forEach(m => { const c = parseChord(m.slice(1, -1)); if (c) out.push(c); });
+    });
+    return out;
+}
+
+// Calidad del acorde a partir del sufijo (m, 7, maj7, m7♭5, °, sus4…)
+function qualityOf(rest) {
+    const q = rest.split('/')[0];
+    if (/^(maj7|M7|Δ)/.test(q)) return 'maj7';
+    if (/^(m7b5|m7♭5|ø)/.test(q)) return 'm7b5';
+    if (/^(dim7|°7|o7)/.test(q)) return 'dim7';
+    if (/^(dim|°|o)/.test(q)) return 'dim';
+    if (/^(aug|\+)/.test(q)) return 'aug';
+    if (/^sus2/.test(q)) return 'sus2';
+    if (/^sus/.test(q)) return 'sus4';
+    if (/^(m7|min7|-7)/.test(q)) return 'min7';
+    if (/^(m|min|-)(?!aj)/.test(q)) return 'min';
+    if (/^(7|9|11|13)/.test(q)) return 'dom7';
+    return 'maj';
+}
+
+// ── Detección de tonalidad ──
+// Puntúa las 12 tonalidades mayores: +1 por acorde diatónico con su calidad
+// correcta (I IV V mayores, ii iii vi menores, vii° disminuido), −0,5 si no lo es,
+// y un extra si empieza o termina en la tónica (I, o vi para la relativa menor).
+function detectKey(chords) {
+    if (chords.length < 3) return null;
+    const DIA = { 0: 'maj', 2: 'min', 4: 'min', 5: 'maj', 7: 'maj', 9: 'min', 11: 'dim' };
+    const family = q => /^(min|min7)$/.test(q) ? 'min' : /^(dim|m7b5|dim7)$/.test(q) ? 'dim' : 'maj';
+    const cs = chords.map(c => ({ pc: Theory.pc(c.root), f: family(qualityOf(c.rest)) }));
+    let best = null;
+    for (let k = 0; k < 12; k++) {
+        let score = 0;
+        cs.forEach(c => { score += DIA[(c.pc - k + 12) % 12] === c.f ? 1 : -0.5; });
+        [cs[0], cs[cs.length - 1]].forEach(c => {
+            const rel = (c.pc - k + 12) % 12;
+            if ((rel === 0 && c.f === 'maj') || (rel === 9 && c.f === 'min')) score += 0.75;
+        });
+        if (!best || score > best.score) best = { k, score };
+    }
+    const first = cs[0], last = cs[cs.length - 1];
+    const isTonic = (c, rel, f) => (c.pc - best.k + 12) % 12 === rel && c.f === f;
+    const minor = (isTonic(first, 9, 'min') || isTonic(last, 9, 'min')) && !isTonic(first, 0, 'maj');
+    const conf = best.score / cs.length;
+    return { k: best.k, minor, conf };
+}
+
+function renderKeyDetect(text) {
+    const box = document.getElementById('keyDetect');
+    const d = detectKey(extractChords(text));
+    if (!d || d.conf < 0.5) { box.hidden = true; return; }
+    const major = Theory.keyForPc(d.k, 'major');
+    const name = d.minor
+        ? Theory.display(Theory.bestScaleRoot((d.k + 9) % 12, 'minor'), 'es') + ' menor'
+        : Theory.display(major, 'es') + ' mayor';
+    const same = d.k === fromKeyIdx;
+    box.hidden = false;
+    box.innerHTML = `Tonalidad detectada: <strong>${name}</strong>` +
+        (d.minor ? ` <span>(relativa de ${Theory.display(major, 'es')} mayor)</span>` : '') +
+        (same ? '' : `<button onclick="useDetectedKey(${d.k})">Usar como origen</button>`);
+}
+function useDetectedKey(k) {
+    const toIdx = ((fromKeyIdx + semitones) % 12 + 12) % 12;
+    fromKeyIdx = k;
+    let diff = (toIdx - k + 12) % 12;       // mantener la tonalidad destino elegida
+    if (diff > 6) diff -= 12;
+    semitones = diff;
+    update();
+}
+
+// ── Digitaciones de guitarra de cada acorde transpuesto ──
+const GUITAR = [40, 45, 50, 55, 59, 64];
+function renderFingerings(text) {
+    const card = document.getElementById('fingerCard');
+    const seen = new Set(), items = [];
+    extractChords(text).forEach(c => {
+        const root = transpNote(c.root, semitones);
+        const q = qualityOf(c.rest);
+        const suffix = c.rest.split('/')[0];
+        const key = root + suffix;
+        if (seen.has(key) || items.length >= 24) return;
+        seen.add(key);
+        const ch = Theory.chord(root, q);
+        if (!ch) return;
+        const optional = ch.pcs.length === 4 && ch.semitones[2] === 7 ? [ch.pcs[2]] : [];
+        const v = Theory.findVoicing({ tuning: GUITAR, pcs: ch.pcs, optional, rootInBass: true, allowMute: true, minStrings: 4 });
+        if (!v) return;
+        const frets = v.frets.map(f => f < 0 ? 'x' : f);
+        items.push({ name: root + suffix, tab: frets.some(f => f > 9) ? frets.join('-') : frets.join('') });
+    });
+    card.hidden = !items.length;
+    document.getElementById('fingerList').innerHTML = items.map(it =>
+        `<div class="transp-finger"><b>${it.name}</b><code>${it.tab}</code></div>`).join('');
+}
+
 // ── Actualizar UI ────────────────────────────────────────────────
 function update() {
     const text = document.getElementById('inputArea').value;
     store.set('text', text); store.set('semitones', semitones);
     store.set('fromKey', fromKeyIdx); store.set('enharm', enharm);
     document.getElementById('outputArea').innerHTML = renderOutput(text, semitones);
+    renderKeyDetect(text);
+    renderFingerings(text);
 
     // Semitone display
     const numEl = document.getElementById('semiNum');
@@ -517,6 +656,9 @@ function init() {
         fromSel.add(new Option(k.label, i));
         toSel.add(new Option(k.label, i));
     });
+    // Desde el círculo de quintas: ?desde=<0-11> abre en esa tonalidad
+    const desde = parseInt(new URLSearchParams(location.search).get('desde'), 10);
+    if (desde >= 0 && desde < 12) { fromKeyIdx = desde; semitones = 0; }
     fromSel.value = fromKeyIdx;
     toSel.value   = fromKeyIdx;
     document.getElementById('inputArea').value = store.get('text', document.getElementById('inputArea').value);

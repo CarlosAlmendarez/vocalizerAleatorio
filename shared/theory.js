@@ -133,7 +133,8 @@
     maj7: { name: 'Mayor 7',           sym: 'maj7', ivs: [[0,1],[4,3],[7,5],[11,7]],   deg: ['1','3','5','7'] },
     min7: { name: 'Menor 7',           sym: 'm7',   ivs: [[0,1],[3,3],[7,5],[10,7]],   deg: ['1','♭3','5','♭7'] },
     m7b5: { name: 'Semidisminuido',    sym: 'm7♭5', ivs: [[0,1],[3,3],[6,5],[10,7]],   deg: ['1','♭3','♭5','♭7'] },
-    dim7: { name: 'Disminuido 7',      sym: '°7',   ivs: [[0,1],[3,3],[6,5],[9,7]],    deg: ['1','♭3','♭5','𝄫7'] }
+    dim7: { name: 'Disminuido 7',      sym: '°7',   ivs: [[0,1],[3,3],[6,5],[9,7]],    deg: ['1','♭3','♭5','𝄫7'] },
+    add9: { name: 'Add 9',             sym: 'add9', ivs: [[0,1],[4,3],[7,5],[14,9]],   deg: ['1','3','5','9'] }
   };
   // Alias usados por las apps
   var CHORD_ALIAS = { major: 'maj', minor: 'min', '7': 'dom7', m7: 'min7' };
@@ -241,7 +242,14 @@
    *       maxSpan     separación máxima entre trastes pisados (3 = 4 trastes)
    *       maxFret     traste más alto a considerar
    */
-  function findVoicing(opts) {
+  function findVoicing(opts) { return findVoicings(opts, 1)[0] || null; }
+
+  /**
+   * Varias digitaciones en posiciones distintas del mástil (abierta, traste 3,
+   * traste 5…), de la más cómoda a la menos. Cada una sigue sonando SOLO notas
+   * del acorde. count: cuántas como máximo.
+   */
+  function findVoicings(opts, count) {
     var tuning = opts.tuning, n = tuning.length;
     var root = opts.pcs[0];
     var allowed = {};
@@ -249,7 +257,7 @@
     var required = opts.pcs.filter(function (p) { return (opts.optional || []).indexOf(p) < 0; });
     var maxSpan = opts.maxSpan || 3, maxFret = opts.maxFret || 14;
     var minStrings = opts.minStrings || Math.min(n, 3);
-    var best = null, bestScore = Infinity;
+    var all = [];
 
     for (var pos = 0; pos <= maxFret - maxSpan; pos++) {
       var lo = Math.max(1, pos), hi = pos + maxSpan;
@@ -266,7 +274,14 @@
         for (var i = 0; i < options[s].length; i++) { frets[s] = options[s][i]; rec(s + 1); }
       })(0);
     }
-    return best;
+    // La mejor primero; las siguientes, en otra zona del mástil (≥ 3 trastes de distancia)
+    all.sort(function (a, b) { return a.score - b.score; });
+    var chosen = [];
+    for (var k = 0; k < all.length && chosen.length < (count || 1); k++) {
+      var c = all[k];
+      if (chosen.every(function (o) { return Math.abs(o.pos - c.pos) >= 3; })) chosen.push(c);
+    }
+    return chosen.map(function (c) { return c.v; });
 
     function consider(fr, pos) {
       // Cuerdas apagadas solo en los extremos (no en medio)
@@ -314,11 +329,8 @@
       var score = minF * 1.0 + (maxF - minF) * 1.2 - sounding * 1.3
                 + (barre ? 0.8 : 0) + missingOptional * 2.5
                 + awkwardOpens * 1.2 - (maxF <= 3 ? opens * 0.3 : 0);
-      if (score < bestScore) {
-        bestScore = score;
-        var baseFret = maxF <= (opts.visibleFrets || 4) ? 1 : minF;
-        best = { frets: fr, baseFret: baseFret, barre: barre };
-      }
+      var baseFret = maxF <= (opts.visibleFrets || 4) ? 1 : minF;
+      all.push({ score: score, pos: minF, v: { frets: fr, baseFret: baseFret, barre: barre, position: minF } });
     }
   }
 
@@ -343,7 +355,7 @@
     fromRoot: fromRoot, enharmonics: enharmonics, rootButtonLabel: rootButtonLabel, bestRoot: bestRoot, bestScaleRoot: bestScaleRoot, chordDef: chordDef,
     chord: chord, scale: scale, degreeRoot: degreeRoot,
     transposeName: transposeName, keyForPc: keyForPc,
-    findVoicing: findVoicing, checkVoicing: checkVoicing
+    findVoicing: findVoicing, findVoicings: findVoicings, checkVoicing: checkVoicing
   };
 
 }(typeof window !== 'undefined' ? window : this));

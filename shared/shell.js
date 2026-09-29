@@ -169,7 +169,10 @@
   }
 
   function currentTabId(pageId) {
-    if (pageId === 'home') return 'home';
+    if (pageId === 'home') {
+      var h = (location.hash || '').slice(1);
+      return ['tools', 'practice', 'settings'].indexOf(h) >= 0 ? h : 'home';
+    }
     for (var i = 0; i < TOOLS.length; i++) {
       if (TOOLS[i].id === pageId) return 'tools';
     }
@@ -235,8 +238,7 @@
             '<div class="back-title">' + toolName + '</div>' +
           '</div>' +
         '</div>' +
-        themeSwitcherHtml +
-        '<button class="mt-icon-btn" title="Notificaciones">' + svg('bell', 18) + '</button>';
+        themeSwitcherHtml;
     } else {
       topbarContent =
         '<a href="' + ROOT + 'index.html" class="mt-topbar-brand">' +
@@ -244,13 +246,12 @@
           '<span style="font-family:var(--font-head);font-weight:800;font-size:16px;letter-spacing:-0.02em;">MusicTools</span>' +
         '</a>' +
         '<div class="mt-topbar-spacer"></div>' +
-        '<div class="mt-topbar-search desktop-only">' +
+        '<label class="mt-topbar-search desktop-only">' +
           svg('search', 16) +
-          '<span>Buscar herramienta, escala, acorde…</span>' +
-          '<kbd>⌘K</kbd>' +
-        '</div>' +
-        themeSwitcherHtml +
-        '<button class="mt-icon-btn" title="Notificaciones">' + svg('bell', 18) + '</button>';
+          '<input id="mt-search" type="search" placeholder="Buscar herramienta, escala, acorde…" autocomplete="off" oninput="window.MT.filterTools(this.value)">' +
+          '<kbd>' + (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K') + '</kbd>' +
+        '</label>' +
+        themeSwitcherHtml;
     }
 
     // Bottom nav
@@ -348,8 +349,78 @@
     }
   }
 
-  /** Descarga instrumentos para usarlos sin conexión: MT.precacheInstruments(['acoustic_grand_piano']) */
+  /* ------------------------------------------------------------------ */
+  /* API COMPARTIDA (window.MT)                                           */
+  /* ------------------------------------------------------------------ */
   window.MT = window.MT || {};
+
+  /** Tema por nombre ('neon' | 'minimal' | 'amber'), para el selector de Ajustes */
+  window.MT.setTheme = function (id) { if (THEMES.indexOf(id) >= 0) applyTheme(id); };
+  window.MT.getTheme = getStoredTheme;
+  window.MT.THEMES = THEMES.map(function (id) { return { id: id, name: THEME_META[id].name, accent: THEME_META[id].accent }; });
+
+  /**
+   * Pantalla encendida mientras se practica (Screen Wake Lock API).
+   * El sistema la libera al ocultar la página: se vuelve a pedir al regresar.
+   */
+  var wakeLock = null, wantAwake = false;
+  function requestWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock) return;
+    navigator.wakeLock.request('screen').then(function (l) {
+      wakeLock = l;
+      l.addEventListener('release', function () { wakeLock = null; });
+    }).catch(function () { wakeLock = null; });
+  }
+  window.MT.keepAwake = function (on) {
+    wantAwake = !!on;
+    if (wantAwake) requestWakeLock();
+    else if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+  };
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && wantAwake) requestWakeLock();
+  });
+
+  /**
+   * Barra espaciadora = reproducir / detener. Cada app define una función
+   * global mtPlayToggle(); en campos de texto el espacio escribe normalmente.
+   */
+  document.addEventListener('keydown', function (e) {
+    if (e.code !== 'Space' || e.repeat || typeof window.mtPlayToggle !== 'function') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    e.preventDefault();   // evita el scroll y que "pulse" el botón enfocado
+    window.mtPlayToggle();
+  });
+
+  /** Filtra las tarjetas de herramientas del inicio por texto */
+  window.MT.filterTools = function (q) {
+    // Sin acentos: "metronomo" encuentra "Metrónomo"
+    var norm = function (t) { return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
+    var query = norm(q).trim();
+    var cards = document.querySelectorAll('.tool-card-nm, .featured-card');
+    cards.forEach(function (c) { c.style.display = !query || norm(c.textContent).indexOf(query) >= 0 ? '' : 'none'; });
+    // Ocultar títulos de sección que se quedan sin tarjetas
+    document.querySelectorAll('.tools-grid-nm').forEach(function (g) {
+      var any = [].some.call(g.querySelectorAll('.tool-card-nm'), function (c) { return c.style.display !== 'none'; });
+      g.style.display = any ? '' : 'none';
+      var lbl = g.previousElementSibling;
+      if (lbl && lbl.classList.contains('section-label')) lbl.style.display = any ? '' : 'none';
+    });
+  };
+
+  /** Marca en menú lateral e inferior la pestaña de la sección visible del inicio */
+  function syncActiveTab() {
+    var tabId = currentTabId(currentPageId());
+    document.querySelectorAll('.mt-nav-item, .mt-sidebar-btn').forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      var hash = href.indexOf('#') >= 0 ? href.slice(href.indexOf('#') + 1) : 'home';
+      if (TABS.some(function (t) { return t.href === href; })) a.classList.toggle('active', hash === tabId);
+    });
+  }
+  window.addEventListener('hashchange', syncActiveTab);
+
+  /** Descarga instrumentos para usarlos sin conexión: MT.precacheInstruments(['acoustic_grand_piano']) */
   window.MT.precacheInstruments = function (names) {
     if (!('serviceWorker' in navigator)) return Promise.resolve({ ok: 0, total: names.length });
     var urls = names.map(function (n) { return 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite/' + n + '-mp3.js'; });
@@ -378,6 +449,20 @@
     // 2. Inject shell
     injectShell();
     setupPWA();
+
+    // El shell mueve el contenido: repetir el salto a la sección (#practice, #settings…)
+    if (currentPageId() === 'home' && location.hash) {
+      var target = document.getElementById(location.hash.slice(1));
+      if (target) setTimeout(function () { target.scrollIntoView(); }, 0);
+    }
+
+    // Ctrl/⌘ + K → buscar (solo existe en el inicio de escritorio)
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        var s = document.getElementById('mt-search');
+        if (s) { e.preventDefault(); s.focus(); }
+      }
+    });
 
     // 3. Layout detection
     applyLayout();

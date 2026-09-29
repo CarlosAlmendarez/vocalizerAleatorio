@@ -15,8 +15,6 @@ class SoundEngine {
     constructor() {
         this._ac    = null;   // AudioContext (único, compartido)
         this._cache = {};     // { instrumentName: Promise<Instrument> }
-        this._wakeLock = null;
-        this._wantAwake = false;
         // Safari 16.4+: sesión de reproducción → suena aunque el interruptor de silencio esté activado
         try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
         this._initIOSUnlock();
@@ -25,40 +23,25 @@ class SoundEngine {
 
     /**
      * En móvil el AudioContext se suspende/interrumpe al bloquear la pantalla,
-     * recibir una llamada o cambiar de app. Al volver lo reanudamos, y
-     * re-adquirimos el wake lock (el sistema lo libera al ocultar la página).
+     * recibir una llamada o cambiar de app. Al volver lo reanudamos.
      */
     _initLifecycle() {
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'visible') return;
             if (this._ac && this._ac.state !== 'running') this._ac.resume().catch(() => {});
-            if (this._wantAwake) this._requestWakeLock();
         });
         window.addEventListener('pageshow', () => {
             if (this._ac && this._ac.state !== 'running') this._ac.resume().catch(() => {});
         });
     }
 
-    async _requestWakeLock() {
-        if (!('wakeLock' in navigator) || this._wakeLock) return;
-        try {
-            this._wakeLock = await navigator.wakeLock.request('screen');
-            this._wakeLock.addEventListener('release', () => { this._wakeLock = null; });
-        } catch (_) { this._wakeLock = null; }
-    }
-
     /**
-     * Mantiene la pantalla encendida mientras se practica (Screen Wake Lock API).
-     * Si el navegador no lo soporta, no hace nada.
+     * Mantiene la pantalla encendida mientras se practica. La implementación
+     * vive en shell.js (MT.keepAwake) para que la usen también las apps sin
+     * motor de sonido (metrónomo, groove).
      */
     keepAwake(on) {
-        this._wantAwake = on;
-        if (on) {
-            this._requestWakeLock();
-        } else if (this._wakeLock) {
-            this._wakeLock.release().catch(() => {});
-            this._wakeLock = null;
-        }
+        if (window.MT && window.MT.keepAwake) window.MT.keepAwake(on);
     }
 
     /**

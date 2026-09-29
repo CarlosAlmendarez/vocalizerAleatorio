@@ -84,7 +84,7 @@
         .groove-grid { display: flex; gap: 3px; width: max-content; padding: 2px 0; }
         .groove-step {
             display: flex; flex-direction: column; align-items: center;
-            gap: 5px; width: 30px; padding: 8px 4px;
+            gap: 0; width: 30px; padding: 5px 3px;
             border-radius: 8px; border: 1px solid transparent;
             transition: all 0.07s;
         }
@@ -94,6 +94,22 @@
             border-color: rgba(var(--accent-rgb),0.5);
             box-shadow: 0 0 12px rgba(var(--accent-rgb),0.25);
         }
+        .groove-cell {
+            width: 24px; height: 22px; padding: 0; border: 0; background: none;
+            display: grid; place-items: center; cursor: pointer;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .groove-cell:hover .groove-dot { border-color: rgba(var(--accent-rgb), 0.6); }
+        .groove-edit-bar {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            margin: 6px 0 2px; font-size: 11px; color: var(--muted);
+        }
+        .groove-edit-bar button {
+            padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border);
+            background: var(--surface-s); color: var(--ink-dim); font: 600 11px var(--font-sans); cursor: pointer;
+        }
+        .groove-edit-bar button[hidden] { display: none; }
+        .g-edited { color: var(--accent); margin-left: 3px; }
         .groove-dot {
             width: 10px; height: 10px; border-radius: 50%;
             background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08);
@@ -243,8 +259,8 @@
         .groove-play-btn:hover { transform: scale(1.05); box-shadow: var(--accent-glow), var(--accent-shadow); }
         .groove-play-btn:active { transform: scale(0.93); }
         .groove-play-btn.playing {
-            background: linear-gradient(135deg, #ff3366, #ff5b7f);
-            box-shadow: 0 12px 32px -8px rgba(255,51,102,0.7);
+            background: linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75));
+            box-shadow: 0 12px 32px -8px rgba(var(--danger-rgb), 0.7);
         }
         .groove-tempo-badge {
             padding: 10px 18px; border-radius: 999px;
@@ -278,6 +294,10 @@
     <div class="groove-timeline">
         <div class="groove-beats" id="beatRow"></div>
         <div class="groove-mute-bar" id="muteBar">🔇 Compás silenciado</div>
+        <div class="groove-edit-bar">
+            <span id="editHint">Toca un punto para crear tu propio patrón</span>
+            <button id="resetPatternBtn" onclick="resetPattern()" hidden>Restaurar original</button>
+        </div>
         <div class="groove-grid-scroll">
             <div class="groove-grid" id="stepGrid"></div>
         </div>
@@ -520,9 +540,37 @@ function getNumBeats() {
     return 6;
 }
 
-function getCurrentPattern() {
+// Patrones editados por el usuario: { '4/4': { rock: {kick,snare,hihat} }, … }
+let customPatterns = store.get('custom', {});
+
+function presetPattern() {
     const bank = timeSig === '4/4' ? P44 : timeSig === '3/4' ? P34 : P68;
     return bank[genre] || bank.rock;
+}
+function isEdited(g = genre, sig = timeSig) { return !!(customPatterns[sig] && customPatterns[sig][g]); }
+function getCurrentPattern() {
+    return isEdited() ? customPatterns[timeSig][genre] : presetPattern();
+}
+
+// Tocar una celda activa o apaga ese golpe. Se aplica ya (el reloj lee el patrón en cada paso).
+function toggleCell(drum, step) {
+    if (!isEdited()) {
+        const base = presetPattern();
+        customPatterns[timeSig] = customPatterns[timeSig] || {};
+        customPatterns[timeSig][genre] = { kick: base.kick.slice(), snare: base.snare.slice(), hihat: base.hihat.slice() };
+    }
+    const pat = customPatterns[timeSig][genre];
+    pat[drum][step] = pat[drum][step] ? 0 : 1;
+    store.set('custom', customPatterns);
+    renderGrid();
+    renderGenres();
+}
+
+function resetPattern() {
+    if (customPatterns[timeSig]) delete customPatterns[timeSig][genre];
+    store.set('custom', customPatterns);
+    renderGrid();
+    renderGenres();
 }
 
 // Recibe el nº de paso libre del Transport → lo envolvemos al patrón.
@@ -575,6 +623,9 @@ function updateStepVisual(step) {
 }
 
 // ── Playback controls ────────────────────────────────────────────
+// Barra espaciadora (shell.js)
+function mtPlayToggle() { togglePlay(); }
+
 function togglePlay() {
     if (isPlaying) stopGroove(); else startGroove();
 }
@@ -593,6 +644,7 @@ async function startGroove() {
     }
     transport.subdiv = subdivForSig();
     isPlaying = true;
+    MT.keepAwake(true);   // pantalla encendida mientras suena
     barCount  = 0;
     await transport.start();
     document.getElementById('playBtn').classList.add('playing');
@@ -601,6 +653,7 @@ async function startGroove() {
 
 function stopGroove() {
     isPlaying = false;
+    MT.keepAwake(false);
     if (transport) transport.stop();
     updateStepVisual(-1);
     document.getElementById('muteBar').classList.remove('visible');
@@ -681,6 +734,7 @@ function setSig(sig, btn) {
     document.querySelectorAll('.groove-sig-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('sigDesc').textContent = SIG_DESC[sig];
+    renderGenres();
     if (isPlaying) { stopGroove(); startGroove(); }
     renderGrid();
 }
@@ -711,7 +765,7 @@ function setVol(drum, val, sliderEl) {
 function renderGenres() {
     document.getElementById('genreRow').innerHTML = GENRES.map(g =>
         `<button class="groove-genre-btn${g.id === genre ? ' active' : ''}" data-id="${g.id}" onclick="setGenre('${g.id}')">
-            ${g.name}<span class="g-sub">${g.sub}</span>
+            ${g.name}${isEdited(g.id) ? '<span class="g-edited" title="Editado">●</span>' : ''}<span class="g-sub">${isEdited(g.id) ? 'Editado' : g.sub}</span>
         </button>`
     ).join('');
 }
@@ -734,13 +788,22 @@ function renderGrid() {
         const beatNum  = Math.floor(s / stepsPerBeat) + 1;
         const subNum   = s % stepsPerBeat + 1;
         const lbl      = subNum === 1 ? beatNum : '·';
+        const cell = (drum, cls, name) =>
+            `<button class="groove-cell" onclick="toggleCell('${drum}',${s})" aria-label="${name} paso ${s + 1}${p[drum][s] ? ' (activo)' : ''}">
+                <span class="groove-dot${p[drum][s] ? ' ' + cls : ''}"></span>
+            </button>`;
         return `<div class="groove-step${isOnBeat ? ' on-beat' : ''}" data-step="${s}">
-            <div class="groove-dot${p.hihat[s] ? ' hihat-on' : ''}"></div>
-            <div class="groove-dot${p.snare[s] ? ' snare-on' : ''}"></div>
-            <div class="groove-dot${p.kick[s]  ? ' kick-on'  : ''}"></div>
+            ${cell('hihat', 'hihat-on', 'Hi-hat')}
+            ${cell('snare', 'snare-on', 'Caja')}
+            ${cell('kick',  'kick-on',  'Bombo')}
             <span class="groove-step-num">${lbl}</span>
         </div>`;
     }).join('');
+    const edited = isEdited();
+    document.getElementById('resetPatternBtn').hidden = !edited;
+    document.getElementById('editHint').textContent = edited
+        ? 'Patrón propio (guardado) · toca para seguir editando'
+        : 'Toca un punto para crear tu propio patrón';
 }
 
 // Redraw on theme change (legend dot colors use CSS vars, grid uses class-based CSS)

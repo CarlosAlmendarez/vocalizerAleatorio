@@ -137,9 +137,11 @@ Theory.transposeName('Bb', 'C', 'D')  // 'C'  (by key-to-key interval, not by se
 Theory.display('Eb4', 'es')           // 'Mi♭4'  — use for anything shown to the user
 Theory.rootButtonLabel(pc, 'es')      // 'Do♯' + <span class="enh-alt">Re♭</span>
 Theory.findVoicing({ tuning, pcs, optional, rootInBass, allowMute, minStrings })
+Theory.findVoicings(opts, 4)         // up to 4 positions in different neck areas, best first
 Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 ```
 
+- Only a *perfect* 5th may be `optional` (m7♭5 / °7 need their ♭5).
 - Chord apps use a hand-written `SHAPES` entry only if `checkVoicing` confirms it sounds exactly
   the chord; otherwise `findVoicing` computes one. Don't add shapes without that guard.
 - Playback still uses MIDI/sharp names; spelling is for display (and `Theory.pc()` for pitch).
@@ -150,6 +152,19 @@ Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 3. Inline `<script>` with the tool logic (often wrapped so it runs on `DOMContentLoaded`).
 4. `shared/audio-utils.js` if used.
 5. `shared/shell.js` **last**.
+
+### Pitch detection (`shared/pitch.js`)
+`Pitch.detect(float32Samples, sampleRate, minFreq)` → Hz or -1 (YIN; ≤1 cent error in tests),
+`Pitch.freqToMidi(hz)`. Used by the tuner and the vocalizer's microphone. Keep `minFreq` as high
+as the use case allows (lowest string × 0.75, ~65 Hz for voice): cost grows with the period.
+
+### Shell API (`window.MT`, from `shell.js`)
+- `MT.keepAwake(true|false)` — screen wake lock while practising (`soundEngine.keepAwake` delegates here).
+- Space bar: define a global `function mtPlayToggle() {}` in the app; the shell calls it
+  (ignored while typing in inputs).
+- `MT.setTheme(id)`, `MT.getTheme()`, `MT.THEMES`, `MT.filterTools(q)`, `MT.precacheInstruments([...])`.
+- Home page sections `#tools`, `#practice`, `#settings` back the bottom-nav tabs.
+- Colors: use tokens; for alpha use `rgba(var(--accent-rgb|--success-rgb|--danger-rgb), a)`.
 
 ### Saved settings (`shared/settings.js`)
 Each tool remembers its settings between visits in `localStorage['mt-settings:<app>']`:
