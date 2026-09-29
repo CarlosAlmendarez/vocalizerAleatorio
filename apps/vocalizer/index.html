@@ -352,6 +352,54 @@
         }
         .voc-live-hint.show { display: block; }
 
+        /* Progreso dentro del rango: C4 ●━━━○ F4 · 3/6 */
+        .voc-range {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 280px;
+            margin: 10px auto 0;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted);
+            font-family: var(--font-head);
+        }
+        .voc-range[hidden] { display: none; }
+        .voc-range-track {
+            position: relative;
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--border);
+        }
+        .voc-range-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            border-radius: 2px;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+        .voc-range-dot {
+            position: absolute;
+            top: 50%;
+            width: 12px; height: 12px;
+            margin: -6px 0 0 -6px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: var(--accent-glow);
+            transition: left 0.3s ease;
+        }
+        .voc-range-count { color: var(--ink-dim); min-width: 34px; text-align: right; }
+
+        .voc-range-warn {
+            display: none;
+            margin-top: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--warning);
+        }
+        .voc-range-warn.show { display: block; }
+
         .voc-semitone {
             font-family: var(--font-head);
             font-size: 15px;
@@ -396,6 +444,15 @@
             <span class="voc-engine-dot"></span><span id="engineText">Audio sin iniciar</span>
         </button>
         <div class="voc-live-hint" id="liveHint" role="status"></div>
+        <div class="voc-range" id="rangeBar" hidden>
+            <span id="rangeLo">—</span>
+            <div class="voc-range-track">
+                <div class="voc-range-fill" id="rangeFill"></div>
+                <div class="voc-range-dot" id="rangeDot"></div>
+            </div>
+            <span id="rangeHi">—</span>
+            <span class="voc-range-count" id="rangeCount"></span>
+        </div>
     </div>
 
     <!-- ── Layout toggle ── -->
@@ -482,6 +539,7 @@
                 <div><label>Inicio</label><select id="startNote"></select></div>
                 <div><label>Fin</label><select id="endNote"></select></div>
             </div>
+            <div class="voc-range-warn" id="rangeWarn"></div>
         </div>
 
         <div class="section-card">
@@ -499,6 +557,14 @@
                 <select id="scale">
                     <option value="major">Mayor</option>
                     <option value="minor">Menor</option>
+                </select>
+            </div>
+            <div style="margin-top:10px">
+                <label>Referencia antes de cada repetición</label>
+                <select id="reference">
+                    <option value="none">Ninguna</option>
+                    <option value="note">Nota base</option>
+                    <option value="chord">Acorde</option>
                 </select>
             </div>
         </div>
@@ -623,6 +689,7 @@ function init() {
     // Cualquier ajuste tocado durante el ejercicio avisa cuándo se aplica
     const panel = document.getElementById('configPanel');
     panel.addEventListener('change', onConfigChanged);
+    panel.addEventListener('change', updateChips);
     panel.addEventListener('input',  onConfigChanged);
     panel.addEventListener('click',  ev => { if (ev.target.closest('.btn-mini')) onConfigChanged(ev); });
 
@@ -669,16 +736,31 @@ function renderDisplay(seq, activeIdx) {
 }
 
 /* ── Radial SVG ─────────────────────────────────── */
+/* Leer variables CSS fuerza un recálculo de estilos: se leen una vez por
+   tema, no en cada nota (en teléfonos modestos causaba tirones). */
+let themeColors = null;
+function getThemeColors() {
+    if (!themeColors) {
+        const cs = getComputedStyle(document.documentElement);
+        const v  = name => cs.getPropertyValue(name).trim();
+        themeColors = {
+            accent: v('--accent'), border: v('--border'), muted: v('--muted'),
+            accentInk: v('--accent-ink'), surface: v('--surface')
+        };
+        themeColors.accentRgb = hexToRgb(themeColors.accent);
+    }
+    return themeColors;
+}
+
+let lastRadialKey = '';
 function renderRadial(seq, activeIdx) {
+    const key = seq.join(',') + '|' + activeIdx;
+    if (key === lastRadialKey) return;
+    lastRadialKey = key;
+
     const svg    = document.getElementById('radialSvg');
     const CX     = 150, CY = 150, R = 105;
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-    const border = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
-    const ink    = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    const muted  = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
-    const inkDim = getComputedStyle(document.documentElement).getPropertyValue('--ink-dim').trim();
-    const accentInk = getComputedStyle(document.documentElement).getPropertyValue('--accent-ink').trim();
-    const surface   = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    const { accent, border, muted, accentInk, surface, accentRgb } = getThemeColors();
 
     // Unique set for display (remove duplicates keeping order)
     const unique = [...new Set(seq)];
@@ -709,8 +791,8 @@ function renderRadial(seq, activeIdx) {
             html += `<circle cx="${x}" cy="${y}" r="26" fill="${accent}" opacity="0.2"/>`;
         }
         const r   = isActive ? 19 : 13;
-        const bg  = isActive ? accent : isPlayed ? `rgba(${hexToRgb(accent)},0.15)` : 'none';
-        const str = isActive ? 'none' : isPlayed ? `rgba(${hexToRgb(accent)},0.4)` : border;
+        const bg  = isActive ? accent : isPlayed ? `rgba(${accentRgb},0.15)` : 'none';
+        const str = isActive ? 'none' : isPlayed ? `rgba(${accentRgb},0.4)` : border;
         html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${bg}" stroke="${str}" stroke-width="1.5"/>`;
         const textFill = isActive ? accentInk : isPlayed ? accent : muted;
         const fs = isActive ? '12' : '10';
@@ -721,14 +803,19 @@ function renderRadial(seq, activeIdx) {
 }
 
 /* ── Stepper ────────────────────────────────────── */
+let lastStepperSeq = '';
 function renderStepper(seq, activeIdx) {
     const wrap = document.getElementById('stepperWrap');
-    wrap.innerHTML = seq.map((note, i) => {
-        let cls = 'voc-step';
-        if (i === activeIdx) cls += ' active';
-        else if (i < activeIdx) cls += ' played';
-        return `<div class="${cls}">${note}</div>`;
-    }).join('');
+    // Reconstruir solo cuando cambia la secuencia; en cada nota, solo clases.
+    const key = seq.join(',');
+    if (key !== lastStepperSeq || wrap.children.length !== seq.length) {
+        lastStepperSeq = key;
+        wrap.innerHTML = seq.map(note => `<div class="voc-step">${note}</div>`).join('');
+    }
+    [...wrap.children].forEach((el, i) => {
+        el.classList.toggle('active', i === activeIdx);
+        el.classList.toggle('played', i < activeIdx);
+    });
 }
 
 /* ── Helper ── */
@@ -769,7 +856,20 @@ function buildTesituraLabel() {
     return octStr ? `${range} (${octStr})` : range;
 }
 
+function updateRangeWarning() {
+    const c    = readConfig();
+    const span = patternSpan(c);
+    const warn = document.getElementById('rangeWarn');
+    const short = c.end - c.start < span;
+    warn.classList.toggle('show', short);
+    if (short) {
+        warn.textContent = `⚠ El rango ${notes[c.start]}–${notes[c.end]} es más corto que el patrón ` +
+            `(necesita ${span} semitonos): se repetirá solo ${notes[c.start]} y el patrón pasará de ${notes[c.end]}.`;
+    }
+}
+
 function updateChips() {
+    updateRangeWarning();
     const patternEl = document.getElementById('pattern');
     const vowelEl   = document.getElementById('vowelPattern');
     const bpmEl     = document.getElementById('tempo');
@@ -837,7 +937,8 @@ function readConfig() {
         pattern: document.getElementById('pattern').value,
         scale:   document.getElementById('scale').value,
         vowels:  document.getElementById('vowelPattern').value,
-        mode:    document.getElementById('practiceMode').value
+        mode:    document.getElementById('practiceMode').value,
+        ref:     document.getElementById('reference').value
     };
     if (c.end < c.start) [c.start, c.end] = [c.end, c.start];
     return c;
@@ -883,10 +984,45 @@ function nextBase() {
     return (nx > hi || nx < lo) ? 'stop' : nx;
 }
 
-// Messa di voce sostiene 4 s: esperar a que termine antes de la siguiente.
+// Pasos de silencio tras la repetición. Con referencia ya hay una pausa
+// antes de cantar, así que basta uno. Messa di voce sostiene 4 s.
 function gapSteps(stepDur) {
-    if (currentConfig.pattern !== 'messa') return GAP_STEPS;
-    return Math.ceil(4 / stepDur) - 1 + GAP_STEPS;
+    const gap = currentConfig.ref !== 'none' ? 1 : GAP_STEPS;
+    if (currentConfig.pattern !== 'messa') return gap;
+    return Math.ceil(4 / stepDur) - 1 + gap;
+}
+
+// Referencia: 1 paso sonando + 1 para respirar antes de la repetición.
+function refSteps() {
+    return currentConfig.ref === 'none' ? 0 : 2;
+}
+
+function playReference(time, stepDur) {
+    const c = currentConfig, base = currentBaseIdx;
+    const root = base + PLAY_OFFSET, sc = scales[c.scale];
+    const offsets = c.ref === 'chord' ? [0, sc[2], sc[4]] : [0];
+    offsets.forEach(o => player.note(playNotes[root + o], time, { dur: stepDur * 1.7, gain: 0.7 }));
+    player.ui(time, () => {
+        document.getElementById('currentNote').innerText  = notes[base];
+        document.getElementById('currentVowel').innerText = '…';
+        document.getElementById('progressInfo').innerText = `Referencia · ${notes[base]}${c.ref === 'chord' ? ' (acorde)' : ''}`;
+    });
+}
+
+/* Barra "C4 ●━━━○ F4 · 3/6": dónde va el ejercicio dentro del rango. */
+function renderRangeBar(base) {
+    const bar = document.getElementById('rangeBar');
+    if (!currentConfig || base == null) { bar.hidden = true; return; }
+    const { lo, hi } = baseBounds(currentConfig);
+    const total = hi - lo + 1;
+    const pos   = Math.min(hi, Math.max(lo, base)) - lo;
+    const pct   = total > 1 ? (pos / (total - 1)) * 100 : 0;
+    document.getElementById('rangeLo').textContent    = notes[lo];
+    document.getElementById('rangeHi').textContent    = notes[hi];
+    document.getElementById('rangeCount').textContent = `${pos + 1}/${total}`;
+    document.getElementById('rangeFill').style.width  = pct + '%';
+    document.getElementById('rangeDot').style.left    = pct + '%';
+    bar.hidden = false;
 }
 
 function dirArrow() {
@@ -910,11 +1046,16 @@ function vocOnStep(step, time, stepDur) {
         }
         currentBaseIdx = nb;
         seq = buildSequence(currentBaseIdx, currentConfig);
-        seqCursor = 0;
-        player.ui(time, () => showHint(''));
+        seqCursor = -refSteps();
+        const b = nb;
+        player.ui(time, () => { showHint(''); renderRangeBar(b); });
     }
 
     const idx = seqCursor++;
+    if (idx < 0) {                   // referencia antes de cantar
+        if (idx === -refSteps()) playReference(time, stepDur);
+        return;
+    }
     if (idx >= seq.length) return;   // paso de silencio
 
     const note  = seq[idx];
@@ -946,7 +1087,8 @@ function handlePlayBtn() {
 /* Prepara la repetición en la base actual y arranca el reloj. */
 async function beginPlaying() {
     seq = buildSequence(currentBaseIdx, currentConfig);
-    seqCursor = 0;
+    seqCursor = -refSteps();
+    renderRangeBar(currentBaseIdx);
     finishing = false;
     currentSequence = seq;
     currentStepIdx  = -1;
@@ -1023,6 +1165,7 @@ function stopExercise(message = 'Ejercicio detenido') {
 
     setPlayBtnState('idle');
     showHint('');
+    renderRangeBar(null);
     document.getElementById('currentNote').classList.remove('playing');
     document.getElementById('currentNote').innerText  = '—';
     document.getElementById('currentVowel').innerText = '—';
@@ -1043,6 +1186,7 @@ function shiftNote(delta) {
     currentBaseIdx = newIdx;
     if (currentConfig.mode === 'cycle') cycleDir = delta > 0 ? 1 : -1;
     buzz(12);
+    renderRangeBar(currentBaseIdx);
     if (state === 'paused') {
         document.getElementById('progressInfo').innerText = `En pausa · Base ${notes[currentBaseIdx]}`;
         renderDisplay(buildSequence(currentBaseIdx, currentConfig), -1);
@@ -1051,7 +1195,7 @@ function shiftNote(delta) {
     player.cancel();
     finishing = false;
     seq = buildSequence(currentBaseIdx, currentConfig);
-    seqCursor = 0;
+    seqCursor = -refSteps();
     renderDisplay(seq, -1);
 }
 
@@ -1128,6 +1272,8 @@ function onEngineStatusTap() {
 
 // Redraw on theme change
 window.addEventListener('mt-theme-change', () => {
+    themeColors = null;
+    lastRadialKey = '';
     renderDisplay(currentSequence.length ? currentSequence : ['C4','E4','G4','E4','C4'], currentStepIdx);
 });
 

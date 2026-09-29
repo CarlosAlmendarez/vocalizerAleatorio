@@ -6,6 +6,7 @@
     <title>Acordes Ukulele - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .chord-screen {
@@ -289,10 +290,12 @@ function getShape(rootIdx, type) {
 let rootIdx   = 9;  // La / A
 let chordType = 'minor';
 
-let ukuleleInst = null;
+const ukulele = createNotePlayer('acoustic_guitar_nylon');
+ukulele.preload().catch(() => {});   // el primer rasgueo no espera a la red
+
 async function initAudio() {
-    if (ukuleleInst) return;
-    ukuleleInst = await soundEngine.get('acoustic_guitar_nylon');
+    await ukulele.ready();
+    ukulele.cancel();   // un rasgueo nuevo apaga el anterior
 }
 
 function midiToNoteName(midi) {
@@ -305,10 +308,10 @@ async function strumChord() {
     const btn   = document.getElementById('strumBtn');
     btn.classList.add('strumming');
     setTimeout(() => btn.classList.remove('strumming'), 260);
-    const now = soundEngine.now;
+    const now = ukulele.now;
     shape.frets.forEach((fret, s) => {
         if (fret < 0) return;
-        ukuleleInst.play(midiToNoteName(OPEN_MIDI[s] + fret), now + s * 0.05, { duration: 2.0, gain: 0.85 });
+        ukulele.note(midiToNoteName(OPEN_MIDI[s] + fret), now + s * 0.05, { dur: 2.0, gain: 0.85 });
     });
 }
 
@@ -317,14 +320,14 @@ async function arpeggioChord() {
     const shape = getShape(rootIdx, chordType);
     const btn   = document.getElementById('arpBtn');
     btn.classList.add('playing');
-    const now = soundEngine.now;
+    const now = ukulele.now;
     let delay = 0;
     shape.frets.forEach((fret, s) => {
         if (fret < 0) return;
-        ukuleleInst.play(midiToNoteName(OPEN_MIDI[s] + fret), now + delay, { duration: 1.8, gain: 0.85 });
+        ukulele.note(midiToNoteName(OPEN_MIDI[s] + fret), now + delay, { dur: 1.8, gain: 0.85 });
         delay += 0.18;
     });
-    setTimeout(() => btn.classList.remove('playing'), delay * 1000 + 400);
+    ukulele.ui(now + delay + 0.4, () => btn.classList.remove('playing'));
 }
 
 // ── Canvas ──────────────────────────────────────────────────────

@@ -314,6 +314,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
 <script src="../../shared/sound-engine.js"></script>
+<script src="../../shared/note-player.js"></script>
 <script src="../../shared/audio-utils.js"></script>
 <script>
 // ══════════════════════════════════════════════
@@ -338,7 +339,9 @@ let currentTuning     = 'standard';
 let selectedString    = null;
 let audioCtx = null, analyser = null, mediaStream = null, rafId = null;
 let isListening = false, lastDetectTime = 0;
-let refSynth = null, playingRefBtn = null;
+const refPiano = createNotePlayer('acoustic_grand_piano');
+refPiano.preload().catch(() => {});   // el tono de referencia suena al primer toque
+let playingRefBtn = null;
 
 // ── Note utils ──────────────────────────────────────────────────
 function noteToMidi(s) {
@@ -624,10 +627,16 @@ function detect() {
 
 // ── Reference tone ──────────────────────────────────────────────
 async function playRef(note, btn) {
-    if (!refSynth) refSynth = await soundEngine.get('acoustic_grand_piano');
+    await refPiano.ready();
+    refPiano.cancel();   // una referencia nueva reemplaza a la anterior
     if (playingRefBtn) playingRefBtn.classList.remove('playing');
-    refSynth.play(note, soundEngine.now, { duration: 2.0, gain: 0.9 });
-    if (btn) { playingRefBtn = btn; btn.classList.add('playing'); setTimeout(() => btn.classList.remove('playing'), 2000); }
+    const now = refPiano.now;
+    refPiano.note(note, now, { dur: 2.0, gain: 0.9 });
+    if (btn) {
+        playingRefBtn = btn;
+        btn.classList.add('playing');
+        refPiano.ui(now + 2.0, () => btn.classList.remove('playing'));
+    }
 }
 
 // ── Reset ────────────────────────────────────────────────────────

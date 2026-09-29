@@ -6,6 +6,7 @@
     <title>Acordes Guitarra - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* Cabecera */
@@ -448,11 +449,12 @@ let chordType = 'minor';
 // ─────────────────────────────────────────────
 // AUDIO — acoustic_guitar_nylon via soundfont-player
 // ─────────────────────────────────────────────
-let guitarInst = null;
+const guitar = createNotePlayer('acoustic_guitar_nylon');
+guitar.preload().catch(() => {});   // el primer rasgueo no espera a la red
 
 async function initAudio() {
-    if (guitarInst) return;
-    guitarInst = await soundEngine.get('acoustic_guitar_nylon');
+    await guitar.ready();
+    guitar.cancel();   // como en una guitarra real: un rasgueo nuevo apaga el anterior
 }
 
 function midiToNoteName(midi) {
@@ -468,12 +470,12 @@ async function strumChord() {
     setTimeout(() => btn.classList.remove('strumming'), 260);
 
     // Rasgueado: delay escalonado de 42 ms entre cuerdas (bajo → agudo)
-    const now = soundEngine.now;
+    const now = guitar.now;
     shape.frets.forEach((fret, s) => {
         if (fret < 0) return;
         const note  = midiToNoteName(OPEN_MIDI[s] + fret);
         const delay = s * 0.042;
-        guitarInst.play(note, now + delay, { duration: 2.5, gain: 0.85 });
+        guitar.note(note, now + delay, { dur: 2.5, gain: 0.85 });
     });
 }
 
@@ -661,15 +663,15 @@ async function arpeggioChord() {
     const shape = getShape(rootIdx, chordType);
     const btn   = document.getElementById('arpBtn');
     btn.classList.add('playing');
-    const now = soundEngine.now;
+    const now = guitar.now;
     let delay = 0;
     shape.frets.forEach((fret, s) => {
         if (fret < 0) return;
         const note = midiToNoteName(OPEN_MIDI[s] + fret);
-        guitarInst.play(note, now + delay, { duration: 1.8, gain: 0.85 });
+        guitar.note(note, now + delay, { dur: 1.8, gain: 0.85 });
         delay += 0.18;
     });
-    setTimeout(() => btn.classList.remove('playing'), delay * 1000 + 500);
+    guitar.ui(now + delay + 0.5, () => btn.classList.remove('playing'));
 }
 
 function update() {

@@ -6,6 +6,7 @@
     <title>Entrenamiento Auditivo - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Screen ── */
@@ -519,10 +520,10 @@ let G = {
 };
 
 // ── Audio ────────────────────────────────────────────────────────
-let pianoInst = null;
-async function ensureAudio() {
-    if (pianoInst) return;
-    pianoInst = await soundEngine.get('acoustic_grand_piano');
+const piano = createNotePlayer('acoustic_grand_piano');
+piano.preload().catch(() => {});   // la primera pregunta suena sin esperar a la red
+function ensureAudio() {
+    return piano.ready();
 }
 
 function noteToMidi(n) {
@@ -532,7 +533,7 @@ function noteToMidi(n) {
 
 async function playNote(note, dur = 0.5) {
     await ensureAudio();
-    pianoInst.play(note, soundEngine.now, { duration: parseFloat(dur), gain: 0.85 });
+    piano.note(note, piano.now, { dur: parseFloat(dur), gain: 0.85 });
     if (!(G.mode === 'notes' && G.diff !== 'beginner')) pingKey('piano2', note, 'k-ping', 280);
 }
 
@@ -543,8 +544,9 @@ async function playChord(rootNote, type) {
         const midi = rootMidi + s;
         return NOTE_NAMES[midi%12] + (Math.floor(midi/12)-1);
     });
-    const now = soundEngine.now;
-    chordNotes.forEach(n => pianoInst.play(n, now, { duration: 2.5, gain: 0.8 }));
+    piano.cancel();   // repetir la pregunta no se mezcla con la anterior
+    const now = piano.now;
+    chordNotes.forEach(n => piano.note(n, now, { dur: 2.5, gain: 0.8 }));
     chordNotes.forEach(n => pingKey('piano2', n, 'k-ping', 700));
 }
 
@@ -554,11 +556,13 @@ async function playInterval(rootNote, semitones) {
     const targetMidi = rootMidi + semitones;
     const targetNote = NOTE_NAMES[targetMidi%12] + (Math.floor(targetMidi/12)-1);
     const expertIntervals = G.mode === 'intervals' && G.diff === 'expert';
-    const now = soundEngine.now;
-    pianoInst.play(rootNote,   now,        { duration: 1.0, gain: 0.85 });
-    pianoInst.play(targetNote, now + 0.65, { duration: 1.2, gain: 0.85 });
+    piano.cancel();   // repetir la pregunta no se mezcla con la anterior
+    const now = piano.now;
+    piano.note(rootNote,   now,        { dur: 1.0, gain: 0.85 });
+    piano.note(targetNote, now + 0.65, { dur: 1.2, gain: 0.85 });
     pingKey('piano2', rootNote, 'k-ping', 350);
-    setTimeout(() => { if (!expertIntervals) pingKey('piano2', targetNote, 'k-ping', 350); }, 650);
+    // el resaltado de la segunda nota llega cuando esa nota suena de verdad
+    if (!expertIntervals) piano.ui(now + 0.65, () => pingKey('piano2', targetNote, 'k-ping', 350));
 }
 
 // ── Piano ────────────────────────────────────────────────────────
@@ -797,7 +801,7 @@ function renderAnswerBtns(choices, onSelect) {
 function handleKeyClick(note, midi) {
     if (G.phase !== 'playing' || G.answered) {
         ensureAudio().then(() => {
-            pianoInst?.play(note, soundEngine.now, { duration: 0.4, gain: 0.85 });
+            piano.note(note, piano.now, { dur: 0.4, gain: 0.85 });
             pingKey('piano2', note, 'k-ping', 280);
         });
         return;
@@ -807,12 +811,12 @@ function handleKeyClick(note, midi) {
         if (G.pendingNote) setKeyState('piano2', G.pendingNote, null, true);
         G.pendingNote = note;
         setKeyState('piano2', note, 'k-selected');
-        ensureAudio().then(() => pianoInst?.play(note, soundEngine.now, { duration: 0.4, gain: 0.85 }));
+        ensureAudio().then(() => piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }));
         document.getElementById('confirmCard').style.display = 'block';
     }
     if (G.mode === 'intervals' && G.diff === 'expert') {
         if (midi === noteToMidi(q.root)) {
-            ensureAudio().then(() => { pianoInst?.play(note, soundEngine.now, { duration: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
+            ensureAudio().then(() => { piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
             return;
         }
         const correct = Math.abs(midi - noteToMidi(q.root)) === q.semitones;
@@ -820,11 +824,11 @@ function handleKeyClick(note, midi) {
         setKeyState('piano2', note, correct ? 'k-correct' : 'k-wrong');
         if (!correct) setKeyState('piano2', q.targetNote, 'k-reveal');
         setKeyState('piano2', q.root, 'k-root');
-        ensureAudio().then(() => pianoInst?.play(note, soundEngine.now, { duration: 0.4, gain: 0.85 }));
+        ensureAudio().then(() => piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }));
         scrollPianoToNote('piano2', q.targetNote);
     }
     if (G.mode === 'chords') {
-        ensureAudio().then(() => { pianoInst?.play(note, soundEngine.now, { duration: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
+        ensureAudio().then(() => { piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
     }
 }
 

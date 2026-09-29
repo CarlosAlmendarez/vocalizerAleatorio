@@ -6,6 +6,7 @@
     <title>Escalas - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Screen wrapper ── */
@@ -332,8 +333,10 @@
 
     let currentScaleKey = 'mayor';
     let currentRootIdx  = 0;
-    let pianoInst       = null;
-    let playingTimeout  = null;
+    // Notas y resaltados se agendan con el reloj de audio (shared/note-player.js)
+    const piano         = createNotePlayer('acoustic_grand_piano');
+    piano.preload().catch(() => {});   // el primer toque no espera a la red
+    const SCALE_STEP_S  = 0.45;
     let isPlayingScale  = false;
 
     function intervalToNote(interval) {
@@ -453,16 +456,9 @@
         renderNoteList();
     }
 
-    async function ensurePiano() {
-        if (!pianoInst) {
-            pianoInst = await soundEngine.get('acoustic_grand_piano');
-        }
-        return pianoInst;
-    }
-
     async function playNoteWithHighlight(noteStr) {
-        const piano = await ensurePiano();
-        piano.play(noteStr, soundEngine.now, { duration: 0.5, gain: 0.9 });
+        await piano.ready();
+        piano.note(noteStr, piano.now, { dur: 0.5, gain: 0.9 });
         if (!isPlayingScale) highlightKey(noteStr, 400);
     }
 
@@ -471,7 +467,8 @@
         stopPlayback();
         isPlayingScale = true;
 
-        const piano = await ensurePiano();
+        await piano.ready();
+        if (!isPlayingScale) return;   // se detuvo mientras cargaba
         const scale = SCALES[currentScaleKey];
         const notes = scale.intervals.map(i => intervalToNote(i));
 
@@ -482,42 +479,42 @@
             <rect x="11" y="4" width="4" height="12" rx="1" fill="currentColor"/>
         </svg>Reproduciendo…`;
 
-        let i = 0;
-        function playNext() {
+        const clearPlaying = () => {
             clearAllHighlights();
             document.querySelectorAll('.scale-note-pill.playing')
                 .forEach(el => el.classList.remove('playing'));
+        };
 
-            if (i >= notes.length || !isPlayingScale) {
-                isPlayingScale  = false;
-                btn.disabled    = false;
-                btn.innerHTML   = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        // Toda la escala se agenda de una vez con el reloj de audio;
+        // el resaltado se dispara cuando cada nota suena de verdad.
+        const t0 = piano.now + 0.05;
+        notes.forEach((note, i) => {
+            const t = t0 + i * SCALE_STEP_S;
+            piano.note(note, t, { dur: 0.4, gain: 0.9 });
+            piano.ui(t, () => {
+                clearPlaying();
+                const pill = document.getElementById('pill-' + i);
+                if (pill) pill.classList.add('playing');
+                const key = document.querySelector(`[data-note="${note}"]`);
+                if (key) key.classList.add('playing');
+            });
+        });
+        piano.ui(t0 + notes.length * SCALE_STEP_S, () => {
+            clearPlaying();
+            isPlayingScale  = false;
+            btn.disabled    = false;
+            btn.innerHTML   = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                     <path d="M6 4.5L15.5 10L6 15.5V4.5Z" fill="currentColor"/>
                 </svg>Escuchar escala`;
-                return;
-            }
-
-            const pill = document.getElementById('pill-' + i);
-            if (pill) pill.classList.add('playing');
-
-            const key = document.querySelector(`[data-note="${notes[i]}"]`);
-            if (key) key.classList.add('playing');
-
-            piano.play(notes[i], soundEngine.now, { duration: 0.4, gain: 0.9 });
-            i++;
-            playingTimeout = setTimeout(playNext, 450);
-        }
-        playNext();
+        });
     }
 
     function stopPlayback() {
-        if (playingTimeout) clearTimeout(playingTimeout);
-        playingTimeout = null;
         isPlayingScale = false;
         clearAllHighlights();
         document.querySelectorAll('.scale-note-pill.playing')
             .forEach(el => el.classList.remove('playing'));
-        if (pianoInst) pianoInst.stop();
+        piano.cancel();
         const btn = document.getElementById('playScaleBtn');
         if (btn) {
             btn.disabled  = false;

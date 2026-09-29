@@ -6,6 +6,7 @@
     <title>Acordes Bajo - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .chord-screen {
@@ -270,10 +271,12 @@ function getShape(rootIdx, type) {
 let rootIdx   = 9;  // La / A
 let chordType = 'minor';
 
-let bassInst = null;
+const bass = createNotePlayer('electric_bass_finger');
+bass.preload().catch(() => {});   // el primer toque no espera a la red
+
 async function initAudio() {
-    if (bassInst) return;
-    bassInst = await soundEngine.get('electric_bass_finger');
+    await bass.ready();
+    bass.cancel();   // una nota nueva apaga la anterior
 }
 
 function midiToNoteName(midi) {
@@ -291,12 +294,12 @@ async function playChord() {
     const order   = shape.arpOrder || [0,1,2,3];
     const stepSec = isArp ? 0.28 : 0.05;
     const dur     = isArp ? 1.2 : 2.0;
-    const now     = soundEngine.now;
+    const now     = bass.now;
     let played = 0;
     order.forEach(s => {
         const fret = shape.frets[s];
         if (fret < 0) return;
-        bassInst.play(midiToNoteName(OPEN_MIDI[s] + fret), now + played * stepSec, { duration: dur, gain: 0.9 });
+        bass.note(midiToNoteName(OPEN_MIDI[s] + fret), now + played * stepSec, { dur, gain: 0.9 });
         played++;
     });
 }

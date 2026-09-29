@@ -9,7 +9,7 @@
  *   player.onStatus(s => …);          // 'loading' | 'ready' | 'suspended' | 'error'
  *   player.preload();                 // descarga el instrumento sin esperar a Play
  *   await player.ready();             // instrumento listo + audio activo
- *   player.note('C4', t, { dur, gain });   // t = tiempo del AudioContext
+ *   player.note('C4', t, { dur, gain });   // t = tiempo del AudioContext ('duration' también vale)
  *   player.click(t);                  // click de metrónomo
  *   player.ui(t, () => …);            // callback visual cuando el audio llega a t
  *   player.cancel();                  // corta SOLO lo agendado por este player
@@ -119,7 +119,7 @@
   NotePlayer.prototype.note = function (note, time, opts) {
     if (!this._inst || !note) return null;
     opts = opts || {};
-    var dur  = opts.dur  != null ? opts.dur  : 1;
+    var dur  = opts.dur != null ? opts.dur : (opts.duration != null ? opts.duration : 1);
     var node = this._inst.play(note, time, { duration: dur, gain: opts.gain != null ? opts.gain : 0.9 });
     if (node) this._nodes.push({ node: node, end: time + dur + 1 });   // +1 s de release
     this._prune();

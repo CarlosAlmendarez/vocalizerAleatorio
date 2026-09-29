@@ -6,6 +6,7 @@
     <title>Acordes Piano - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .piano-screen {
@@ -311,7 +312,8 @@ let rootIdx   = 0;
 let chordType = 'maj';
 let inversion = 0;
 let leftHand  = false;
-let pianoInst = null;
+const piano = createNotePlayer('acoustic_grand_piano');
+piano.preload().catch(() => {});   // el primer toque no espera a la red
 let isPlaying = false;
 
 // ── Chord maths ───────────────────────────────────────────────────
@@ -535,25 +537,29 @@ async function playChord() {
     btn.classList.add('playing');
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg> Sonando…';
 
-    if (!pianoInst) pianoInst = await soundEngine.get('acoustic_grand_piano');
+    try { await piano.ready(); } catch (_) {}
 
-    if (pianoInst) {
+    const now = piano.now;
+    if (piano.status !== 'error') {
         const midis = currentMidis();
         const noteNames = midis.map(m => {
             const semi = ((m % 12) + 12) % 12;
             const oct  = Math.floor(m / 12) - 1;
             return SHARP_NAMES[semi] + oct;
         });
+        // Arpegiado suave: 65 ms entre notas, agendado con el reloj de audio
         noteNames.forEach((n, i) => {
-            setTimeout(() => pianoInst.play(n, soundEngine.now, { duration: 2.2, gain: 0.72 }), i * 65);
+            piano.note(n, now + i * 0.065, { dur: 2.2, gain: 0.72 });
         });
     }
 
-    setTimeout(() => {
+    const resetBtn = () => {
         isPlaying = false;
         btn.classList.remove('playing');
         btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg> Escuchar Acorde';
-    }, 2400);
+    };
+    if (piano.status === 'error') resetBtn();
+    else piano.ui(now + 2.4, resetBtn);
 }
 
 // ── UI updates ────────────────────────────────────────────────────

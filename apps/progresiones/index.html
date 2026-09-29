@@ -6,6 +6,7 @@
     <title>Progresiones - MusicTools</title>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <script src="../../shared/transport.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -465,20 +466,18 @@ let instrument  = 'piano'; // 'piano' | 'guitar'
 let drumsOn     = false;
 let transport   = null;    // reloj compartido (shared/transport.js)
 let progEnded   = false;   // true cuando una progresión sin loop ya terminó
-let pianoInst   = null;
-
 const CHORD_STEPS = 4;     // corcheas por acorde (= 2 tiempos)
-let guitarInst  = null;
 
-// ── Instrument loading ────────────────────────────────────────────
+// ── Instrument loading (shared/note-player.js) ────────────────────
+const players = {
+    piano:  createNotePlayer('acoustic_grand_piano'),
+    guitar: createNotePlayer('acoustic_guitar_nylon')
+};
+players.piano.preload().catch(() => {});   // el primer ▶ no espera a la red
 async function ensureInst() {
-    if (instrument === 'piano') {
-        if (!pianoInst) pianoInst = await soundEngine.get('acoustic_grand_piano');
-    } else {
-        if (!guitarInst) guitarInst = await soundEngine.get('acoustic_guitar_nylon');
-    }
+    await players[instrument].ready();
 }
-function getInst() { return instrument === 'piano' ? pianoInst : guitarInst; }
+function getInst() { return players[instrument]; }
 
 // ── Playback ──────────────────────────────────────────────────────
 // Un solo Transport (corcheas) mueve acordes Y batería, así van
@@ -530,13 +529,12 @@ function playChordAudio(idx, time, stepDur) {
     const root  = rootNote(keyIdx, prog.degrees[idx]);
     const notes = getChordNotes(root, prog.types[idx], 4);
     const inst  = getInst();
-    if (!inst) return;
 
     if (playStyle === 'arpeggio') {
         const spread = Math.min(0.09, (stepDur || 0.2) / 3);
-        notes.forEach((n, i) => inst.play(n, time + i * spread, { duration: 1.5, gain: 0.7 * instVol }));
+        notes.forEach((n, i) => inst.note(n, time + i * spread, { dur: 1.5, gain: 0.7 * instVol }));
     } else {
-        notes.forEach(n => inst.play(n, time, { duration: 1.4, gain: 0.65 * instVol }));
+        notes.forEach(n => inst.note(n, time, { dur: 1.4, gain: 0.65 * instVol }));
     }
 }
 
@@ -554,6 +552,8 @@ function stopPlay() {
     isPlaying = false;
     progEnded = false;
     if (transport) transport.stop();
+    players.piano.cancel();    // detener corta también los acordes ya agendados
+    players.guitar.cancel();
     if (activeProg) {
         highlightChord(activeProg.id, -1);
     }

@@ -16,6 +16,9 @@
   function iosUnlock() {
     if (unlocked) return;
     unlocked = true;
+    // Las páginas con sound-engine.js ya desbloquean su propio AudioContext
+    // (y transport.js el suyo): no crear un contexto extra que se descarta.
+    try { if (typeof soundEngine !== 'undefined' && soundEngine) return; } catch (_) {}
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;

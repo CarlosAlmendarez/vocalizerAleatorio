@@ -118,6 +118,10 @@ player.cancel();                // stops only what THIS player scheduled
   `onDraw` or keep your own UI queue.
 - For one-off phrases (scales, chords) use `player.now + n` offsets — never `setTimeout`.
 - Reference implementation: `apps/vocalizer` (play/pause/stop, live config, engine status).
+- Every pitched app uses it (escalas, acordes-*, afinador, entrenamiento-auditivo,
+  progresiones, vocalizer): don't call `soundEngine.get()` / `inst.play()` directly in new code.
+- Call `preload()` at script top level (the first tap then doesn't wait for the CDN) and
+  `cancel()` before re-triggering a strum/question so sounds don't pile up.
 
 ### Page load order (typical tool)
 1. `<head>`: `design.css`, then optionally `soundfont-player` + `sound-engine.js`.
