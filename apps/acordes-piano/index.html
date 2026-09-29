@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .piano-screen {
@@ -284,12 +285,12 @@ const THEORY = {
     maj7: { formula: 'Raíz  +  3ª Mayor  +  5ª Justa  +  7ª Mayor', intervals: ['1','3M','5J','7M'],
             desc: 'Suave y sofisticado. La 7ª mayor añade color sin tensión. Muy usado en jazz, bossa nova y R&B.' },
     min7: { formula: 'Raíz  +  3ª Menor  +  5ª Justa  +  7ª Menor', intervals: ['1','3m','5J','7m'],
-            desc: 'Oscuro pero fluido. Dos terceras menores y la 7ª menor crean ese sabor característico del soul y funk.' },
+            desc: 'Oscuro pero fluido. Tercera menor, tercera mayor y tercera menor apiladas: el sabor característico del soul y el funk.' },
     sus4: { formula: 'Raíz  +  4ª Justa  +  5ª Justa', intervals: ['1','4J','5J'],
             desc: 'Sin tercera: la 4ª reemplaza a la 3ª. Crea suspenso que resuelve natural al acorde mayor.' },
     dim:  { formula: 'Raíz  +  3ª Menor  +  5ª Disminuida', intervals: ['1','3m','5d'],
             desc: 'Dos terceras menores apiladas. Muy tenso y disonante. Excelente como acorde de paso dramático.' },
-    aug:  { formula: 'Raíz  +  3ª Mayor  +  5ª Aumentada', intervals: ['1','3M','5+'],
+    aug:  { formula: 'Raíz  +  3ª Mayor  +  5ª Aumentada', intervals: ['1','3M','5A'],
             desc: 'Dos terceras mayores apiladas. Misterioso y expansivo. Habitual en música cinematográfica y impresionismo.' },
 };
 
@@ -333,12 +334,24 @@ function applyInv(notes, inv) {
 }
 
 function currentMidis() {
-    return applyInv(baseNotes(), inversion);
+    const ns = applyInv(baseNotes(), inversion);
+    // Una inversión sube la nota grave una octava: si la voz se sale del teclado
+    // dibujado (Do4–Si5), se baja entera una octava (antes Si maj7 en 3ª inv. no se veía).
+    while (Math.min(...ns) >= BASE_MIDI + 12) ns.forEach((m, i) => ns[i] = m - 12);
+    return ns;
 }
 
+// Nombres escritos por grado con shared/theory.js (Do menor = C Eb G, no C D# G)
+function currentChord() {
+    const t = CHORD_THEORY_TYPE[chordType] || chordType;
+    return Theory.chord(Theory.bestRoot(rootIdx, t), t);
+}
+const CHORD_THEORY_TYPE = { dom7: 'dom7', min7: 'min7' };
+
 function midiName(midi) {
-    const semi = ((midi % 12) + 12) % 12;
-    return PREFER_FLAT.has(rootIdx) ? FLAT_NAMES[semi] : SHARP_NAMES[semi];
+    const c = currentChord();
+    const i = c.pcs.indexOf(((midi % 12) + 12) % 12);
+    return i >= 0 ? Theory.display(c.notes[i], 'en') : SHARP_NAMES[((midi % 12) + 12) % 12];
 }
 
 function getFingers() {
@@ -542,11 +555,7 @@ async function playChord() {
     const now = piano.now;
     if (piano.status !== 'error') {
         const midis = currentMidis();
-        const noteNames = midis.map(m => {
-            const semi = ((m % 12) + 12) % 12;
-            const oct  = Math.floor(m / 12) - 1;
-            return SHARP_NAMES[semi] + oct;
-        });
+        const noteNames = midis.map(m => SHARP_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1));
         // Arpegiado suave: 65 ms entre notas, agendado con el reloj de audio
         noteNames.forEach((n, i) => {
             piano.note(n, now + i * 0.065, { dur: 2.2, gain: 0.72 });
@@ -568,10 +577,12 @@ function update() {
 
     const midis   = currentMidis();
     const typeObj = CHORD_TYPES.find(t => t.id === chordType);
-    const root    = ROOT_LABELS[rootIdx];
+    const chord   = currentChord();
+    const bass    = midiName(Math.min(...midis));
+    const slash   = inversion > 0 ? '/' + bass : '';   // 1ª inversión de C = C/E
 
-    document.getElementById('chordBig').textContent    = root;
-    document.getElementById('chordTypeLbl').textContent = typeObj?.suffix || '';
+    document.getElementById('chordBig').textContent    = Theory.display(chord.root, 'en');
+    document.getElementById('chordTypeLbl').textContent = (typeObj?.suffix || '') + slash;
     document.getElementById('notesRow').textContent    = midis.map(midiName).join(' · ');
 
     // Theory
@@ -599,7 +610,9 @@ function updateFingerLegend(midis) {
     document.getElementById('fingerPills').innerHTML = sorted.map((m, i) => {
         const f   = fingers[i] || (i + 1);
         const nm  = midiName(m);
-        const oct = Math.floor(m / 12) - 1;
+        // La octava sigue a la letra: B♯4 suena como C5 y C♭5 como B4
+        const pcM = ((m % 12) + 12) % 12;
+        const oct = Math.floor(m / 12) - 1 + (nm[0] === 'B' && pcM === 0 ? -1 : 0) + (nm[0] === 'C' && pcM === 11 ? 1 : 0);
         return `<span class="finger-pill"><span class="finger-pill-num">${f}</span>${nm}${oct} · ${FINGER_NAMES[f] || f}</span>`;
     }).join('');
 }
@@ -644,7 +657,7 @@ function setHand(hand, btn) {
 // ── Render helpers ────────────────────────────────────────────────
 function renderRootGrid() {
     document.getElementById('rootGrid').innerHTML = ROOT_LABELS.map((lbl, i) =>
-        `<button class="piano-root-btn${i === rootIdx ? ' active' : ''}" data-i="${i}" onclick="selectRoot(${i})">${lbl}</button>`
+        `<button class="piano-root-btn${i === rootIdx ? ' active' : ''}" data-i="${i}" onclick="selectRoot(${i})">${Theory.rootButtonLabel(i, 'en')}</button>`
     ).join('');
 }
 

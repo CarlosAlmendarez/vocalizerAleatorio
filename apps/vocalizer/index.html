@@ -8,6 +8,7 @@
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/transport.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Layout root ─────────────────────────── */
@@ -964,6 +965,29 @@ function buildSequence(baseNoteIdx, config) {
     });
 }
 
+/* Nombres para MOSTRAR, escritos según la tonalidad de la base (tríada de
+   Mi♭: E♭–G–B♭, no D#–G–A#). El audio sigue usando los nombres de playNotes. */
+function baseKey(baseIdx, config) {
+    const type = config && config.scale === 'minor' ? 'minor' : 'major';
+    return { key: Theory.bestScaleRoot(baseIdx % 12, type), type };
+}
+function baseLabel(baseIdx, config = currentConfig) {
+    const oct = notes[baseIdx].replace(/^\D+/, '');
+    return Theory.display(baseKey(baseIdx, config).key + oct, 'en');
+}
+function spelledSeq(sequence, baseIdx, config = currentConfig) {
+    const { key, type } = baseKey(baseIdx, config);
+    const byPc = {};
+    Theory.scale(key, type).notes.forEach(n => { byPc[Theory.pc(n)] = n; });
+    return sequence.map(n => {
+        const p = Theory.parse(n);
+        const name = byPc[p.pc] || n.replace(/\d+$/, '');
+        // La octava sigue a la letra: B♯3 suena como C4
+        const oct = p.octave + (name[0] === 'B' && p.pc === 0 ? -1 : 0) + (name[0] === 'C' && p.pc === 11 ? 1 : 0);
+        return Theory.display(name + oct, 'en');
+    });
+}
+
 // Siguiente nota base según el modo, o 'stop' al terminar.
 function nextBase() {
     const c = currentConfig;
@@ -1003,9 +1027,9 @@ function playReference(time, stepDur) {
     const offsets = c.ref === 'chord' ? [0, sc[2], sc[4]] : [0];
     offsets.forEach(o => player.note(playNotes[root + o], time, { dur: stepDur * 1.7, gain: 0.7 }));
     player.ui(time, () => {
-        document.getElementById('currentNote').innerText  = notes[base];
+        document.getElementById('currentNote').innerText  = baseLabel(base, c);
         document.getElementById('currentVowel').innerText = '…';
-        document.getElementById('progressInfo').innerText = `Referencia · ${notes[base]}${c.ref === 'chord' ? ' (acorde)' : ''}`;
+        document.getElementById('progressInfo').innerText = `Referencia · ${baseLabel(base, c)}${c.ref === 'chord' ? ' (acorde)' : ''}`;
     });
 }
 
@@ -1017,8 +1041,8 @@ function renderRangeBar(base) {
     const total = hi - lo + 1;
     const pos   = Math.min(hi, Math.max(lo, base)) - lo;
     const pct   = total > 1 ? (pos / (total - 1)) * 100 : 0;
-    document.getElementById('rangeLo').textContent    = notes[lo];
-    document.getElementById('rangeHi').textContent    = notes[hi];
+    document.getElementById('rangeLo').textContent    = baseLabel(lo);
+    document.getElementById('rangeHi').textContent    = baseLabel(hi);
     document.getElementById('rangeCount').textContent = `${pos + 1}/${total}`;
     document.getElementById('rangeFill').style.width  = pct + '%';
     document.getElementById('rangeDot').style.left    = pct + '%';
@@ -1067,13 +1091,15 @@ function vocOnStep(step, time, stepDur) {
     const vowel = vowelList[idx % vowelList.length];
     const base  = currentBaseIdx;
     const arrow = dirArrow();
-    const s     = seq;
+    const s     = spelledSeq(seq, currentBaseIdx);
+    const label = s[idx];
+    const baseTxt = baseLabel(base);
     player.ui(time, () => {
         currentSequence = s;
         currentStepIdx  = idx;
-        document.getElementById('currentNote').innerText  = note;
+        document.getElementById('currentNote').innerText  = label;
         document.getElementById('currentVowel').innerText = vowel;
-        document.getElementById('progressInfo').innerText = `Base: ${notes[base]}${arrow}`;
+        document.getElementById('progressInfo').innerText = `Base: ${baseTxt}${arrow}`;
         renderDisplay(s, idx);
     });
 }
@@ -1092,7 +1118,7 @@ async function beginPlaying() {
     finishing = false;
     currentSequence = seq;
     currentStepIdx  = -1;
-    renderDisplay(seq, -1);
+    renderDisplay(spelledSeq(seq, currentBaseIdx), -1);
     showHint('');
 
     state = 'playing';
@@ -1142,7 +1168,7 @@ function pauseExercise() {
     soundEngine.keepAwake(false);
     setPlayBtnState('paused');
     document.getElementById('currentNote').classList.remove('playing');
-    document.getElementById('progressInfo').innerText = `En pausa · Base ${notes[currentBaseIdx]}`;
+    document.getElementById('progressInfo').innerText = `En pausa · Base ${baseLabel(currentBaseIdx)}`;
     showHint('');
 }
 
@@ -1188,15 +1214,15 @@ function shiftNote(delta) {
     buzz(12);
     renderRangeBar(currentBaseIdx);
     if (state === 'paused') {
-        document.getElementById('progressInfo').innerText = `En pausa · Base ${notes[currentBaseIdx]}`;
-        renderDisplay(buildSequence(currentBaseIdx, currentConfig), -1);
+        document.getElementById('progressInfo').innerText = `En pausa · Base ${baseLabel(currentBaseIdx)}`;
+        renderDisplay(spelledSeq(buildSequence(currentBaseIdx, currentConfig), currentBaseIdx), -1);
         return;
     }
     player.cancel();
     finishing = false;
     seq = buildSequence(currentBaseIdx, currentConfig);
     seqCursor = -refSteps();
-    renderDisplay(seq, -1);
+    renderDisplay(spelledSeq(seq, currentBaseIdx), -1);
 }
 
 function buzz(ms) {

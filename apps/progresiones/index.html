@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <script src="../../shared/transport.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -259,7 +260,7 @@ const PROGRESSIONS = [
     { id:'golden',   name:'Eje de Oro',         mood:'pop',  moodLabel:'Pop · Rock',
       degrees:['I','V','vi','IV'],       types:['maj','maj','min','maj'],
       emotion:'Alegre · Universal',
-      desc:'La más usada en la historia del pop. Presente en miles de canciones exactamente igual.',
+      desc:'Una de las progresiones más usadas del pop. Aparece en miles de canciones, a menudo tal cual.',
       famous:['Let It Be · Beatles','No Woman No Cry · Bob Marley','Don\'t Stop Believin\' · Journey'],
       bpm:120, groove:'pop' },
 
@@ -267,14 +268,14 @@ const PROGRESSIONS = [
       degrees:['vi','IV','I','V'],        types:['min','maj','maj','maj'],
       emotion:'Intensa · Dramática',
       desc:'Versión oscura del Eje de Oro. Empieza en la relativa menor para más dramatismo.',
-      famous:['Zombie · The Cranberries','Boulevard of Broken Dreams · Green Day','In The End · Linkin Park'],
+      famous:['Zombie · The Cranberries','Save Tonight · Eagle-Eye Cherry'],
       bpm:130, groove:'rock' },
 
     { id:'indie',    name:'Indie Folk',           mood:'pop',  moodLabel:'Pop · Rock',
       degrees:['I','IV','vi','V'],        types:['maj','maj','min','maj'],
       emotion:'Íntima · Honesta',
       desc:'Popular en indie y folk contemporáneo. Cálida y narrativa.',
-      famous:['The Scientist · Coldplay','Ho Hey · The Lumineers','Skinny Love · Bon Iver'],
+      famous:[],
       bpm:90, groove:'pop' },
 
     { id:'rock',     name:'Rock Clásico',         mood:'pop',  moodLabel:'Pop · Rock',
@@ -302,7 +303,7 @@ const PROGRESSIONS = [
       degrees:['I','ii','V','I'],         types:['maj7','min7','dom7','maj7'],
       emotion:'Suave · Sofisticada',
       desc:'Con séptimas por todos lados. Da ese sonido cálido del soul moderno y R&B.',
-      famous:['Isn\'t She Lovely · Stevie Wonder','Just The Two Of Us · Bill Withers'],
+      famous:[],
       bpm:80, groove:'jazz' },
 
     { id:'blues_12', name:'Blues Clásico',         mood:'blues',moodLabel:'Blues',
@@ -315,50 +316,50 @@ const PROGRESSIONS = [
     { id:'blues_min',name:'Blues Menor',           mood:'blues',moodLabel:'Blues',
       degrees:['i','iv','v','i'],         types:['min','min','min','min'],
       emotion:'Oscura · Melancólica',
-      desc:'Versión menor del blues. Más intensa y dramática. Base del flamenco y el metal.',
+      desc:'Versión menor del blues: i, iv y v en lugar de I7, IV7 y V7. Más oscura e intensa.',
       famous:['The Thrill Is Gone · B.B. King','Black Magic Woman · Santana'],
       bpm:75, groove:'blues' },
 
     { id:'epic_vi',  name:'Épico Cinemático',      mood:'epic', moodLabel:'Épico · Cine',
       degrees:['vi','IV','I','V'],        types:['min','maj','maj','maj'],
       emotion:'Épica · Grandiosa',
-      desc:'Suena a banda sonora de película. Perfecta para composición orquestal.',
-      famous:['Counting Stars · OneRepublic','Fix You · Coldplay','Eye of the Tiger'],
+      desc:'Los mismos acordes que el Pop Oscuro, pensados para tempo lento y arreglo orquestal.',
+      famous:[],
       bpm:90, groove:'epic' },
 
     { id:'aeolian',  name:'Eólico Dramático',      mood:'epic', moodLabel:'Épico · Cine',
       degrees:['i','bVII','bVI','bVII'],  types:['min','maj','maj','maj'],
       emotion:'Tensa · Oscura',
-      desc:'Acordes del modo eólico. Suena a Hans Zimmer o John Williams.',
-      famous:['Game of Thrones','The Dark Knight','Interstellar · Hans Zimmer'],
+      desc:'Acordes del modo eólico (menor natural): el ♭VII y el ♭VI dan un color épico y oscuro, típico de bandas sonoras.',
+      famous:[],
       bpm:70, groove:'epic' },
 
     { id:'anime',    name:'Anime · Épico',          mood:'epic', moodLabel:'Épico · Cine',
       degrees:['I','V','vi','iii','IV'],  types:['maj','maj','min','min','maj'],
       emotion:'Emotiva · Ascendente',
-      desc:'Canon de Pachelbel moderno. Omnipresente en anime, J-pop y composiciones épicas.',
-      famous:['Canon en D · Pachelbel','Gurenge · Demon Slayer','Neon Genesis Evangelion'],
+      desc:'El inicio del Canon de Pachelbel (I–V–vi–iii–IV). Muy presente en anime, J-pop y composiciones épicas.',
+      famous:['Canon en Re · Pachelbel','Basket Case · Green Day'],
       bpm:130, groove:'epic' },
 
     { id:'melanchol',name:'Melancólico',            mood:'sad',  moodLabel:'Triste',
       degrees:['vi','iii','IV','I'],      types:['min','min','maj','maj'],
       emotion:'Nostálgica · Añorante',
       desc:'Evoca tristeza contenida. Ideal para baladas y canciones de desamor.',
-      famous:['Dust in the Wind · Kansas','The Sound of Silence · Simon & Garfunkel'],
+      famous:[],
       bpm:70, groove:'sad' },
 
     { id:'andaluz',  name:'Cadencia Andaluza',      mood:'sad',  moodLabel:'Triste',
       degrees:['i','bVII','bVI','V'],     types:['min','maj','maj','maj'],
       emotion:'Dramática · Flamenca',
-      desc:'La cadencia andaluza. Base del flamenco, la música española y composiciones árabes.',
-      famous:['Stairway to Heaven · Led Zeppelin','Hotel California · Eagles','Malagueña'],
+      desc:'La cadencia andaluza: bajo descendente i–♭VII–♭VI–V. Base del flamenco y de mucha música española.',
+      famous:['Hit the Road Jack · Ray Charles','Runaway · Del Shannon','Malagueña'],
       bpm:80, groove:'latin' },
 
     { id:'latin',    name:'Latin Pop',              mood:'latin',moodLabel:'Latin',
       degrees:['I','vi','ii','V'],        types:['maj','min','min','maj'],
       emotion:'Bailable · Romántica',
-      desc:'La base de la balada latina. Infinitamente versátil.',
-      famous:['La Bamba','Despacito · Luis Fonsi','Corazón Espinado · Santana'],
+      desc:'Progresión circular I–vi–ii–V, muy usada en baladas y doo-wop. Infinitamente versátil.',
+      famous:['Blue Moon · Rodgers & Hart'],
       bpm:95, groove:'latin' },
 ];
 
@@ -382,14 +383,18 @@ const CHORD_INTS = {
     'maj7':[0,4,7,11],'min7':[0,3,7,10],'dom7':[0,4,7,10],
 };
 
-function rootNote(keyIdx, degree) {
-    const s = DEGREE_SEMI[degree] ?? 0;
-    const ni = (keyIdx + s) % 12;
-    return (FLAT_IDX.has(keyIdx) ? FLATS : SHARPS)[ni];
+// Tonalidad escrita (mayor o menor según la progresión) y fundamental de cada
+// grado por letra con shared/theory.js: en Do, bVII = Bb y bVI = Ab (antes A# y G#).
+function isMinorProg(prog) { return (prog || activeProg || {}).degrees?.[0] === 'i'; }
+function keyName(keyIdx, prog) {
+    return Theory.keyForPc(keyIdx, isMinorProg(prog) ? 'minor' : 'major');
+}
+function rootNote(keyIdx, degree, prog) {
+    return Theory.degreeRoot(keyName(keyIdx, prog), degree);
 }
 
-function chordLabel(keyIdx, degree, type) {
-    return rootNote(keyIdx, degree) + (TYPE_SUFFIX[type] || '');
+function chordLabel(keyIdx, degree, type, prog) {
+    return Theory.display(rootNote(keyIdx, degree, prog), 'en') + (TYPE_SUFFIX[type] || '');
 }
 
 function romanLabel(degree, type) {
@@ -398,7 +403,7 @@ function romanLabel(degree, type) {
 }
 
 function getChordNotes(root, type, octave) {
-    const rIdx = NOTE_IDX[root] ?? 0;
+    const rIdx = Theory.pc(root);   // entiende Cb, E#, B#… (la tabla anterior no)
     const ints = CHORD_INTS[type] || CHORD_INTS.maj;
     return ints.map(s => {
         const ni = (rIdx + s) % 12;
@@ -526,7 +531,7 @@ function onProgStep(step, time, stepDur) {
 
 function playChordAudio(idx, time, stepDur) {
     const prog  = activeProg;
-    const root  = rootNote(keyIdx, prog.degrees[idx]);
+    const root  = rootNote(keyIdx, prog.degrees[idx], prog);
     const notes = getChordNotes(root, prog.types[idx], 4);
     const inst  = getInst();
 
@@ -587,7 +592,7 @@ function highlightChord(progId, idx) {
 // ── Chord display ─────────────────────────────────────────────────
 function buildChordPills(prog) {
     return prog.degrees.map((d, i) => {
-        const label = chordLabel(keyIdx, d, prog.types[i]);
+        const label = chordLabel(keyIdx, d, prog.types[i], prog);
         return `<span class="prog-chord-pill" data-i="${i}">${label}</span>`;
     }).join('');
 }
@@ -675,7 +680,7 @@ function syncCardUI(cardEl) {
 function copyChords(progId) {
     const prog = PROGRESSIONS.find(p => p.id === progId);
     if (!prog) return;
-    const text = prog.degrees.map((d,i) => chordLabel(keyIdx, d, prog.types[i])).join('  ');
+    const text = prog.degrees.map((d,i) => chordLabel(keyIdx, d, prog.types[i], prog)).join('  ');
     navigator.clipboard?.writeText(text).then(() => {
         const btn = document.querySelector(`[data-prog="${progId}"] .prog-copy-btn`);
         if (!btn) return;
@@ -694,7 +699,7 @@ function setKey(idx) {
         const prog   = PROGRESSIONS.find(p => p.id === progId);
         if (!prog) return;
         const i = parseInt(el.dataset.i);
-        if (!isNaN(i)) el.textContent = chordLabel(idx, prog.degrees[i], prog.types[i]);
+        if (!isNaN(i)) el.textContent = chordLabel(idx, prog.degrees[i], prog.types[i], prog);
     });
 }
 
@@ -759,7 +764,7 @@ function renderList() {
             </div>
             <div class="prog-player">
                 <div class="prog-desc">${prog.desc}</div>
-                <div class="prog-famous">${prog.famous.map(f => `<span class="prog-famous-tag">🎵 ${f}</span>`).join('')}</div>
+                ${prog.famous.length ? `<div class="prog-famous">${prog.famous.map(f => `<span class="prog-famous-tag">🎵 ${f}</span>`).join('')}</div>` : ''}
                 <div class="prog-controls">
                     <!-- BPM row -->
                     <div class="prog-ctrl-row">

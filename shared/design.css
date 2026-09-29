@@ -376,6 +376,7 @@ body {
 .mt-topbar-back {
   display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
 }
+.mt-back-info { min-width: 0; }   /* permite que el título se corte con "…" */
 .mt-back-info .back-label {
   font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
   color: var(--muted); text-transform: uppercase;
@@ -412,6 +413,22 @@ body {
   color: var(--ink-dim); letter-spacing: 0.02em;
   font-family: var(--font-sans);
 }
+/* Pantallas estrechas (≤359 px): el tema se muestra solo con sus puntos de color */
+@media (max-width: 359px) {
+  .mt-topbar { padding: 0 12px; gap: 8px; }
+  .mt-theme-btn { padding: 8px 10px; }
+  .mt-theme-btn .theme-label { display: none; }
+}
+/* Enarmónico secundario en botones de fundamental (Do♯ / Re♭) */
+.enh-alt {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.65;
+  line-height: 1.1;
+}
+
 .mt-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
@@ -486,7 +503,11 @@ body {
   cursor: pointer; font-family: var(--font-sans); text-decoration: none;
   transition: color 0.15s;
   flex: 1; min-height: 44px; justify-content: center;
+  min-width: 0;            /* 320 px: "Herramientas" no debe empujar fuera de pantalla */
   position: relative;
+}
+@media (max-width: 359px) {
+  .mt-nav-item { padding: 8px 6px; }
 }
 .mt-nav-item.active { color: var(--accent); }
 .mt-nav-item.active::before {

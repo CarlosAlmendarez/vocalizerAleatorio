@@ -298,19 +298,11 @@
 
 </div><!-- /transp-screen -->
 
+<script src="../../shared/theory.js"></script>
 <script>
 // ── Escala cromática ─────────────────────────────────────────────
 const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const FLATS  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-
-const TO_IDX = {
-    'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,
-    'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,
-    'A#':10,'Bb':10,'B':11
-};
-
-// Tonalidades que usan bemoles en su armadura
-const FLAT_KEY_IDX = new Set([5,10,3,8,1,6]); // F,Bb,Eb,Ab,Db,Gb
 
 // Para el dropdown: mostrar ambas opciones en las enarmonías
 const KEYS_DISPLAY = [
@@ -341,22 +333,25 @@ let fromKeyIdx = 0;   // índice 0-11
 let enharm     = 'auto';
 
 // ── Helpers ──────────────────────────────────────────────────────
-function noteIdx(note) {
-    return TO_IDX[note] !== undefined ? TO_IDX[note] : -1;
-}
-
-function useFlats(semi) {
-    if (enharm === 'sharp') return false;
-    if (enharm === 'flat')  return true;
+// Tonalidad de origen y destino escritas. Se transpone por el INTERVALO entre
+// ambas (letras + semitonos) con shared/theory.js: de C a D, Bb → C y F# → G#,
+// en vez de decidir sostenidos/bemoles igual para todos los acordes.
+function fromKeyName() { return KEYS_DISPLAY[fromKeyIdx].note; }
+function toKeyName(semi) {
     const destIdx = ((fromKeyIdx + semi) % 12 + 12) % 12;
-    return FLAT_KEY_IDX.has(destIdx);
+    if (enharm === 'sharp') return SHARPS[destIdx];
+    if (enharm === 'flat')  return FLATS[destIdx];
+    return Theory.keyForPc(destIdx, 'major');
 }
 
-function transpNote(note, n, flats) {
-    const i = noteIdx(note);
-    if (i < 0) return note;
-    const j = ((i + n) % 12 + 12) % 12;
-    return flats ? FLATS[j] : SHARPS[j];
+function transpNote(note, n) {
+    if (Theory.pc(note) < 0) return note;
+    if (n === 0) return note;
+    const out = Theory.transposeName(note, fromKeyName(), toKeyName(n));
+    // Con preferencia forzada, respetar sostenidos/bemoles aunque la letra cambie
+    if (enharm === 'sharp' && out.includes('b')) return SHARPS[Theory.pc(out)];
+    if (enharm === 'flat'  && out.includes('#')) return FLATS[Theory.pc(out)];
+    return out;
 }
 
 // Detecta si un token es un acorde (heurístico)
@@ -364,7 +359,7 @@ function parseChord(token) {
     const m = token.match(/^([A-G][b#]?)(.*)$/);
     if (!m) return null;
     const [, root, rest] = m;
-    if (noteIdx(root) < 0) return null;
+    if (Theory.pc(root) < 0) return null;
     // Descartar si el sufijo tiene 4+ letras minúsculas consecutivas
     // excepto palabras clave de acordes
     const suffix = rest.replace(/\/[A-G][b#]?.*/, '');
@@ -380,30 +375,37 @@ function renderOutput(text, n) {
     }
 
     const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const flats = useFlats(n);
+    const rootCls = n !== 0 ? 'tc-root' : 'tc-same';
+
+    const renderChord = ({ root, rest }) => {
+        const newRoot = transpNote(root, n);
+        // Transponer también la nota del bajo en acordes slash (Am/E)
+        const newRest = rest.replace(/\/([A-G][b#]?)/, (_, bass) => '/' + transpNote(bass, n));
+        return `<span class="tc-chord"><span class="${rootCls}">${esc(newRoot)}</span>${esc(newRest)}</span>`;
+    };
 
     return text.split('\n').map(line => {
         if (!line.trim()) return '<div class="transp-line">&nbsp;</div>';
 
+        // ¿Línea de acordes o de letra? En una letra ("A veces te veo") la "A"
+        // no es un acorde: solo se transponen líneas donde la mayoría de palabras
+        // son acordes, y en las de letra solo los acordes entre corchetes [Am].
+        const words = line.trim().split(/\s+/).filter(w => !/^[|/\-–()x\d.:]+$/i.test(w));
+        const chordWords = words.filter(w => parseChord(w)).length;
+        const isChordLine = words.length > 0 && chordWords / words.length >= 0.5;
+
+        if (!isChordLine) {
+            const out = esc(line).replace(/\[([A-G][^\]\s]*)\]/g, (m, inner) => {
+                const c = parseChord(inner);
+                return c ? '[' + renderChord(c) + ']' : m;
+            });
+            return `<div class="transp-line">${out}</div>`;
+        }
+
         const rendered = line.split(/(\s+)/).map(tok => {
             if (/^\s+$/.test(tok)) return esc(tok);
-
             const chord = parseChord(tok);
-            if (!chord) return esc(tok);
-
-            const { root, rest } = chord;
-            const newRoot = transpNote(root, n, flats);
-
-            // Transponer también la nota del bajo en acordes slash (Am/E)
-            const newRest = rest.replace(/\/([A-G][b#]?)/, (_, bass) => {
-                const bi = noteIdx(bass);
-                if (bi < 0) return '/' + bass;
-                const ni = ((bi + n) % 12 + 12) % 12;
-                return '/' + (flats ? FLATS[ni] : SHARPS[ni]);
-            });
-
-            const rootCls = n !== 0 ? 'tc-root' : 'tc-same';
-            return `<span class="tc-chord"><span class="${rootCls}">${esc(newRoot)}</span>${esc(newRest)}</span>`;
+            return chord ? renderChord(chord) : esc(tok);
         });
 
         return `<div class="transp-line">${rendered.join('')}</div>`;
@@ -440,11 +442,11 @@ function update() {
     // Capo helper (guitarristas): útil en trastes 1-7
     const capoCard = document.getElementById('capoCard');
     if (semitones >= 1 && semitones <= 7) {
-        const origKey = SHARPS[fromKeyIdx] || FLATS[fromKeyIdx];
+        const origKey = Theory.display(fromKeyName(), 'en');
         document.getElementById('capoText').innerHTML =
             `Pon la cejilla en el traste <span class="transp-capo-badge">${semitones}</span> ` +
             `y toca los acordes originales en <strong>${origKey}</strong>. Sonarás en ` +
-            `<strong>${SHARPS[toIdx]}</strong> sin aprender nuevos acordes.`;
+            `<strong>${Theory.display(toKeyName(semitones), 'en')}</strong> sin aprender nuevos acordes.`;
         capoCard.classList.add('visible');
     } else {
         capoCard.classList.remove('visible');

@@ -123,6 +123,27 @@ player.cancel();                // stops only what THIS player scheduled
 - Call `preload()` at script top level (the first tap then doesn't wait for the CDN) and
   `cancel()` before re-triggering a strum/question so sounds don't pile up.
 
+### Music theory (`shared/theory.js`)
+Single source of truth for note spelling, chords, scales, roman degrees, transposition and
+fretted voicings. **Never name notes from a fixed sharps/flats table** — that is how Fa mayor
+ended up showing "La#" and Do menor "D#". Everything is spelled by scale degree (a 3rd always
+uses the letter two steps up) and enharmonic roots pick the spelling with fewest accidentals.
+
+```js
+Theory.chord(Theory.bestRoot(pc, 'min'), 'min')   // { symbol, notes:['C#','E','G#'], pcs, degrees }
+Theory.scale(Theory.bestScaleRoot(pc, 'major'), 'major').notes
+Theory.degreeRoot('C', 'bVII')        // 'Bb'
+Theory.transposeName('Bb', 'C', 'D')  // 'C'  (by key-to-key interval, not by semitone table)
+Theory.display('Eb4', 'es')           // 'Mi♭4'  — use for anything shown to the user
+Theory.rootButtonLabel(pc, 'es')      // 'Do♯' + <span class="enh-alt">Re♭</span>
+Theory.findVoicing({ tuning, pcs, optional, rootInBass, allowMute, minStrings })
+Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
+```
+
+- Chord apps use a hand-written `SHAPES` entry only if `checkVoicing` confirms it sounds exactly
+  the chord; otherwise `findVoicing` computes one. Don't add shapes without that guard.
+- Playback still uses MIDI/sharp names; spelling is for display (and `Theory.pc()` for pitch).
+
 ### Page load order (typical tool)
 1. `<head>`: `design.css`, then optionally `soundfont-player` + `sound-engine.js`.
 2. `<body data-page-id data-tool-name>` with the tool markup.

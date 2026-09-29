@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Screen wrapper ── */
@@ -322,6 +323,21 @@
         lidio:        { label: 'Lidio',          intervals: [0,2,4,6,7,9,11,12], pattern: 'T-T-T-s-T-T-s'   },
         mixolidio:    { label: 'Mixolidio',      intervals: [0,2,4,5,7,9,10,12], pattern: 'T-T-s-T-T-s-T'   },
     };
+    // Tipo equivalente en shared/theory.js (escribe cada grado con su letra: Fa mayor → Si♭, no La#)
+    const THEORY_SCALE = {
+        mayor: 'major', menor: 'minor', pentatonica: 'pentMajor', 'pent-menor': 'pentMinor',
+        blues: 'blues', 'dórico': 'dorian', frigio: 'phrygian', lidio: 'lydian', mixolidio: 'mixolydian'
+    };
+    function spelledScale() {
+        const t = THEORY_SCALE[currentScaleKey];
+        return Theory.scale(Theory.bestScaleRoot(currentRootIdx, t), t);
+    }
+    // Nombre escrito de cada clase de altura de la escala actual: { 10: 'Bb', … }
+    function spelledByPc() {
+        const map = {};
+        spelledScale().notes.forEach(n => { map[Theory.pc(n)] = n; });
+        return map;
+    }
 
     const NOTE_NAMES_ES = ['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
     const NOTE_NAMES_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -357,6 +373,7 @@
         piano.style.height = '140px';
 
         const scaleNotes = buildScaleNoteSet();
+        const spelled    = spelledByPc();
 
         // White keys
         for (let oct = 0; oct < 2; oct++) {
@@ -373,7 +390,7 @@
 
                 const lbl = document.createElement('div');
                 lbl.className = 'key-label';
-                lbl.textContent = NOTE_NAMES_ES[semitone];
+                lbl.textContent = inScale && spelled[semitone] ? Theory.display(spelled[semitone], 'es') : NOTE_NAMES_ES[semitone];
                 key.appendChild(lbl);
                 key.onclick = () => playNoteWithHighlight(noteStr);
                 piano.appendChild(key);
@@ -414,19 +431,20 @@
         const scale = SCALES[currentScaleKey];
         const list  = document.getElementById('noteList');
         list.innerHTML = '';
+        const spelled = spelledByPc();
         scale.intervals.forEach((interval, i) => {
             const noteIdx = (currentRootIdx + interval) % 12;
             const pill    = document.createElement('div');
             pill.className = 'scale-note-pill' + (i === 0 ? ' root' : '');
             pill.id = 'pill-' + i;
-            pill.textContent = NOTE_NAMES_ES[noteIdx];
+            pill.textContent = Theory.display(spelled[noteIdx], 'es');
             list.appendChild(pill);
         });
     }
 
     function renderRootGrid() {
-        document.getElementById('rootGrid').innerHTML = NOTE_NAMES_ES.map((name, i) =>
-            `<button class="root-btn${i === currentRootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${name}</button>`
+        document.getElementById('rootGrid').innerHTML = NOTE_NAMES_ES.map((_, i) =>
+            `<button class="root-btn${i === currentRootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${Theory.rootButtonLabel(i, 'es')}</button>`
         ).join('');
     }
 
@@ -448,7 +466,7 @@
 
     function update() {
         const scale = SCALES[currentScaleKey];
-        document.getElementById('heroRoot').textContent       = NOTE_NAMES_ES[currentRootIdx];
+        document.getElementById('heroRoot').textContent       = Theory.display(spelledScale().root, 'es');
         document.getElementById('heroMode').textContent       = scale.label;
         document.getElementById('displayScaleType').textContent = scale.label;
         document.getElementById('displayInterval').textContent  = scale.pattern;

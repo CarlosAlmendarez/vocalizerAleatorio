@@ -193,7 +193,9 @@ let audioCtx = null;
 const FREQS = {
     'C':261.63,'C#':277.18,'Db':277.18,'D':293.66,'D#':311.13,'Eb':311.13,
     'E':329.63,'F':349.23,'F#':369.99,'Gb':369.99,'G':392.00,'G#':415.30,
-    'Ab':415.30,'A':440.00,'A#':466.16,'Bb':466.16,'B':493.88
+    'Ab':415.30,'A':440.00,'A#':466.16,'Bb':466.16,'B':493.88,
+    // enarmónicos que aparecen en F# y Db mayor (E#dim, Cb…)
+    'E#':349.23,'B#':261.63,'Cb':246.94,'Fb':329.63
 };
 const CHORD_INTS = { maj:[0,4,7], min:[0,3,7], dim:[0,3,6] };
 
@@ -348,8 +350,6 @@ function updateInfo() {
     }
 
     const d   = CIRCLE[selectedIdx];
-    const IV  = CIRCLE[(selectedIdx - 1 + 12) % 12];
-    const V   = CIRCLE[(selectedIdx + 1) % 12];
 
     // Key signature string
     let sigStr = '';
@@ -360,15 +360,18 @@ function updateInfo() {
     // Alt enharmonic
     const altNote = d.altMajor ? ` / ${d.altMajor}` : '';
 
-    // 7 diatonic chords
+    // 7 acordes diatónicos, escritos desde la escala de la tonalidad (cada grado
+    // con su letra). Antes se tomaban de las casillas vecinas del círculo y en
+    // F# mayor salía V = Db, o en Db mayor IV = F#.
+    const sc = d.scale;
     const diatonic = [
-        { roman:'I',    name:d.major,      type:'maj' },
-        { roman:'ii',   name:IV.minor,     type:'min' },
-        { roman:'iii',  name:V.minor,      type:'min' },
-        { roman:'IV',   name:IV.major,     type:'maj' },
-        { roman:'V',    name:V.major,      type:'maj' },
-        { roman:'vi',   name:d.minor,      type:'min' },
-        { roman:'vii°', name:d.dimChord,   type:'dim' },
+        { roman:'I',    name:sc[0],          type:'maj' },
+        { roman:'ii',   name:sc[1] + 'm',    type:'min' },
+        { roman:'iii',  name:sc[2] + 'm',    type:'min' },
+        { roman:'IV',   name:sc[3],          type:'maj' },
+        { roman:'V',    name:sc[4],          type:'maj' },
+        { roman:'vi',   name:sc[5] + 'm',    type:'min' },
+        { roman:'vii°', name:sc[6] + 'dim',  type:'dim' },
     ];
 
     // Get root note for playback (strip accidental suffix)

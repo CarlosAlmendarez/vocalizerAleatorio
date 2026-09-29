@@ -819,7 +819,8 @@ function handleKeyClick(note, midi) {
             ensureAudio().then(() => { piano.note(note, piano.now, { dur: 0.4, gain: 0.85 }); pingKey('piano2', note, 'k-ping', 280); });
             return;
         }
-        const correct = Math.abs(midi - noteToMidi(q.root)) === q.semitones;
+        // El intervalo suena ascendente (fundamental → nota superior): solo vale la de arriba
+        const correct = midi - noteToMidi(q.root) === q.semitones;
         markAnswer(correct, q.targetNote);
         setKeyState('piano2', note, correct ? 'k-correct' : 'k-wrong');
         if (!correct) setKeyState('piano2', q.targetNote, 'k-reveal');

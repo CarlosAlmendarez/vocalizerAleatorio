@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .chord-screen {
@@ -264,27 +265,23 @@ const SHAPES = {
     'A_aug':{frets:[2,1,1,4],baseFret:1,barre:null},
 };
 
-function buildBarreShape(rootIdx, type) {
-    const cFret = ((rootIdx - 0) % 12 + 12) % 12 || 12;
-    const shapes = {
-        major:[cFret-1<0?0:cFret-1,cFret,cFret,cFret+3],
-        minor:[cFret-1<0?0:cFret-1,cFret,cFret-1<0?0:cFret-1,cFret+3],
-        '7':  [cFret-1<0?0:cFret-1,cFret,cFret,cFret+1],
-        m7:   [cFret-1<0?0:cFret-1,cFret,cFret,cFret+1],
-        maj7: [cFret-1<0?0:cFret-1,cFret,cFret,cFret+2],
-        sus2: [cFret-1<0?0:cFret-1,cFret,cFret-1<0?0:cFret-1,cFret+3],
-        sus4: [cFret-1<0?0:cFret-1,cFret,cFret+1,cFret+3],
-        dim:  [cFret-1<0?0:cFret-1,cFret,cFret-2<0?0:cFret-2,cFret+2],
-        aug:  [cFret+1,cFret,cFret,cFret+3],
-    };
-    const f = shapes[type] ? Math.min(...shapes[type].filter(x=>x>=0)) : 1;
-    return { frets: shapes[type] || shapes.major, baseFret: Math.max(1,f), barre: null };
+
+// Digitación verificada con shared/theory.js: se usa la de la tabla solo si suena
+// exactamente el acorde; si no (o si no existe), se busca una. Antes varias formas
+// de la tabla y del generador de cejillas sonaban notas ajenas al acorde.
+const VOICING_OPTS = { rootInBass: false, allowMute: false, minStrings: 4 }   // afinación reentrante: sin bajo obligatorio;
+const THEORY_TYPE = {};
+function chordFor(rootIdx, type) {
+    const t = THEORY_TYPE[type] || type;
+    return Theory.chord(Theory.bestRoot(rootIdx, t), t);
 }
 
 function getShape(rootIdx, type) {
-    const key = NOTE_EN[rootIdx] + '_' + type;
-    const keyFlat = (['Bb','Eb','Ab','Db','Gb'][[10,3,8,1,6].indexOf(rootIdx)] || '') + '_' + type;
-    return SHAPES[key] || SHAPES[keyFlat] || buildBarreShape(rootIdx, type);
+    const c = chordFor(rootIdx, type);
+    const optional = c.pcs.length === 4 ? [c.pcs[2]] : [];   // en 4 notas la 5ª se puede omitir
+    const table = SHAPES[NOTE_EN[rootIdx] + '_' + type] || SHAPES[(['Bb','Eb','Ab','Db','Gb'][[10,3,8,1,6].indexOf(rootIdx)] || '') + '_' + type];
+    if (table && Theory.checkVoicing(table.frets, OPEN_MIDI, c.pcs, optional, VOICING_OPTS.rootInBass)) return table;
+    return Theory.findVoicing(Object.assign({ tuning: OPEN_MIDI, pcs: c.pcs, optional }, VOICING_OPTS));
 }
 
 let rootIdx   = 9;  // La / A
@@ -433,8 +430,9 @@ function drawDiagram(shape) {
 
 // ── UI ──────────────────────────────────────────────────────────
 function renderRootGrid() {
-    document.getElementById('rootGrid').innerHTML = NOTE_ES.map((name, i) =>
-        `<button class="chord-root-btn${i === rootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${name}</button>`
+    // Teclas negras con sus dos nombres (Do♯ / Re♭)
+    document.getElementById('rootGrid').innerHTML = NOTE_ES.map((_, i) =>
+        `<button class="chord-root-btn${i === rootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${Theory.rootButtonLabel(i, 'es')}</button>`
     ).join('');
 }
 
@@ -454,12 +452,12 @@ function setType(type, btn) {
 
 function update() {
     const shape     = getShape(rootIdx, chordType);
-    const intervals = CHORD_INTERVALS[chordType];
-    const noteNames = intervals.map(i => NOTE_ES[(rootIdx + i) % 12]);
+    const chord     = chordFor(rootIdx, chordType);
+    const noteNames = chord.notes.map(n => Theory.display(n, 'es'));
 
     const suffix = { minor:'m','7':'7',m7:'m7',maj7:'maj7',sus2:'sus2',sus4:'sus4',dim:'°',aug:'+' }[chordType] || '';
 
-    document.getElementById('dispName').textContent  = NOTE_EN[rootIdx];
+    document.getElementById('dispName').textContent  = Theory.display(chord.root, 'en');
     document.getElementById('dispType').textContent  = suffix;
     document.getElementById('dispNotes').textContent = `${TYPE_LABELS[chordType]} · ${noteNames.join(' · ')}`;
 

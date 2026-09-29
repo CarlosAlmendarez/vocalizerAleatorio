@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* Cabecera */
@@ -380,11 +381,11 @@ const SHAPES = {
     // ── Dim ──
     'A_dim':     {frets:[-1,0,1,2,1,-1], baseFret:1, barre:null},
     'B_dim':     {frets:[-1,2,3,4,3,-1], baseFret:2, barre:null},
-    'C_dim':     {frets:[-1,3,4,5,4,3],  baseFret:3, barre:{fret:3,from:1,to:5}},
-    'D_dim':     {frets:[-1,-1,0,1,0,1], baseFret:1, barre:null},
-    'E_dim':     {frets:[0,1,2,3,2,-1],  baseFret:1, barre:null},
-    'F_dim':     {frets:[1,2,3,4,3,1],   baseFret:1, barre:{fret:1,from:0,to:5}},
-    'G_dim':     {frets:[3,4,5,6,5,3],   baseFret:3, barre:{fret:3,from:0,to:5}},
+    'C_dim':     {frets:[-1,3,4,5,4,-1], baseFret:3, barre:null},
+    'D_dim':     {frets:[-1,-1,0,1,3,1], baseFret:1, barre:null},
+    'E_dim':     {frets:[0,1,2,0,-1,-1], baseFret:1, barre:null},
+    'F_dim':     {frets:[1,2,3,1,-1,-1], baseFret:1, barre:null},
+    'G_dim':     {frets:[3,4,5,3,-1,-1], baseFret:3, barre:null},
     // ── Aug ──
     'C_aug':     {frets:[-1,3,2,1,1,0],  baseFret:1, barre:null},
     'D_aug':     {frets:[-1,-1,0,3,3,2], baseFret:1, barre:null},
@@ -397,47 +398,23 @@ const SHAPES = {
 // ─────────────────────────────────────────────
 // GENERADOR DE CEJILLA (para acordes sin forma predefinida)
 // ─────────────────────────────────────────────
-function buildBarreShape(rootIdx, type) {
-    // Fret para forma-E (raíz en cuerda 6, E2=4)
-    const eFret = ((rootIdx - 4) % 12 + 12) % 12 || 12;
-    // Fret para forma-A (raíz en cuerda 5, A2=9)
-    const aFret = ((rootIdx - 9) % 12 + 12) % 12 || 12;
 
-    const useE = eFret <= aFret;
-    const f    = useE ? eFret : aFret;
-
-    if (useE) {
-        const shapes = {
-            major: [f, f+2, f+2, f+1, f,   f  ],
-            minor: [f, f+2, f+2, f,   f,   f  ],
-            '7':   [f, f+2, f,   f+1, f,   f  ],
-            m7:    [f, f+2, f,   f,   f,   f  ],
-            maj7:  [f, f+2, f+1, f+1, f,   f  ],
-            sus2:  [f, f+2, f+2, f-1>=0?f-1:f, f, f],
-            sus4:  [f, f+2, f+2, f+2, f,   f  ],
-            dim:   [f, f+1, f+2, f+3, f+2, f+1],
-            aug:   [f, f+3, f+2, f+1, f+1, f  ],
-        };
-        return { frets: shapes[type] || shapes.major, baseFret: f, barre:{fret:f,from:0,to:5} };
-    } else {
-        const shapes = {
-            major: [-1, f, f+2, f+2, f+2, f  ],
-            minor: [-1, f, f+2, f+2, f+1, f  ],
-            '7':   [-1, f, f+2, f,   f+2, f  ],
-            m7:    [-1, f, f+2, f,   f+1, f  ],
-            maj7:  [-1, f, f+2, f+1, f+2, f  ],
-            sus2:  [-1, f, f+2, f+2, f-1>=0?f-1:f, f],
-            sus4:  [-1, f, f+2, f+3, f+2, f  ],
-            dim:   [-1, f, f+1, f+2, f+1, f  ],
-            aug:   [-1, f, f+3, f+2, f+2, f+1],
-        };
-        return { frets: shapes[type] || shapes.major, baseFret: f, barre:{fret:f,from:1,to:5} };
-    }
+// Digitación verificada con shared/theory.js: se usa la de la tabla solo si suena
+// exactamente el acorde; si no (o si no existe), se busca una. Antes varias formas
+// de la tabla y del generador de cejillas sonaban notas ajenas al acorde.
+const VOICING_OPTS = { rootInBass: true, allowMute: true, minStrings: 4 };
+const THEORY_TYPE = {};
+function chordFor(rootIdx, type) {
+    const t = THEORY_TYPE[type] || type;
+    return Theory.chord(Theory.bestRoot(rootIdx, t), t);
 }
 
 function getShape(rootIdx, type) {
-    const key = NOTE_EN[rootIdx] + '_' + type;
-    return SHAPES[key] || buildBarreShape(rootIdx, type);
+    const c = chordFor(rootIdx, type);
+    const optional = c.pcs.length === 4 ? [c.pcs[2]] : [];   // en 4 notas la 5ª se puede omitir
+    const table = SHAPES[NOTE_EN[rootIdx] + '_' + type];
+    if (table && Theory.checkVoicing(table.frets, OPEN_MIDI, c.pcs, optional, VOICING_OPTS.rootInBass)) return table;
+    return Theory.findVoicing(Object.assign({ tuning: OPEN_MIDI, pcs: c.pcs, optional }, VOICING_OPTS));
 }
 
 // ─────────────────────────────────────────────
@@ -639,8 +616,9 @@ function drawDiagram(shape) {
 // RENDERIZADO DE UI
 // ─────────────────────────────────────────────
 function renderRootGrid() {
-    document.getElementById('rootGrid').innerHTML = NOTE_ES.map((name, i) =>
-        `<button class="chord-root-btn${i === rootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${name}</button>`
+    // Teclas negras con sus dos nombres (Do♯ / Re♭)
+    document.getElementById('rootGrid').innerHTML = NOTE_ES.map((_, i) =>
+        `<button class="chord-root-btn${i === rootIdx ? ' active' : ''}" onclick="selectRoot(${i})">${Theory.rootButtonLabel(i, 'es')}</button>`
     ).join('');
 }
 
@@ -676,13 +654,13 @@ async function arpeggioChord() {
 
 function update() {
     const shape     = getShape(rootIdx, chordType);
-    const intervals = CHORD_INTERVALS[chordType];
-    const noteNames = intervals.map(i => NOTE_ES[(rootIdx + i) % 12]);
+    const chord     = chordFor(rootIdx, chordType);
+    const noteNames = chord.notes.map(n => Theory.display(n, 'es'));   // Do menor → Do · Mi♭ · Sol
 
     const suffix = { minor:'m','7':'7',m7:'m7',maj7:'maj7',sus2:'sus2',sus4:'sus4',dim:'°',aug:'+' }[chordType] || '';
 
     // Hero header
-    document.getElementById('dispName').textContent = NOTE_EN[rootIdx];
+    document.getElementById('dispName').textContent = Theory.display(chord.root, 'en');
     document.getElementById('dispType').textContent = suffix;
     document.getElementById('dispNotes').textContent = `${TYPE_LABELS[chordType]} · ${noteNames.join(' · ')}`;
 

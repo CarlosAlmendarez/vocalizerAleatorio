@@ -194,7 +194,15 @@ const TAP_RESET_MS = 2500; // inactivity auto-reset timer
 //  SÍNTESIS DE SONIDO CLÁSICO DE METRÓNOMO
 //  (clic de madera con ataque nítido y decay corto)
 // ══════════════════════════════════════════════
-function scheduleClick(time, isAccent) {
+// Pulsos dentro del compás (acento secundario). En compases compuestos e
+// irregulares el oído agrupa las corcheas: 6/8 = 3+3, 12/8 = 3+3+3+3,
+// 7/8 = 2+2+3, 5/4 = 3+2. Antes solo sonaba acentuado el tiempo 1.
+function beatGroupStarts() {
+    const key = beatsPerBar + '/' + beatUnit;
+    return { '6/8':[0,3], '12/8':[0,3,6,9], '7/8':[0,2,4], '5/4':[0,3] }[key] || [0];
+}
+
+function scheduleClick(time, isAccent, isSecondary = false) {
     const audioCtx = tctx();
     if (!audioCtx) return;
     const out = master();
@@ -206,11 +214,11 @@ function scheduleClick(time, isAccent) {
 
     osc.type = 'sine';
     // El tono baja rápidamente: da el carácter "tok" vs un tono puro
-    osc.frequency.setValueAtTime(isAccent ? 1850 : 1200, time);
-    osc.frequency.exponentialRampToValueAtTime(isAccent ? 620 : 420, time + 0.045);
+    osc.frequency.setValueAtTime(isAccent ? 1850 : isSecondary ? 1500 : 1200, time);
+    osc.frequency.exponentialRampToValueAtTime(isAccent ? 620 : isSecondary ? 520 : 420, time + 0.045);
 
     oscGain.gain.setValueAtTime(0, time);
-    oscGain.gain.linearRampToValueAtTime(isAccent ? 0.85 : 0.55, time + 0.001);
+    oscGain.gain.linearRampToValueAtTime(isAccent ? 0.85 : isSecondary ? 0.7 : 0.55, time + 0.001);
     oscGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.07);
 
     osc.connect(oscGain);
@@ -269,7 +277,8 @@ async function startMetronome() {
             onStep: (step, time) => {
                 // Acento en el primer tiempo del compás (independiente del
                 // denominador: 6/8 a 120 BPM = 120 clics/min, como 4/4).
-                scheduleClick(time, step % beatsPerBar === 0);
+                const beat = step % beatsPerBar;
+                scheduleClick(time, beat === 0, beatGroupStarts().includes(beat));
             },
             onDraw: (step) => flashBeat(step % beatsPerBar),
         });
@@ -413,7 +422,7 @@ function renderBeatDots() {
     container.innerHTML = '';
     for (let i = 0; i < beatsPerBar; i++) {
         const dot = document.createElement('div');
-        dot.className = 'beat-dot' + (i === 0 ? ' accent' : '');
+        dot.className = 'beat-dot' + (beatGroupStarts().includes(i) ? ' accent' : '');
         container.appendChild(dot);
     }
 }

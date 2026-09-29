@@ -358,12 +358,17 @@ function midiToDisplayNote(midi) {
 function noteToFreq(s) { const m = noteToMidi(s); return m === null ? null : 440 * Math.pow(2, (m - 69) / 12); }
 
 // ── Autocorrelation ─────────────────────────────────────────────
-function autoCorrelate(buf, sr) {
+// minFreq: la nota más grave a buscar. Antes era fija en 35 Hz: el Si0 del bajo
+// de 5 cuerdas (30,9 Hz) no se detectaba, y un violín pagaba el coste de buscar
+// hasta 35 Hz. El trabajo crece con MAX_LAG, así que acotarlo acelera el afinador.
+let corrBuf = null;
+function autoCorrelate(buf, sr, minFreq = 35) {
     let rms = 0;
     for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
     if (Math.sqrt(rms / buf.length) < 0.012) return -1;
-    const MAX_LAG = Math.min(Math.ceil(sr / 35), Math.floor(buf.length / 2));
-    const corr = new Float32Array(MAX_LAG + 1);
+    const MAX_LAG = Math.min(Math.ceil(sr / minFreq), Math.floor(buf.length / 2));
+    if (!corrBuf || corrBuf.length < MAX_LAG + 1) corrBuf = new Float32Array(MAX_LAG + 1);
+    const corr = corrBuf;
     const len  = buf.length - MAX_LAG;
     for (let lag = 0; lag <= MAX_LAG; lag++) {
         let s = 0;
@@ -374,10 +379,17 @@ function autoCorrelate(buf, sr) {
     while (d < MAX_LAG - 1 && corr[d] > corr[d + 1]) d++;
     const MIN_LAG = Math.floor(sr / 4000);
     let maxVal = -Infinity, maxPos = -1;
-    for (let i = Math.max(d, MIN_LAG); i <= MAX_LAG; i++) {
+    const from = Math.max(d, MIN_LAG);
+    for (let i = from; i <= MAX_LAG; i++) {
         if (corr[i] > maxVal) { maxVal = corr[i]; maxPos = i; }
     }
     if (maxPos < 0 || maxVal <= 0) return -1;
+    // Una señal periódica correlaciona casi igual en T, 2T, 3T…: quedarse con el
+    // pico MÁS ALTO podía elegir un múltiplo (Mi4 se leía como La2). Se toma el
+    // primer máximo local que alcance el 90 % del máximo global.
+    for (let i = from + 1; i < MAX_LAG; i++) {
+        if (corr[i] >= 0.9 * maxVal && corr[i] >= corr[i - 1] && corr[i] >= corr[i + 1]) { maxPos = i; break; }
+    }
     let T0 = maxPos;
     if (maxPos > 0 && maxPos < MAX_LAG) {
         const y1 = corr[maxPos-1], y2 = corr[maxPos], y3 = corr[maxPos+1];
@@ -441,9 +453,9 @@ function renderNoteRefGrid() {
 // ── Selection ────────────────────────────────────────────────────
 function selectInstrument(id) {
     currentInstrument = id; currentTuning = Object.keys(INSTRUMENTS[id].tunings)[0]; selectedString = null;
-    renderInstruments(); renderTunings(); renderStrings(); resetDisplay();
+    renderInstruments(); renderTunings(); renderStrings(); resetDisplay(); configureAnalyser();
 }
-function selectTuning(id) { currentTuning = id; selectedString = null; renderStrings(); resetDisplay(); }
+function selectTuning(id) { currentTuning = id; selectedString = null; renderStrings(); resetDisplay(); configureAnalyser(); }
 function selectString(idx) {
     selectedString = (selectedString === idx) ? null : idx;
     renderStrings();
@@ -513,7 +525,8 @@ async function startListening() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
 
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 4096; analyser.smoothingTimeConstant = 0.2;
+    analyser.smoothingTimeConstant = 0.2;
+    configureAnalyser();
     audioCtx.createMediaStreamSource(mediaStream).connect(analyser);
     isListening = true;
     updateMicUI(true);
@@ -558,6 +571,26 @@ function updateMicUI(on) {
     if (!on) { noteEl.className = 'afin-note-big'; }
 }
 
+// Frecuencia mínima = 75 % de la cuerda más grave de la afinación (margen para
+// cuerdas muy destensadas). Notas por debajo de ~40 Hz necesitan un búfer mayor.
+let minDetectFreq = 35, detectBuf = null;
+function configureAnalyser() {
+    const notes = INSTRUMENTS[currentInstrument].tunings[currentTuning].notes;
+    const lowest = Math.min(...notes.map(noteToFreq));
+    minDetectFreq = Math.max(24, lowest * 0.75);
+    if (!analyser) return;
+    analyser.fftSize = minDetectFreq < 40 ? 8192 : 4096;
+    detectBuf = new Float32Array(analyser.fftSize);
+}
+
+// Nombre a mostrar: el de la cuerda si coincide en altura (Eb, no D#, en la
+// afinación ½ tono abajo); si no, el nombre cromático habitual.
+function displayNoteName(midiRounded, tuningNotes) {
+    const pcDet = ((midiRounded % 12) + 12) % 12;
+    const match = tuningNotes.find(n => ((noteToMidi(n) % 12) + 12) % 12 === pcDet);
+    return match ? match.replace(/\d+$/, '') : NOTE_DISPLAY[pcDet];
+}
+
 // ── Detection loop ──────────────────────────────────────────────
 function detect() {
     if (!isListening) return;
@@ -566,9 +599,9 @@ function detect() {
     if (now - lastDetectTime < 80) return;
     lastDetectTime = now;
 
-    const buf = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buf);
-    const freq = autoCorrelate(buf, audioCtx.sampleRate);
+    if (!detectBuf || detectBuf.length !== analyser.fftSize) detectBuf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(detectBuf);   // búfer reutilizado: sin basura en cada lectura
+    const freq = autoCorrelate(detectBuf, audioCtx.sampleRate, minDetectFreq);
 
     if (freq === -1) {
         document.getElementById('tunerNote').className = 'afin-note-big';
@@ -606,7 +639,7 @@ function detect() {
 
     // Update note display
     const noteEl = document.getElementById('tunerNote');
-    noteEl.textContent = note.name + note.octave;
+    noteEl.textContent = displayNoteName(Math.round(midiFloat), tuningNotes) + note.octave;
     noteEl.className   = 'afin-note-big ' + (colorClass === 'in-tune' ? 'in-tune' : 'detected');
 
     document.getElementById('tunerFreq').textContent = freq.toFixed(1) + ' Hz · ' + (cents >= 0 ? '+' : '') + cents.toFixed(0) + '¢';
