@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/settings.js"></script>
     <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -347,8 +348,10 @@
     const WHITE_KEY_W      = 42;
     const OCT_WIDTH        = WHITE_SEMITONES.length * WHITE_KEY_W; // 294 px
 
-    let currentScaleKey = 'mayor';
-    let currentRootIdx  = 0;
+    // Tónica y tipo de escala recordados entre visitas (shared/settings.js)
+    const store = createStore('escalas');
+    let currentScaleKey = SCALES[store.get('scale')] ? store.get('scale') : 'mayor';
+    let currentRootIdx  = Number.isInteger(store.get('root')) ? store.get('root') : 0;
     // Notas y resaltados se agendan con el reloj de audio (shared/note-player.js)
     const piano         = createNotePlayer('acoustic_grand_piano');
     piano.preload().catch(() => {});   // el primer toque no espera a la red
@@ -450,6 +453,7 @@
 
     function selectRoot(i) {
         currentRootIdx = i;
+        store.set('root', i);
         stopPlayback();
         document.querySelectorAll('.root-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.root-btn')[i].classList.add('active');
@@ -458,6 +462,7 @@
 
     function setScaleType(key, btn) {
         currentScaleKey = key;
+        store.set('scale', key);
         stopPlayback();
         document.querySelectorAll('.scale-chip').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -547,6 +552,9 @@
 <script>
     window.addEventListener('load', function() {
         renderRootGrid();
+        // Marcar el tipo de escala restaurado
+        document.querySelectorAll('.scale-chip').forEach(b =>
+            b.classList.toggle('active', (b.getAttribute('onclick') || '').includes(`'${currentScaleKey}'`)));
         update();
     });
 </script>

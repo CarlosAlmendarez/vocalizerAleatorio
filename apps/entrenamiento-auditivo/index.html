@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/settings.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Screen ── */
@@ -930,14 +931,17 @@ function showLobby() {
 }
 
 // ── Selección ────────────────────────────────────────────────────
+const store = createStore('entrenamiento-auditivo');   // modo y dificultad recordados
 function selMode(mode, btn) {
     G.mode = mode;
+    store.set('mode', mode);
     document.querySelectorAll('.ear-mode-card').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     updateRules();
 }
 function selDiff(diff, btn) {
     G.diff = diff;
+    store.set('diff', diff);
     document.querySelectorAll('.ear-diff-chip').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     updateRules();
@@ -974,6 +978,11 @@ function noteToSpanish(n) {
 window.addEventListener('load', function() {
     buildPiano('piano');
     buildPiano('piano2');
+    // Restaurar modo y dificultad de la última sesión
+    const m = [...document.querySelectorAll('.ear-mode-card')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('mode', G.mode)}'`));
+    if (m) selMode(store.get('mode', G.mode), m);
+    const d = [...document.querySelectorAll('.ear-diff-chip')].find(b => (b.getAttribute('onclick') || '').includes(`'${store.get('diff', G.diff)}'`));
+    if (d) selDiff(store.get('diff', G.diff), d);
     updateRules();
 });
 </script>

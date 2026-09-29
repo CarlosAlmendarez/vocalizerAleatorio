@@ -6,6 +6,7 @@
     <title>Metrónomo - MusicTools</title>
     <link rel="stylesheet" href="../../shared/design.css">
     <script src="../../shared/transport.js"></script>
+    <script src="../../shared/settings.js"></script>
     <style>
         /* BPM display */
         .bpm-display { text-align:center; margin:6px 0 4px; }
@@ -159,6 +160,7 @@ const TEMPO_PRESETS = [
 // ══════════════════════════════════════════════
 //  ESTADO
 // ══════════════════════════════════════════════
+const store       = createStore('metronomo');
 let bpm           = 120;
 let beatsPerBar   = 4;
 let beatUnit      = 4;
@@ -309,6 +311,7 @@ function stopMetronome() {
 // ══════════════════════════════════════════════
 function setBpm(val) {
     bpm = Math.max(20, Math.min(300, val));
+    store.set('bpm', bpm);
 
     document.getElementById('bpmNumber').textContent = bpm;
     document.getElementById('bpmSlider').value       = bpm;
@@ -392,7 +395,8 @@ function tapTempo() {
 // ══════════════════════════════════════════════
 function setTimeSig(beats, unit, btn) {
     beatsPerBar = beats;
-    beatUnit    = unit;        // solo informativo: el BPM es siempre la
+    beatUnit    = unit;
+    store.set('sig', beats + '/' + unit);        // solo informativo: el BPM es siempre la
                                // velocidad del clic, en cualquier compás
     currentBeat = 0;
     if (transport) transport.resetStep(0);   // el acento vuelve al tiempo 1
@@ -445,8 +449,10 @@ function renderPresets() {
 // ══════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════
-setBpm(120);
-renderBeatDots();
+// Ajustes recordados entre visitas (BPM y compás)
+setBpm(store.get('bpm', 120));
+const savedSig = [...document.querySelectorAll('.sig-btn')].find(b => b.textContent.trim() === store.get('sig', '4/4'));
+if (savedSig) savedSig.click(); else renderBeatDots();
 renderPresets();
 </script>
 <script src="../../shared/shell.js"></script>

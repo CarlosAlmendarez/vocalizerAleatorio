@@ -315,6 +315,7 @@
 <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
 <script src="../../shared/sound-engine.js"></script>
 <script src="../../shared/note-player.js"></script>
+<script src="../../shared/settings.js"></script>
 <script src="../../shared/audio-utils.js"></script>
 <script>
 // ══════════════════════════════════════════════
@@ -334,8 +335,10 @@ const INSTRUMENTS = {
 const NOTE_DISPLAY = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const NOTE_TO_PC = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11 };
 
-let currentInstrument = 'guitar';
-let currentTuning     = 'standard';
+// Instrumento y afinación recordados entre visitas (shared/settings.js)
+const store = createStore('afinador');
+let currentInstrument = INSTRUMENTS[store.get('instrument')] ? store.get('instrument') : 'guitar';
+let currentTuning     = INSTRUMENTS[currentInstrument].tunings[store.get('tuning')] ? store.get('tuning') : Object.keys(INSTRUMENTS[currentInstrument].tunings)[0];
 let selectedString    = null;
 let audioCtx = null, analyser = null, mediaStream = null, rafId = null;
 let isListening = false, lastDetectTime = 0;
@@ -357,44 +360,55 @@ function midiToDisplayNote(midi) {
 }
 function noteToFreq(s) { const m = noteToMidi(s); return m === null ? null : 440 * Math.pow(2, (m - 69) / 12); }
 
-// ── Autocorrelation ─────────────────────────────────────────────
-// minFreq: la nota más grave a buscar. Antes era fija en 35 Hz: el Si0 del bajo
-// de 5 cuerdas (30,9 Hz) no se detectaba, y un violín pagaba el coste de buscar
-// hasta 35 Hz. El trabajo crece con MAX_LAG, así que acotarlo acelera el afinador.
-let corrBuf = null;
-function autoCorrelate(buf, sr, minFreq = 35) {
+// ── Detección de altura: YIN (de Cheveigné & Kawahara, 2002) ────
+// Más preciso que la autocorrelación simple en notas graves y robusto frente a
+// armónicos fuertes. minFreq acota la búsqueda a la cuerda más grave de la
+// afinación elegida (el coste crece con el periodo máximo).
+const YIN_THRESHOLD = 0.12;
+let yinBuf = null;
+function detectPitch(buf, sr, minFreq = 35) {
     let rms = 0;
     for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
     if (Math.sqrt(rms / buf.length) < 0.012) return -1;
-    const MAX_LAG = Math.min(Math.ceil(sr / minFreq), Math.floor(buf.length / 2));
-    if (!corrBuf || corrBuf.length < MAX_LAG + 1) corrBuf = new Float32Array(MAX_LAG + 1);
-    const corr = corrBuf;
-    const len  = buf.length - MAX_LAG;
-    for (let lag = 0; lag <= MAX_LAG; lag++) {
-        let s = 0;
-        for (let j = 0; j < len; j++) s += buf[j] * buf[j + lag];
-        corr[lag] = s;
+
+    const tauMax = Math.min(Math.ceil(sr / minFreq), Math.floor(buf.length / 2));
+    const tauMin = Math.max(2, Math.floor(sr / 4000));
+    const W = buf.length - tauMax;              // ventana de integración
+    if (!yinBuf || yinBuf.length < tauMax + 1) yinBuf = new Float32Array(tauMax + 1);
+    const d = yinBuf;
+
+    // 1) Diferencia cuadrática y 2) normalización acumulada (CMNDF)
+    d[0] = 1;
+    let running = 0;
+    for (let tau = 1; tau <= tauMax; tau++) {
+        let sum = 0;
+        for (let j = 0; j < W; j++) { const x = buf[j] - buf[j + tau]; sum += x * x; }
+        running += sum;
+        d[tau] = running > 0 ? sum * tau / running : 1;
     }
-    let d = 0;
-    while (d < MAX_LAG - 1 && corr[d] > corr[d + 1]) d++;
-    const MIN_LAG = Math.floor(sr / 4000);
-    let maxVal = -Infinity, maxPos = -1;
-    const from = Math.max(d, MIN_LAG);
-    for (let i = from; i <= MAX_LAG; i++) {
-        if (corr[i] > maxVal) { maxVal = corr[i]; maxPos = i; }
+
+    // 3) Primer mínimo bajo el umbral (evita elegir un múltiplo del periodo)
+    let tau = -1;
+    for (let t = tauMin; t <= tauMax; t++) {
+        if (d[t] < YIN_THRESHOLD) {
+            while (t + 1 <= tauMax && d[t + 1] < d[t]) t++;
+            tau = t;
+            break;
+        }
     }
-    if (maxPos < 0 || maxVal <= 0) return -1;
-    // Una señal periódica correlaciona casi igual en T, 2T, 3T…: quedarse con el
-    // pico MÁS ALTO podía elegir un múltiplo (Mi4 se leía como La2). Se toma el
-    // primer máximo local que alcance el 90 % del máximo global.
-    for (let i = from + 1; i < MAX_LAG; i++) {
-        if (corr[i] >= 0.9 * maxVal && corr[i] >= corr[i - 1] && corr[i] >= corr[i + 1]) { maxPos = i; break; }
+    // Sin mínimo claro: aceptar el mínimo global solo si es razonablemente periódico
+    if (tau < 0) {
+        let best = Infinity;
+        for (let t = tauMin; t <= tauMax; t++) if (d[t] < best) { best = d[t]; tau = t; }
+        if (best > 0.35) return -1;
     }
-    let T0 = maxPos;
-    if (maxPos > 0 && maxPos < MAX_LAG) {
-        const y1 = corr[maxPos-1], y2 = corr[maxPos], y3 = corr[maxPos+1];
-        const den = 2*y2 - y1 - y3;
-        if (den > 0) T0 += (y3 - y1) / (2 * den);
+
+    // 4) Interpolación parabólica para precisión por debajo de una muestra
+    let T0 = tau;
+    if (tau > 1 && tau < tauMax) {
+        const a = d[tau - 1], b = d[tau], c = d[tau + 1];
+        const den = a + c - 2 * b;
+        if (den > 0) T0 = tau + (a - c) / (2 * den);
     }
     return sr / T0;
 }
@@ -454,8 +468,12 @@ function renderNoteRefGrid() {
 function selectInstrument(id) {
     currentInstrument = id; currentTuning = Object.keys(INSTRUMENTS[id].tunings)[0]; selectedString = null;
     renderInstruments(); renderTunings(); renderStrings(); resetDisplay(); configureAnalyser();
+    store.set('instrument', currentInstrument); store.set('tuning', currentTuning);
 }
-function selectTuning(id) { currentTuning = id; selectedString = null; renderStrings(); resetDisplay(); configureAnalyser(); }
+function selectTuning(id) {
+    currentTuning = id; selectedString = null; renderStrings(); resetDisplay(); configureAnalyser();
+    store.set('tuning', currentTuning);
+}
 function selectString(idx) {
     selectedString = (selectedString === idx) ? null : idx;
     renderStrings();
@@ -601,7 +619,7 @@ function detect() {
 
     if (!detectBuf || detectBuf.length !== analyser.fftSize) detectBuf = new Float32Array(analyser.fftSize);
     analyser.getFloatTimeDomainData(detectBuf);   // búfer reutilizado: sin basura en cada lectura
-    const freq = autoCorrelate(detectBuf, audioCtx.sampleRate, minDetectFreq);
+    const freq = detectPitch(detectBuf, audioCtx.sampleRate, minDetectFreq);
 
     if (freq === -1) {
         document.getElementById('tunerNote').className = 'afin-note-big';

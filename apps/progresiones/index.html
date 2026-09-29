@@ -8,6 +8,7 @@
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
     <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
     <script src="../../shared/transport.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -423,8 +424,11 @@ const DRUM_PATTERNS = {
     latin: { kick:[1,0,1,0,0,0,1,0], snare:[0,0,0,0,1,0,0,0], hihat:[1,1,1,1,1,1,1,1] },
 };
 
-let drumVol  = 0.8;
-let instVol  = 0.8;
+// Preferencias recordadas entre visitas (shared/settings.js). El BPM no:
+// cada progresión trae el suyo.
+const store = createStore('progresiones');
+let drumVol  = store.get('drumVol', 0.8);
+let instVol  = store.get('instVol', 0.8);
 
 // El AudioContext lo provee el Transport compartido (shared/transport.js),
 // que reutiliza el de soundEngine → un solo reloj para acordes y batería.
@@ -460,15 +464,15 @@ function synthHihat(t, g) {
 }
 
 // ── Estado ────────────────────────────────────────────────────────
-let keyIdx      = 0;      // current key (0=C)
-let selectedMood= 'all';
+let keyIdx      = store.get('key', 0);      // current key (0=C)
+let selectedMood= store.get('mood', 'all');
 let activeProg  = null;
 let isPlaying   = false;
 let bpm         = 90;
-let loopOn      = true;
-let playStyle   = 'block'; // 'block' | 'arpeggio'
-let instrument  = 'piano'; // 'piano' | 'guitar'
-let drumsOn     = false;
+let loopOn      = store.get('loop', true);
+let playStyle   = store.get('style', 'block');   // 'block' | 'arpeggio'
+let instrument  = store.get('instrument', 'piano'); // 'piano' | 'guitar'
+let drumsOn     = store.get('drums', false);
 let transport   = null;    // reloj compartido (shared/transport.js)
 let progEnded   = false;   // true cuando una progresión sin loop ya terminó
 const CHORD_STEPS = 4;     // corcheas por acorde (= 2 tiempos)
@@ -478,7 +482,7 @@ const players = {
     piano:  createNotePlayer('acoustic_grand_piano'),
     guitar: createNotePlayer('acoustic_guitar_nylon')
 };
-players.piano.preload().catch(() => {});   // el primer ▶ no espera a la red
+players[instrument].preload().catch(() => {});   // el instrumento guardado: el primer ▶ no espera a la red
 async function ensureInst() {
     await players[instrument].ready();
 }
@@ -627,15 +631,18 @@ function adjBPM(delta) { setBPM(bpm + delta); }
 
 function toggleLoop(btn) {
     loopOn = !loopOn;
+    store.set('loop', loopOn);
     btn.classList.toggle('on', loopOn);
 }
 function setPlayStyle(style, btn) {
     playStyle = style;
+    store.set('style', style);
     document.querySelectorAll('.ps-btn').forEach(b => b.classList.toggle('on', b.dataset.style === style));
 }
 async function setInstrument(inst, btn) {
     if (instrument === inst) return;
     instrument = inst;
+    store.set('instrument', inst);
     document.querySelectorAll('.inst-btn').forEach(b => b.classList.toggle('on', b.dataset.inst === inst));
     if (isPlaying) {
         const prog = activeProg;
@@ -650,15 +657,18 @@ function toggleDrums(btn) {
     // El Transport ya está corriendo; onProgStep consulta drumsOn en cada paso,
     // así que basta con cambiar la bandera.
     drumsOn = !drumsOn;
+    store.set('drums', drumsOn);
     btn.classList.toggle('on', drumsOn);
 }
 
 function setDrumVol(v) {
     drumVol = v / 100;
+    store.set('drumVol', drumVol);
     document.querySelectorAll('.mix-drum-val').forEach(el => el.textContent = v + '%');
 }
 function setInstVol(v) {
     instVol = v / 100;
+    store.set('instVol', instVol);
     document.querySelectorAll('.mix-inst-val').forEach(el => el.textContent = v + '%');
 }
 
@@ -693,6 +703,7 @@ function copyChords(progId) {
 // ── Filters ───────────────────────────────────────────────────────
 function setKey(idx) {
     keyIdx = idx;
+    store.set('key', idx);
     document.querySelectorAll('.prog-chord-pill').forEach(el => {
         const cardEl = el.closest('[data-prog]');
         const progId = cardEl?.dataset.prog;
@@ -705,6 +716,7 @@ function setKey(idx) {
 
 function setMood(mood) {
     selectedMood = mood;
+    store.set('mood', mood);
     document.querySelectorAll('.prog-mood-btn').forEach(b => b.classList.toggle('active', b.dataset.id === mood));
     renderList();
 }
@@ -824,7 +836,7 @@ const KEY_LABELS = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
 function init() {
     const sel = document.getElementById('keySelect');
     KEY_LABELS.forEach((k, i) => sel.add(new Option(k, i)));
-    sel.value = 0;
+    sel.value = keyIdx;
     renderMoods();
     renderList();
 }

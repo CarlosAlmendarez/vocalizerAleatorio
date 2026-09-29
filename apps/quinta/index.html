@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quinta - MusicTools</title>
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
+    <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         .quinta-screen {
@@ -187,33 +191,24 @@ const ROMAN_MIN = { 0:'vi', 11:'ii', 1:'iii' };
 // ── Estado ────────────────────────────────────────────────────────
 let selectedIdx = -1;
 let mode = 'notes'; // 'notes' | 'roman' | 'sigs'
-let audioCtx = null;
 
-// ── Audio (Web Audio API — triángulo arpegiado) ───────────────────
-const FREQS = {
-    'C':261.63,'C#':277.18,'Db':277.18,'D':293.66,'D#':311.13,'Eb':311.13,
-    'E':329.63,'F':349.23,'F#':369.99,'Gb':369.99,'G':392.00,'G#':415.30,
-    'Ab':415.30,'A':440.00,'A#':466.16,'Bb':466.16,'B':493.88,
-    // enarmónicos que aparecen en F# y Db mayor (E#dim, Cb…)
-    'E#':349.23,'B#':261.63,'Cb':246.94,'Fb':329.63
-};
+// ── Audio: piano compartido (shared/note-player.js) ─────────────
+// Antes usaba osciladores propios con su propio AudioContext; ahora suena
+// el mismo piano que el resto de la app, precargado y con arpegio suave.
+const piano = createNotePlayer('acoustic_grand_piano');
+piano.preload().catch(() => {});
 const CHORD_INTS = { maj:[0,4,7], min:[0,3,7], dim:[0,3,6] };
+const SHARP_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-function playChord(root, type) {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const base = FREQS[root]; if (!base) return;
-    const ints = CHORD_INTS[type] || CHORD_INTS.maj;
-    const now = audioCtx.currentTime;
-    ints.forEach((s, i) => {
-        const f = base * Math.pow(2, s / 12);
-        const osc = audioCtx.createOscillator();
-        const g   = audioCtx.createGain();
-        osc.type = 'triangle'; osc.frequency.value = f;
-        g.gain.setValueAtTime(0.12, now + i * 0.06);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.06 + 1.4);
-        osc.connect(g); g.connect(audioCtx.destination);
-        osc.start(now + i * 0.06); osc.stop(now + i * 0.06 + 1.5);
+async function playChord(root, type) {
+    const pc = Theory.pc(root);          // entiende E#, Cb, Gb…
+    if (pc < 0) return;
+    try { await piano.ready(); } catch (_) { return; }
+    piano.cancel();                      // un acorde nuevo reemplaza al anterior
+    const now = piano.now;
+    (CHORD_INTS[type] || CHORD_INTS.maj).forEach((s, i) => {
+        const midi = 60 + pc + s;        // alrededor de Do4
+        piano.note(SHARP_NAMES[midi % 12] + (Math.floor(midi / 12) - 1), now + i * 0.06, { dur: 1.6, gain: 0.8 });
     });
 }
 

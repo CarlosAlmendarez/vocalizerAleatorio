@@ -120,6 +120,8 @@
   var ROOT = (function () {
     var path = window.location.pathname.replace(/\\/g, '/');
     var parts = path.split('/').filter(Boolean);
+    // /apps/vocalizer/index.html → ignorar el archivo (antes contaba un nivel de más)
+    if (parts.length && parts[parts.length - 1].indexOf('.') >= 0) parts.pop();
     // Find project root by looking for apps/ segment
     var appsIdx = parts.indexOf('apps');
     if (appsIdx >= 0) {
@@ -324,6 +326,48 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* APP INSTALABLE + SIN CONEXIÓN (manifest + Service Worker)            */
+  /* ------------------------------------------------------------------ */
+  function addHeadTag(tag, attrs) {
+    var el = document.createElement(tag);
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    document.head.appendChild(el);
+  }
+  function setupPWA() {
+    if (!document.querySelector('link[rel="manifest"]')) {
+      addHeadTag('link', { rel: 'manifest', href: ROOT + 'manifest.webmanifest' });
+      addHeadTag('link', { rel: 'apple-touch-icon', href: ROOT + 'shared/icons/apple-touch-icon.png' });
+      addHeadTag('link', { rel: 'icon', type: 'image/png', href: ROOT + 'shared/icons/icon-192.png' });
+      addHeadTag('meta', { name: 'theme-color', content: '#07071a' });
+      addHeadTag('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' });
+      addHeadTag('meta', { name: 'mobile-web-app-capable', content: 'yes' });
+      addHeadTag('meta', { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' });
+    }
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register(ROOT + 'sw.js').catch(function () {});
+    }
+  }
+
+  /** Descarga instrumentos para usarlos sin conexión: MT.precacheInstruments(['acoustic_grand_piano']) */
+  window.MT = window.MT || {};
+  window.MT.precacheInstruments = function (names) {
+    if (!('serviceWorker' in navigator)) return Promise.resolve({ ok: 0, total: names.length });
+    var urls = names.map(function (n) { return 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite/' + n + '-mp3.js'; });
+    return navigator.serviceWorker.ready.then(function (reg) {
+      return new Promise(function (resolve) {
+        function onMsg(e) {
+          if (e.data && e.data.type === 'precache-done') {
+            navigator.serviceWorker.removeEventListener('message', onMsg);
+            resolve(e.data);
+          }
+        }
+        navigator.serviceWorker.addEventListener('message', onMsg);
+        reg.active.postMessage({ type: 'precache', urls: urls });
+      });
+    });
+  };
+
+  /* ------------------------------------------------------------------ */
   /* INIT                                                                 */
   /* ------------------------------------------------------------------ */
   function init() {
@@ -333,6 +377,7 @@
 
     // 2. Inject shell
     injectShell();
+    setupPWA();
 
     // 3. Layout detection
     applyLayout();

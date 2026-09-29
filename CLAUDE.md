@@ -151,6 +151,26 @@ Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 4. `shared/audio-utils.js` if used.
 5. `shared/shell.js` **last**.
 
+### Saved settings (`shared/settings.js`)
+Each tool remembers its settings between visits in `localStorage['mt-settings:<app>']`:
+```js
+const store = createStore('metronomo');
+store.get('bpm', 120); store.set('bpm', 96);
+store.bindInputs(['pattern', 'tempo']);   // restores + saves form controls by id
+```
+Restore on load by calling the app's own setters (so the UI stays in sync) and `store.set`
+inside those setters. Values changed by code (no `change` event) must be saved explicitly.
+Storage can throw (private mode) — `settings.js` already swallows that.
+
+### Offline / installable app (`sw.js` + `manifest.webmanifest`)
+`shell.js` injects the manifest/icons and registers `sw.js` (scope = repo root, works under
+the GitHub Pages prefix). Own files: **network-first** with cache fallback, so deploys show up
+immediately. Instruments (`gleitz.github.io`, 1.7–2.3 MB each), the soundfont library and fonts:
+**cache-first**. When adding a new shared file or app, add it to `SHELL`/`APPS` in `sw.js` and
+bump `VERSION`. `MT.precacheInstruments([...])` downloads instruments for offline use (the home
+page has a button for it). Headless Edge's `--virtual-time-budget` stalls on service workers:
+test them through the DevTools protocol in real time instead.
+
 ## Conventions
 
 - UI copy and code comments are in **Spanish**. Match this.

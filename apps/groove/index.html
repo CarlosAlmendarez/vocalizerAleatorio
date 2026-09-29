@@ -6,6 +6,7 @@
     <title>Groove - MusicTools</title>
     <link rel="stylesheet" href="../../shared/design.css">
     <script src="../../shared/transport.js"></script>
+    <script src="../../shared/settings.js"></script>
     <style>
         /* ── Screen ── */
         .groove-screen {
@@ -428,6 +429,7 @@ const P68 = {
 const SIG_DESC = { '4/4':'4 tiempos · 16 subdivisiones', '3/4':'3 tiempos · vals / balada', '6/8':'Compás compuesto · 2 pulsos de 3 corcheas' };
 
 // ── State ────────────────────────────────────────────────────────
+const store   = createStore('groove');   // ajustes recordados entre visitas
 let bpm       = 100;
 let isPlaying = false;
 let genre     = 'rock';
@@ -612,6 +614,7 @@ function setBPM(v) {
     document.getElementById('bpmDisplay').textContent = bpm;
     document.getElementById('bpmSlider').value = bpm;
     document.getElementById('tempoBadge').innerHTML = bpm + '<span>BPM</span>';
+    store.set('bpm', bpm);
 }
 
 function adjBPM(delta) { setBPM(bpm + delta); }
@@ -667,12 +670,14 @@ function tap() {
 // ── Genre / Sig / Options ────────────────────────────────────────
 function setGenre(id) {
     genre = id;
+    store.set('genre', id);
     document.querySelectorAll('.groove-genre-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
     renderGrid();
 }
 
 function setSig(sig, btn) {
     timeSig = sig;
+    store.set('sig', sig);
     document.querySelectorAll('.groove-sig-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('sigDesc').textContent = SIG_DESC[sig];
@@ -682,6 +687,7 @@ function setSig(sig, btn) {
 
 function toggleHumanize() {
     humanize = !humanize;
+    store.set('humanize', humanize);
     document.getElementById('humanizeToggle').classList.toggle('on', humanize);
 }
 
@@ -693,6 +699,7 @@ function toggleGhost() {
 
 function setVol(drum, val, sliderEl) {
     vols[drum] = val;
+    store.set('vols', vols);
     const pct = Math.round(val * 100);
     document.getElementById('lbl' + drum.charAt(0).toUpperCase() + drum.slice(1)).textContent = pct;
     // Color accent on slider track
@@ -755,6 +762,18 @@ function initSliders() {
 <script>
 window.addEventListener('load', function() {
     renderGenres();
+    // Restaurar ajustes guardados con los propios setters (actualizan la interfaz)
+    setBPM(store.get('bpm', bpm));
+    const g = store.get('genre', genre);
+    if (GENRES.some(x => x.id === g)) setGenre(g);
+    const sigBtn = [...document.querySelectorAll('.groove-sig-btn')].find(b => b.textContent.trim() === store.get('sig', timeSig));
+    if (sigBtn) setSig(sigBtn.textContent.trim(), sigBtn);
+    if (store.get('humanize', humanize) !== humanize) toggleHumanize();
+    const v = store.get('vols', null);
+    if (v) ['kick','snare','hihat'].forEach(d => {
+        const sl = document.getElementById('vol' + d.charAt(0).toUpperCase() + d.slice(1));
+        if (sl && typeof v[d] === 'number') { sl.value = v[d]; setVol(d, v[d], sl); }
+    });
     renderGrid();
     initSliders();
 });

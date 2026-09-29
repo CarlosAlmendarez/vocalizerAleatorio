@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/settings.js"></script>
     <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -309,8 +310,10 @@ const FINGERING = {
 const FINGER_NAMES = { 1:'Pulgar', 2:'Índice', 3:'Corazón', 4:'Anular', 5:'Meñique' };
 
 // ── State ─────────────────────────────────────────────────────────
-let rootIdx   = 0;
-let chordType = 'maj';
+// Fundamental, tipo y mano recordados entre visitas (shared/settings.js)
+const store = createStore('acordes-piano');
+let rootIdx   = Number.isInteger(store.get('root')) ? store.get('root') : 0;
+let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'maj';
 let inversion = 0;
 let leftHand  = false;
 const piano = createNotePlayer('acoustic_grand_piano');
@@ -621,6 +624,7 @@ function updateFingerLegend(midis) {
 function selectRoot(i) {
     rootIdx   = i;
     inversion = 0;
+    store.set('root', i);
     document.querySelectorAll('.piano-root-btn').forEach(b =>
         b.classList.toggle('active', +b.dataset.i === i)
     );
@@ -631,6 +635,7 @@ function selectRoot(i) {
 function selectType(type) {
     chordType = type;
     inversion = 0;
+    store.set('type', type);
     document.querySelectorAll('.piano-type-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.type === type)
     );
@@ -648,6 +653,7 @@ function selectInversion(inv) {
 
 function setHand(hand, btn) {
     leftHand = hand === 'left';
+    store.set('hand', hand);
     document.querySelectorAll('.hand-btn').forEach(b =>
         b.classList.toggle('on', b.dataset.hand === hand)
     );
@@ -679,6 +685,8 @@ function renderInvButtons() {
 
 // ── Init ──────────────────────────────────────────────────────────
 function init() {
+    const hb = document.querySelector(`.hand-btn[data-hand="${store.get('hand', 'right')}"]`);
+    if (hb) setHand(hb.dataset.hand, hb);
     renderRootGrid();
     renderTypeRow();
     renderInvButtons();

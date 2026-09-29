@@ -1,0 +1,22 @@
+{
+  "name": "MusicTools",
+  "short_name": "MusicTools",
+  "description": "Vocalizador, afinador, acordes, escalas, metrónomo y más herramientas para músicos.",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07071a",
+  "theme_color": "#07071a",
+  "icons": [
+    { "src": "shared/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "shared/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "shared/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Vocalizer", "url": "./apps/vocalizer/" },
+    { "name": "Afinador",  "url": "./apps/afinador/" },
+    { "name": "Metrónomo", "url": "./apps/metronomo/" }
+  ]
+}

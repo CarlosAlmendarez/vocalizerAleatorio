@@ -299,6 +299,7 @@
 </div><!-- /transp-screen -->
 
 <script src="../../shared/theory.js"></script>
+<script src="../../shared/settings.js"></script>
 <script>
 // ── Escala cromática ─────────────────────────────────────────────
 const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -328,9 +329,11 @@ const INTERVAL_NAMES = {
 };
 
 // ── Estado ───────────────────────────────────────────────────────
-let semitones  = 0;
-let fromKeyIdx = 0;   // índice 0-11
-let enharm     = 'auto';
+// El texto, la tonalidad y la transposición se recuerdan entre visitas
+const store = createStore('transponer');
+let semitones  = store.get('semitones', 0);
+let fromKeyIdx = store.get('fromKey', 0);   // índice 0-11
+let enharm     = store.get('enharm', 'auto');
 
 // ── Helpers ──────────────────────────────────────────────────────
 // Tonalidad de origen y destino escritas. Se transpone por el INTERVALO entre
@@ -415,6 +418,8 @@ function renderOutput(text, n) {
 // ── Actualizar UI ────────────────────────────────────────────────
 function update() {
     const text = document.getElementById('inputArea').value;
+    store.set('text', text); store.set('semitones', semitones);
+    store.set('fromKey', fromKeyIdx); store.set('enharm', enharm);
     document.getElementById('outputArea').innerHTML = renderOutput(text, semitones);
 
     // Semitone display
@@ -512,8 +517,11 @@ function init() {
         fromSel.add(new Option(k.label, i));
         toSel.add(new Option(k.label, i));
     });
-    fromSel.value = 0;
-    toSel.value   = 0;
+    fromSel.value = fromKeyIdx;
+    toSel.value   = fromKeyIdx;
+    document.getElementById('inputArea').value = store.get('text', document.getElementById('inputArea').value);
+    document.querySelectorAll('.transp-enharm-btn').forEach(b =>
+        b.classList.toggle('active', (b.getAttribute('onclick') || '').includes(`'${enharm}'`)));
     update();
 }
 </script>

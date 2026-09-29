@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/settings.js"></script>
     <script src="../../shared/theory.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
@@ -261,8 +262,10 @@ function getShape(rootIdx, type) {
     return Theory.findVoicing(Object.assign({ tuning: OPEN_MIDI, pcs: c.pcs, optional }, VOICING_OPTS));
 }
 
-let rootIdx   = 9;  // La / A
-let chordType = 'minor';
+// Fundamental y tipo recordados entre visitas (shared/settings.js)
+const store   = createStore('acordes-bajo');
+let rootIdx   = Number.isInteger(store.get('root')) ? store.get('root') : 9;  // La / A
+let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'minor';
 
 const bass = createNotePlayer('electric_bass_finger');
 bass.preload().catch(() => {});   // el primer toque no espera a la red
@@ -408,6 +411,7 @@ function renderRootGrid() {
 
 function selectRoot(i) {
     rootIdx = i;
+    store.set('root', i);
     document.querySelectorAll('.chord-root-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.chord-root-btn')[i].classList.add('active');
     update();
@@ -415,6 +419,7 @@ function selectRoot(i) {
 
 function setType(type, btn) {
     chordType = type;
+    store.set('type', type);
     document.querySelectorAll('.chord-type-chip').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     update();
@@ -443,6 +448,9 @@ function update() {
 <script>
 window.addEventListener('load', function() {
     renderRootGrid();
+    // Marcar el tipo restaurado
+    document.querySelectorAll('.chord-type-chip').forEach(b =>
+        b.classList.toggle('active', (b.getAttribute('onclick') || '').includes(`'${chordType}'`)));
     update();
 });
 </script>

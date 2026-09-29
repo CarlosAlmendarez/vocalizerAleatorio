@@ -9,6 +9,7 @@
     <script src="../../shared/transport.js"></script>
     <script src="../../shared/note-player.js"></script>
     <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Layout root ─────────────────────────── */
@@ -401,6 +402,62 @@
         }
         .voc-range-warn.show { display: block; }
 
+        /* Rutinas */
+        .voc-routine-tag {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--accent);
+            background: rgba(var(--accent-rgb), 0.12);
+            border: 1px solid rgba(var(--accent-rgb), 0.3);
+        }
+        .voc-routine-tag[hidden] { display: none; }
+        .voc-routine-steps {
+            list-style: none;
+            margin: 10px 0 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .voc-routine-steps li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--ink-dim);
+        }
+        .voc-routine-steps li.current {
+            border-color: var(--accent);
+            color: var(--ink);
+            background: rgba(var(--accent-rgb), 0.1);
+        }
+        .voc-routine-steps .n {
+            font-family: var(--font-head);
+            font-weight: 800;
+            color: var(--accent);
+            min-width: 16px;
+        }
+        .voc-routine-steps .rm {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .voc-routine-actions { display: flex; gap: 6px; margin-top: 8px; }
+        .voc-routine-actions .btn-mini { flex: 1; }
+        .voc-routine-empty { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
         .voc-semitone {
             font-family: var(--font-head);
             font-size: 15px;
@@ -444,6 +501,7 @@
         <button type="button" class="voc-engine" id="engineStatus" data-kind="wait" onclick="onEngineStatusTap()">
             <span class="voc-engine-dot"></span><span id="engineText">Audio sin iniciar</span>
         </button>
+        <div class="voc-routine-tag" id="routineTag" hidden></div>
         <div class="voc-live-hint" id="liveHint" role="status"></div>
         <div class="voc-range" id="rangeBar" hidden>
             <span id="rangeLo">—</span>
@@ -525,6 +583,23 @@
 
     <!-- ── Config panel ── -->
     <div class="voc-config-panel" id="configPanel">
+
+        <div class="section-card">
+            <div class="section-title">Rutina</div>
+            <label>Encadenar ejercicios sin detenerse</label>
+            <select id="routine" onchange="renderRoutine()">
+                <option value="none">Ninguna (un solo ejercicio)</option>
+                <option value="warmup">Calentamiento (4 ejercicios)</option>
+                <option value="agility">Agilidad (3 ejercicios)</option>
+                <option value="sustain">Resistencia y control (3 ejercicios)</option>
+                <option value="custom">Mi rutina</option>
+            </select>
+            <ol class="voc-routine-steps" id="routineSteps"></ol>
+            <div class="voc-routine-actions" id="routineActions" hidden>
+                <button class="btn-mini" onclick="addCurrentToRoutine()">+ Añadir ejercicio actual</button>
+                <button class="btn-mini" onclick="clearCustomRoutine()">Vaciar</button>
+            </div>
+        </div>
 
         <div class="section-card">
             <div class="section-title">Tesitura</div>
@@ -663,6 +738,7 @@ const vowelLabels = {
    ESTADO
    ════════════════════════════════════════════════════ */
 let metEnabled      = false;
+const store         = createStore('vocalizer');
 let currentSequence = [];   // notes being played this sequence
 let currentStepIdx  = -1;   // index in currentSequence
 let currentLayout   = 'radial';
@@ -679,8 +755,17 @@ function init() {
         e.options.add(new Option(n, i));
     });
     s.value = 24; e.value = 48;  // default C4 → C5
-    s.onchange = () => { currentPresetName = null; updateChips(); };
-    e.onchange = () => { currentPresetName = null; updateChips(); };
+    s.onchange = () => { currentPresetName = null; store.set('preset', null); updateChips(); };
+    e.onchange = () => { currentPresetName = null; store.set('preset', null); updateChips(); };
+
+    // Recordar la configuración entre visitas (shared/settings.js)
+    store.bindInputs(['startNote', 'endNote', 'pattern', 'scale', 'vowelPattern',
+                      'practiceMode', 'tempo', 'reference', 'routine']);
+    currentPresetName = store.get('preset', null);
+    document.getElementById('bpmVal').innerText = document.getElementById('tempo').value;
+    setMet(store.get('met', false));
+    if (store.get('layout', 'radial') !== 'radial') setLayout(store.get('layout'));
+    renderRoutine();
 
     document.getElementById('tempo').oninput = ev => {
         document.getElementById('bpmVal').innerText = ev.target.value;
@@ -708,6 +793,7 @@ function init() {
    ════════════════════════════════════════════════════ */
 function setLayout(layout) {
     currentLayout = layout;
+    store.set('layout', layout);
     document.getElementById('btnRadial').classList.toggle('active',   layout === 'radial');
     document.getElementById('btnStepper').classList.toggle('active', layout === 'stepper');
     document.getElementById('radialWrap').style.display  = layout === 'radial'  ? 'flex' : 'none';
@@ -899,13 +985,98 @@ function setVoicePreset(v) {
     document.getElementById('endNote').value   = notes.indexOf(voicePresets[v][1]);
     const labels = { soprano:'Soprano', mezzosoprano:'Mezzo', alto:'Alto', tenor:'Tenor', baritone:'Barítono', bass:'Bajo' };
     currentPresetName = labels[v];
+    // Cambio por código: no dispara "change", se guarda a mano
+    store.set('input:startNote', document.getElementById('startNote').value);
+    store.set('input:endNote',   document.getElementById('endNote').value);
+    store.set('preset', currentPresetName);
     updateChips();
 }
 
 function setMet(v) {
     metEnabled = v;
+    store.set('met', v);
     document.getElementById('mOn').classList.toggle('active',  v);
     document.getElementById('mOff').classList.toggle('active', !v);
+}
+
+/* ════════════════════════════════════════════════════
+   RUTINAS — varios ejercicios encadenados sin detener el reloj
+   ════════════════════════════════════════════════════ */
+const ROUTINES = {
+    warmup:  [ { pattern:'triad',    mode:'loop',      vowels:'mama'  },
+               { pattern:'scale',    mode:'loop',      vowels:'a'     },
+               { pattern:'arpeggio', mode:'loop-desc', vowels:'aeiou' },
+               { pattern:'messa',    mode:'loop',      vowels:'a'     } ],
+    agility: [ { pattern:'arpeggio', mode:'loop',      vowels:'a'     },
+               { pattern:'scale',    mode:'loop-desc', vowels:'mama'  },
+               { pattern:'octave',   mode:'loop',      vowels:'aeiou' } ],
+    sustain: [ { pattern:'messa',    mode:'loop',      vowels:'a'     },
+               { pattern:'octave',   mode:'loop-desc', vowels:'a'     },
+               { pattern:'messa',    mode:'loop-desc', vowels:'aeiou' } ],
+};
+const MODE_ARROW   = { loop:'↑', 'loop-desc':'↓', single:'×1' };
+const BREATH_STEPS = 4;   // pasos de silencio extra entre un ejercicio y el siguiente
+let routineIdx = 0;
+
+function routineSteps() {
+    const id = document.getElementById('routine').value;
+    return id === 'custom' ? store.get('customRoutine', []) : (ROUTINES[id] || []);
+}
+function stepLabel(st) {
+    return `${patternLabels[st.pattern]} ${MODE_ARROW[st.mode] || ''} · ${vowelLabels[st.vowels]}`;
+}
+
+function renderRoutine() {
+    const id    = document.getElementById('routine').value;
+    const steps = routineSteps();
+    const list  = document.getElementById('routineSteps');
+    list.innerHTML = steps.map((st, i) => `
+        <li class="${state !== 'idle' && i === routineIdx ? 'current' : ''}">
+            <span class="n">${i + 1}</span>${stepLabel(st)}
+            ${id === 'custom' ? `<button class="rm" onclick="removeRoutineStep(${i})" aria-label="Quitar">×</button>` : ''}
+        </li>`).join('') +
+        (id === 'custom' && !steps.length ? '<div class="voc-routine-empty">Configura un ejercicio abajo y pulsa "Añadir ejercicio actual".</div>' : '');
+    document.getElementById('routineActions').hidden = id !== 'custom';
+    renderRoutineTag();
+}
+
+function renderRoutineTag() {
+    const tag = document.getElementById('routineTag');
+    const steps = routineSteps();
+    if (!steps.length || state === 'idle') { tag.hidden = true; return; }
+    tag.hidden = false;
+    tag.textContent = `Rutina · ${routineIdx + 1}/${steps.length} · ${stepLabel(steps[routineIdx])}`;
+}
+
+/* Pone el paso n de la rutina en los controles del panel (el motor lee de ahí). */
+function applyRoutineStep(n) {
+    const st = routineSteps()[n];
+    if (!st) return false;
+    document.getElementById('pattern').value      = st.pattern;
+    document.getElementById('practiceMode').value = st.mode;
+    document.getElementById('vowelPattern').value = st.vowels;
+    routineIdx = n;
+    updateChips();
+    renderRoutine();
+    return true;
+}
+
+function addCurrentToRoutine() {
+    const c = readConfig();
+    // Un ejercicio cíclico no termina nunca: en una rutina se convierte en "subir"
+    const st = { pattern: c.pattern, mode: c.mode === 'cycle' ? 'loop' : c.mode, vowels: c.vowels };
+    store.set('customRoutine', [...store.get('customRoutine', []), st]);
+    renderRoutine();
+}
+function removeRoutineStep(i) {
+    const steps = store.get('customRoutine', []).slice();
+    steps.splice(i, 1);
+    store.set('customRoutine', steps);
+    renderRoutine();
+}
+function clearCustomRoutine() {
+    store.set('customRoutine', []);
+    renderRoutine();
 }
 
 /* ════════════════════════════════════════════════════
@@ -1064,8 +1235,29 @@ function vocOnStep(step, time, stepDur) {
         currentConfig = readConfig();
         const nb = nextBase();
         if (nb === 'stop') {
+            const steps = routineSteps();
+            if (steps.length && routineIdx + 1 < steps.length) {
+                // Siguiente ejercicio de la rutina: mismo reloj, sin cortes
+                const next = routineIdx + 1;
+                applyRoutineStep(next);
+                currentConfig = readConfig();
+                const { lo, hi } = baseBounds(currentConfig);
+                const isDesc = currentConfig.mode === 'loop-desc';
+                currentBaseIdx = isDesc ? hi : lo;
+                cycleDir = isDesc ? -1 : 1;
+                seq = buildSequence(currentBaseIdx, currentConfig);
+                seqCursor = -refSteps() - BREATH_STEPS;
+                const b = currentBaseIdx;
+                player.ui(time, () => {
+                    showHint(`Siguiente: ${stepLabel(steps[next])}`);
+                    renderRangeBar(b);
+                    document.getElementById('progressInfo').innerText = 'Respira…';
+                });
+                return;
+            }
             finishing = true;
-            player.ui(time, () => stopExercise('Ejercicio completado ✓'));
+            const msg = steps.length ? 'Rutina completada ✓' : 'Ejercicio completado ✓';
+            player.ui(time, () => stopExercise(msg));
             return;
         }
         currentBaseIdx = nb;
@@ -1123,6 +1315,7 @@ async function beginPlaying() {
 
     state = 'playing';
     setPlayBtnState('playing');
+    renderRoutine();
     soundEngine.keepAwake(true);   // que la pantalla no se apague mientras practicas
     document.getElementById('currentNote').classList.add('playing');
 
@@ -1151,6 +1344,7 @@ async function startExercise() {
     }
     if (state !== 'loading') return;   // se detuvo mientras cargaba
 
+    if (routineSteps().length) applyRoutineStep(0);
     currentConfig = readConfig();
     // "Bajar automático" empieza arriba; los demás modos, abajo.
     const { lo, hi } = baseBounds(currentConfig);
@@ -1184,6 +1378,7 @@ async function resumeExercise() {
 
 function stopExercise(message = 'Ejercicio detenido') {
     state     = 'idle';
+    routineIdx = 0;
     finishing = false;
     if (transport) transport.stop();
     player.cancel();
@@ -1192,6 +1387,7 @@ function stopExercise(message = 'Ejercicio detenido') {
     setPlayBtnState('idle');
     showHint('');
     renderRangeBar(null);
+    renderRoutine();
     document.getElementById('currentNote').classList.remove('playing');
     document.getElementById('currentNote').innerText  = '—';
     document.getElementById('currentVowel').innerText = '—';
