@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/transport.js"></script>
+    <script src="../../shared/note-player.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <style>
         /* ── Layout root ─────────────────────────── */
@@ -296,9 +297,66 @@
             opacity: 0.7;
             cursor: wait;
         }
-        .voc-play-btn.stop-mode {
-            background: linear-gradient(135deg, var(--danger), #ff3366);
-            box-shadow: 0 12px 30px -8px rgba(255,91,127,0.7), inset 0 1px 0 rgba(255,255,255,0.25);
+
+        /* Stop: solo aparece con el ejercicio en marcha o en pausa */
+        .voc-stop-btn {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: var(--surface-s);
+            border: 1px solid var(--border);
+            color: var(--danger);
+            cursor: pointer;
+            display: none;
+            place-items: center;
+            flex-shrink: 0;
+            transition: transform 0.12s;
+        }
+        .voc-stop-btn.show { display: grid; }
+        .voc-stop-btn:active { transform: scale(0.92); }
+
+        /* Estado del motor de audio */
+        .voc-engine {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            margin-left: 6px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+        }
+        .voc-engine-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--muted);
+        }
+        .voc-engine[data-kind="ok"]   .voc-engine-dot { background: var(--success); }
+        .voc-engine[data-kind="wait"] .voc-engine-dot { background: var(--warning); animation: voc-blink 1s infinite; }
+        .voc-engine[data-kind="bad"]  { color: var(--danger); border-color: var(--danger); }
+        .voc-engine[data-kind="bad"]  .voc-engine-dot { background: var(--danger); }
+        @keyframes voc-blink { 50% { opacity: 0.3; } }
+
+        /* Aviso: ajuste cambiado durante el ejercicio */
+        .voc-live-hint {
+            display: none;
+            margin-top: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--warning);
+        }
+        .voc-live-hint.show { display: block; }
+
+        .voc-semitone {
+            font-family: var(--font-head);
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
         }
 
         .voc-side-btn {
@@ -334,6 +392,10 @@
             Vocal · <span id="currentVowel">—</span>
         </div>
         <div class="voc-progress-tag" id="progressInfo">Selecciona y presiona ▶</div>
+        <button type="button" class="voc-engine" id="engineStatus" data-kind="wait" onclick="onEngineStatusTap()">
+            <span class="voc-engine-dot"></span><span id="engineText">Audio sin iniciar</span>
+        </button>
+        <div class="voc-live-hint" id="liveHint" role="status"></div>
     </div>
 
     <!-- ── Layout toggle ── -->
@@ -481,15 +543,19 @@
 <!-- ── Floating transport ── -->
 <div class="voc-transport">
     <button class="voc-side-btn" id="prevBtn" onclick="shiftNote(-1)" disabled aria-label="Bajar medio tono">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14M18 5 8 12l10 7z"/></svg>
+        <span class="voc-semitone">−½</span>
     </button>
 
-    <button class="voc-play-btn" id="playBtn" onclick="handlePlayBtn()" aria-label="Reproducir / detener">
+    <button class="voc-play-btn" id="playBtn" onclick="handlePlayBtn()" aria-label="Reproducir">
         <svg id="playIcon" width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 12 7-12 7z"/></svg>
     </button>
 
     <button class="voc-side-btn" id="nextBtn" onclick="shiftNote(1)" disabled aria-label="Subir medio tono">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 5v14M6 5l10 7L6 19z"/></svg>
+        <span class="voc-semitone">+½</span>
+    </button>
+
+    <button class="voc-stop-btn" id="stopBtn" onclick="stopExercise()" disabled aria-label="Detener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>
     </button>
 </div>
 
@@ -529,16 +595,7 @@ const vowelLabels = {
 /* ════════════════════════════════════════════════════
    ESTADO
    ════════════════════════════════════════════════════ */
-let isPlaying       = false;
-let isLoading       = false;
 let metEnabled      = false;
-let pianoInst       = null;
-let transport       = null;   // reloj compartido (shared/transport.js)
-let seq             = [];     // sequence (note names) currently sounding
-let seqCursor       = 0;      // position within seq (+ GAP_STEPS de silencio)
-let uiQ             = [];     // per-step UI payloads, drained by onDraw al ritmo del audio
-let pendingStop     = false;  // true cuando el modo ya terminó; se para al vaciar uiQ
-const GAP_STEPS     = 2;      // pasos de silencio entre repeticiones (= stepTime * 2)
 let currentSequence = [];   // notes being played this sequence
 let currentStepIdx  = -1;   // index in currentSequence
 let currentLayout   = 'radial';
@@ -562,6 +619,16 @@ function init() {
         document.getElementById('bpmVal').innerText = ev.target.value;
         updateChips();
     };
+
+    // Cualquier ajuste tocado durante el ejercicio avisa cuándo se aplica
+    const panel = document.getElementById('configPanel');
+    panel.addEventListener('change', onConfigChanged);
+    panel.addEventListener('input',  onConfigChanged);
+    panel.addEventListener('click',  ev => { if (ev.target.closest('.btn-mini')) onConfigChanged(ev); });
+
+    // Descargar el piano ya, para que el primer ▶ no espere a la red
+    player.onStatus(renderEngineStatus);
+    player.preload().catch(() => {});
 
     // Build initial radial with a preview sequence
     buildPreviewDisplay();
@@ -741,50 +808,40 @@ function setMet(v) {
 }
 
 /* ════════════════════════════════════════════════════
-   TRANSPORT — PLAY / STOP / SHIFT
+   TRANSPORT — PLAY / PAUSA / STOP / SHIFT
+   ────────────────────────────────────────────────────
+   Estados: idle → loading → playing ⇄ paused → idle
+   · transport.js decide CUÁNDO (un paso = una nota, BPM leído en vivo).
+   · note-player.js toca las notas y sincroniza la pantalla al audio.
+   · Los ajustes se releen al empezar cada repetición: cambiar patrón,
+     vocales, tesitura o modo no obliga a detener el ejercicio.
    ════════════════════════════════════════════════════ */
-function handlePlayBtn() {
-    if (isLoading) return;
-    if (isPlaying) {
-        stopExercise();
-    } else {
-        startExercise();
-    }
-}
+const player      = createNotePlayer('acoustic_grand_piano');
+const playNotes   = getAllNotes(1, 7);   // rango ampliado: los patrones suben hasta una octava
+const PLAY_OFFSET = 12;                  // notes[i] === playNotes[i + PLAY_OFFSET]
+const GAP_STEPS   = 2;                   // pasos de silencio entre repeticiones
 
-function setPlayBtnState(state) {
-    const btn  = document.getElementById('playBtn');
-    const icon = document.getElementById('playIcon');
-    const prev = document.getElementById('prevBtn');
-    const next = document.getElementById('nextBtn');
-
-    btn.classList.remove('loading', 'stop-mode');
-    if (state === 'loading') {
-        btn.classList.add('loading');
-        icon.innerHTML = '<circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="14" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle>';
-        prev.disabled = true;
-        next.disabled = true;
-    } else if (state === 'stop') {
-        btn.classList.add('stop-mode');
-        icon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
-        prev.disabled = false;
-        next.disabled = false;
-    } else {
-        // idle / play — ◀ ▶ solo tienen sentido durante el ejercicio
-        icon.innerHTML = '<path d="m8 5 12 7-12 7z"/>';
-        prev.disabled = true;
-        next.disabled = true;
-    }
-}
-
-let currentBaseIdx = 0;
+let state          = 'idle';
+let transport      = null;
 let currentConfig  = null;
-let cycleDir       = 1;   // 1 = ascending, -1 = descending (used by cycle mode)
-let clickNodes     = [];  // clicks de metrónomo agendados (cancelables al saltar/parar)
+let currentBaseIdx = 0;
+let cycleDir       = 1;       // 1 = sube, -1 = baja
+let seq            = [];      // notas de la repetición en curso
+let seqCursor      = 0;       // posición en seq (+ pasos de silencio)
+let finishing      = false;   // el modo terminó; se para al acabar el silencio
 
-// Rango ampliado para reproducir: los patrones suben hasta una octava sobre la base.
-const playNotes   = getAllNotes(1, 7);
-const PLAY_OFFSET = 12;   // notes[i] === playNotes[i + PLAY_OFFSET]
+function readConfig() {
+    const c = {
+        start:   parseInt(document.getElementById('startNote').value),
+        end:     parseInt(document.getElementById('endNote').value),
+        pattern: document.getElementById('pattern').value,
+        scale:   document.getElementById('scale').value,
+        vowels:  document.getElementById('vowelPattern').value,
+        mode:    document.getElementById('practiceMode').value
+    };
+    if (c.end < c.start) [c.start, c.end] = [c.end, c.start];
+    return c;
+}
 
 /* La nota más aguda del patrón no debe pasar de "Fin": la base sube
    como máximo hasta Fin − (salto del patrón). */
@@ -798,91 +855,21 @@ function baseBounds(config) {
     return { lo, hi };
 }
 
-async function startExercise() {
-    if (isPlaying || isLoading) return;
-
-    isLoading = true;
-    setPlayBtnState('loading');
-    document.getElementById('progressInfo').innerText = 'Cargando piano…';
-
-    try {
-        pianoInst = await soundEngine.get('acoustic_grand_piano');
-    } catch (err) {
-        console.error(err);
-        pianoInst = null;
-    }
-    isLoading = false;
-
-    if (!pianoInst) {
-        setPlayBtnState('idle');
-        document.getElementById('progressInfo').innerText = 'No se pudo cargar el sonido. Revisa tu conexión.';
-        return;
-    }
-
-    isPlaying = true;
-    setPlayBtnState('stop');
-    soundEngine.keepAwake(true);   // que la pantalla no se apague mientras practicas
-
-    // Mark hero as playing
-    document.getElementById('currentNote').classList.add('playing');
-
-    currentConfig = {
-        start:   parseInt(document.getElementById('startNote').value),
-        end:     parseInt(document.getElementById('endNote').value),
-        pattern: document.getElementById('pattern').value,
-        scale:   document.getElementById('scale').value,
-        vowels:  document.getElementById('vowelPattern').value,
-        mode:    document.getElementById('practiceMode').value,
-        bpm:     parseInt(document.getElementById('tempo').value)
-    };
-
-    if (currentConfig.end < currentConfig.start) {
-        [currentConfig.start, currentConfig.end] = [currentConfig.end, currentConfig.start];
-    }
-
-    // "Bajar automático" empieza arriba; los demás modos, abajo.
-    const { lo, hi } = baseBounds(currentConfig);
-    const isDesc = currentConfig.mode === 'loop-desc';
-    currentBaseIdx = isDesc ? hi : lo;
-    cycleDir  = isDesc ? -1 : 1;
-    pendingStop = false;
-    uiQ = [];
-    seq = buildSequence(currentBaseIdx, currentConfig);
-    seqCursor = 0;
-    currentSequence = seq;
-    currentStepIdx  = -1;
-    renderDisplay(seq, -1);
-    updateChips();
-
-    if (!transport) {
-        transport = createTransport({
-            // Una nota por paso: stepTime = 60/bpm. El BPM se fija al pulsar
-            // Play (igual que antes); todo se agenda con el reloj de audio.
-            getBpm: () => (currentConfig ? currentConfig.bpm : 100),
-            subdiv: 1,
-            onStep: vocOnStep,
-            onDraw: vocOnDraw,
-        });
-    }
-    await transport.start();
-}
-
-// Construye la secuencia de notas (nombres) para una nota base dada.
 function buildSequence(baseNoteIdx, config) {
-    const scaleInt      = scales[config.scale];
-    const patternGrades = patterns[config.pattern];
-    return patternGrades.map(grade => {
-        const octaveShift  = Math.floor(grade / 8);
-        const scaleDegree  = grade % 8;
-        const semitoneJump = scaleInt[scaleDegree] + (octaveShift * 12);
+    const scaleInt = scales[config.scale];
+    return patterns[config.pattern].map(grade => {
+        const semitoneJump = scaleInt[grade % 8] + Math.floor(grade / 8) * 12;
         return playNotes[baseNoteIdx + PLAY_OFFSET + semitoneJump];
     });
 }
 
-// Decide la siguiente nota base según el modo. Devuelve 'stop' al terminar.
+// Siguiente nota base según el modo, o 'stop' al terminar.
 function nextBase() {
     const c = currentConfig;
     const { lo, hi } = baseBounds(c);
+    // Si la tesitura cambió en vivo y la base quedó fuera, volver al rango.
+    if (currentBaseIdx > hi) return hi;
+    if (currentBaseIdx < lo) return lo;
     if (c.mode === 'single') return 'stop';
     if (c.mode === 'cycle') {
         if (hi === lo) return lo;
@@ -890,87 +877,152 @@ function nextBase() {
         if (currentBaseIdx + cycleDir < lo) cycleDir =  1;
         return currentBaseIdx + cycleDir;
     }
-    const nx = c.mode === 'loop' ? currentBaseIdx + 1 : currentBaseIdx - 1;
-    if (nx > hi || nx < lo) return 'stop';
-    return nx;
+    if (c.mode === 'loop')      cycleDir =  1;
+    if (c.mode === 'loop-desc') cycleDir = -1;
+    const nx = currentBaseIdx + cycleDir;
+    return (nx > hi || nx < lo) ? 'stop' : nx;
 }
 
-// Pasos de silencio tras la secuencia. Messa di voce sostiene 4 s:
-// esperar a que termine antes de la siguiente nota.
+// Messa di voce sostiene 4 s: esperar a que termine antes de la siguiente.
 function gapSteps(stepDur) {
     if (currentConfig.pattern !== 'messa') return GAP_STEPS;
-    return Math.max(GAP_STEPS, Math.ceil(4 / stepDur) - 1 + GAP_STEPS);
+    return Math.ceil(4 / stepDur) - 1 + GAP_STEPS;
 }
 
-function cancelClicks() {
-    clickNodes.forEach(o => { try { o.stop(0); } catch (_) {} });
-    clickNodes = [];
+function dirArrow() {
+    const m = currentConfig.mode;
+    if (m === 'single') return '';
+    return cycleDir > 0 ? ' ↑' : ' ↓';
 }
 
-// Un paso = una nota. Se llama con el tiempo exacto de audio.
+/* ── Reloj: un paso = una nota, agendado con el tiempo exacto de audio ── */
 function vocOnStep(step, time, stepDur) {
-    if (!isPlaying || pendingStop) return;
+    if (state !== 'playing' || finishing) return;
 
-    // ¿Terminó la secuencia actual (+ silencio)? → pasa a la siguiente base.
+    // Fin de la repetición (+ silencio) → aplicar ajustes y pasar a la siguiente base.
     if (seqCursor >= seq.length + gapSteps(stepDur)) {
+        currentConfig = readConfig();
         const nb = nextBase();
-        if (nb === 'stop') { pendingStop = true; return; }
+        if (nb === 'stop') {
+            finishing = true;
+            player.ui(time, () => stopExercise('Ejercicio completado ✓'));
+            return;
+        }
         currentBaseIdx = nb;
         seq = buildSequence(currentBaseIdx, currentConfig);
         seqCursor = 0;
+        player.ui(time, () => showHint(''));
     }
 
     const idx = seqCursor++;
     if (idx >= seq.length) return;   // paso de silencio
 
-    const note    = seq[idx];
-    const isMessa = currentConfig.pattern === 'messa';
-    const dur     = isMessa ? 4 : stepDur * 0.8;
-    if (pianoInst) pianoInst.play(note, time, { duration: dur, gain: 0.9 });
-    if (metEnabled) {
-        const osc = soundEngine.clickAt(time);
-        if (osc) clickNodes.push(osc);
-        if (clickNodes.length > 64) clickNodes = clickNodes.slice(-32);
-    }
+    const note  = seq[idx];
+    const dur   = currentConfig.pattern === 'messa' ? 4 : stepDur * 0.8;
+    player.note(note, time, { dur, gain: 0.9 });
+    if (metEnabled) player.click(time);
 
     const vowelList = vowelSets[currentConfig.vowels];
-    const c = currentConfig;
-    const arrow = c.mode === 'loop' ? ' ↑' : c.mode === 'loop-desc' ? ' ↓'
-                : c.mode === 'cycle' ? (cycleDir > 0 ? ' ↑' : ' ↓') : '';
-    uiQ.push({ time, seq, idx, note, base: currentBaseIdx, arrow, vowel: vowelList[idx % vowelList.length] });
+    const vowel = vowelList[idx % vowelList.length];
+    const base  = currentBaseIdx;
+    const arrow = dirArrow();
+    const s     = seq;
+    player.ui(time, () => {
+        currentSequence = s;
+        currentStepIdx  = idx;
+        document.getElementById('currentNote').innerText  = note;
+        document.getElementById('currentVowel').innerText = vowel;
+        document.getElementById('progressInfo').innerText = `Base: ${notes[base]}${arrow}`;
+        renderDisplay(s, idx);
+    });
 }
 
-// La UI se drena al ritmo del audio (el Transport llama a onDraw en el
-// momento en que suena cada paso), nunca con setTimeout.
-function vocOnDraw() {
-    // Cada entrada lleva su tiempo de audio: se muestra cuando suena de verdad,
-    // aunque la cola se haya vaciado por un salto ◀ ▶.
-    const now = soundEngine.now;
-    let it = null;
-    while (uiQ.length && uiQ[0].time <= now + 0.005) it = uiQ.shift();
-    if (it) {
-        currentSequence = it.seq;
-        currentStepIdx  = it.idx;
-        document.getElementById('currentNote').innerText  = it.note;
-        document.getElementById('currentVowel').innerText = it.vowel;
-        document.getElementById('progressInfo').innerText = `Base: ${notes[it.base]}${it.arrow}`;
-        updateChips();
-        renderDisplay(it.seq, it.idx);
-    } else if (pendingStop && !uiQ.length) {
-        stopExercise('Ejercicio completado ✓');
+function handlePlayBtn() {
+    if      (state === 'idle')    startExercise();
+    else if (state === 'playing') pauseExercise();
+    else if (state === 'paused')  resumeExercise();
+}
+
+/* Prepara la repetición en la base actual y arranca el reloj. */
+async function beginPlaying() {
+    seq = buildSequence(currentBaseIdx, currentConfig);
+    seqCursor = 0;
+    finishing = false;
+    currentSequence = seq;
+    currentStepIdx  = -1;
+    renderDisplay(seq, -1);
+    showHint('');
+
+    state = 'playing';
+    setPlayBtnState('playing');
+    soundEngine.keepAwake(true);   // que la pantalla no se apague mientras practicas
+    document.getElementById('currentNote').classList.add('playing');
+
+    if (!transport) {
+        transport = createTransport({
+            // BPM leído en vivo: mover el slider cambia el tempo al instante.
+            getBpm: () => parseInt(document.getElementById('tempo').value) || 100,
+            subdiv: 1,
+            onStep: vocOnStep
+        });
     }
+    await transport.start();
+}
+
+async function startExercise() {
+    state = 'loading';
+    setPlayBtnState('loading');
+    try {
+        await player.ready();
+    } catch (err) {
+        console.error(err);
+        state = 'idle';
+        setPlayBtnState('idle');
+        document.getElementById('progressInfo').innerText = 'No se pudo cargar el piano. Revisa tu conexión.';
+        return;
+    }
+    if (state !== 'loading') return;   // se detuvo mientras cargaba
+
+    currentConfig = readConfig();
+    // "Bajar automático" empieza arriba; los demás modos, abajo.
+    const { lo, hi } = baseBounds(currentConfig);
+    const isDesc = currentConfig.mode === 'loop-desc';
+    currentBaseIdx = isDesc ? hi : lo;
+    cycleDir = isDesc ? -1 : 1;
+    await beginPlaying();
+}
+
+function pauseExercise() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    if (transport) transport.stop();
+    player.cancel();
+    soundEngine.keepAwake(false);
+    setPlayBtnState('paused');
+    document.getElementById('currentNote').classList.remove('playing');
+    document.getElementById('progressInfo').innerText = `En pausa · Base ${notes[currentBaseIdx]}`;
+    showHint('');
+}
+
+async function resumeExercise() {
+    if (state !== 'paused') return;
+    try { await player.ready(); } catch (_) { return; }
+    // Retoma desde el inicio de la repetición en la misma base, con los ajustes actuales.
+    currentConfig = readConfig();
+    const { lo, hi } = baseBounds(currentConfig);
+    currentBaseIdx = Math.min(hi, Math.max(lo, currentBaseIdx));
+    await beginPlaying();
 }
 
 function stopExercise(message = 'Ejercicio detenido') {
-    isPlaying   = false;
-    pendingStop = false;
-    uiQ = [];
+    state     = 'idle';
+    finishing = false;
     if (transport) transport.stop();
-    if (pianoInst) pianoInst.stop();
-    cancelClicks();
+    player.cancel();
     soundEngine.keepAwake(false);
 
     setPlayBtnState('idle');
+    showHint('');
     document.getElementById('currentNote').classList.remove('playing');
     document.getElementById('currentNote').innerText  = '—';
     document.getElementById('currentVowel').innerText = '—';
@@ -980,19 +1032,98 @@ function stopExercise(message = 'Ejercicio detenido') {
     buildPreviewDisplay();
 }
 
+/* −½ / +½: en marcha salta ya a la nueva base; en pausa solo la elige. */
 function shiftNote(delta) {
-    if (!isPlaying || !currentConfig) return;
+    if ((state !== 'playing' && state !== 'paused') || !currentConfig) return;
+    currentConfig = readConfig();
     const { lo, hi } = baseBounds(currentConfig);
     const newIdx = currentBaseIdx + delta;
-    if (newIdx < lo || newIdx > hi) return;
+    if (newIdx < lo || newIdx > hi) { buzz(40); return; }
 
     currentBaseIdx = newIdx;
-    if (pianoInst) pianoInst.stop();
-    cancelClicks();
+    if (currentConfig.mode === 'cycle') cycleDir = delta > 0 ? 1 : -1;
+    buzz(12);
+    if (state === 'paused') {
+        document.getElementById('progressInfo').innerText = `En pausa · Base ${notes[currentBaseIdx]}`;
+        renderDisplay(buildSequence(currentBaseIdx, currentConfig), -1);
+        return;
+    }
+    player.cancel();
+    finishing = false;
     seq = buildSequence(currentBaseIdx, currentConfig);
     seqCursor = 0;
-    uiQ = [];
     renderDisplay(seq, -1);
+}
+
+function buzz(ms) {
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
+}
+
+function setPlayBtnState(s) {
+    const btn  = document.getElementById('playBtn');
+    const icon = document.getElementById('playIcon');
+    const active = s === 'playing' || s === 'paused';
+
+    btn.classList.toggle('loading', s === 'loading');
+    btn.setAttribute('aria-label', s === 'playing' ? 'Pausar' : s === 'paused' ? 'Continuar' : 'Reproducir');
+    if (s === 'loading') {
+        icon.innerHTML = '<circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="14" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle>';
+    } else if (s === 'playing') {
+        icon.innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/>';
+    } else {
+        icon.innerHTML = '<path d="m8 5 12 7-12 7z"/>';
+    }
+    document.getElementById('prevBtn').disabled = !active;
+    document.getElementById('nextBtn').disabled = !active;
+    document.getElementById('stopBtn').classList.toggle('show', active);
+    document.getElementById('stopBtn').disabled = !active;
+    renderEngineStatus();
+}
+
+/* ── Aviso de cambios en vivo ── */
+function showHint(text) {
+    const el = document.getElementById('liveHint');
+    el.textContent = text;
+    el.classList.toggle('show', !!text);
+}
+
+function onConfigChanged(ev) {
+    if (state !== 'playing') return;
+    const id = ev.target && ev.target.id;
+    if (id === 'tempo') return;   // el BPM se aplica al instante
+    showHint('Se aplica en la siguiente repetición');
+}
+
+/* ── Estado del motor de audio ── */
+function renderEngineStatus() {
+    const el  = document.getElementById('engineStatus');
+    const txt = document.getElementById('engineText');
+    let kind, label;
+    switch (player.status) {
+        case 'loading':
+            kind = 'wait'; label = 'Cargando piano…'; break;
+        case 'error':
+            kind = 'bad';  label = 'Sin piano · toca para reintentar'; break;
+        case 'suspended':
+            // Antes del primer toque es normal; durante el ejercicio, el sistema cortó el audio.
+            if (state === 'playing') { kind = 'bad'; label = 'Audio pausado por el sistema · toca para reanudar'; }
+            else { kind = 'ok'; label = 'Piano listo'; }
+            break;
+        case 'ready': {
+            const ms = player.latencyMs;
+            kind = 'ok'; label = ms ? `Audio listo · ${ms} ms` : 'Audio listo';
+            break;
+        }
+        default:
+            kind = 'wait'; label = 'Audio sin iniciar';
+    }
+    el.dataset.kind = kind;
+    txt.textContent = label;
+}
+
+function onEngineStatusTap() {
+    if (player.status === 'error') player.preload().catch(() => {});
+    else soundEngine.start();   // reanuda si el sistema lo suspendió
 }
 
 // Redraw on theme change

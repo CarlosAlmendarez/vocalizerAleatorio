@@ -100,6 +100,25 @@ await t.start();  t.stop();  t.subdiv = 2;  t.resetStep(0);
 - Metronome BPM is always the click rate regardless of meter denominator (6/8 at 120 =
   120 clicks/min); `beatUnit` is display-only.
 
+### Playing notes (`shared/note-player.js`)
+The layer between `sound-engine.js` and each app: *what* note sounds *when*, and what the
+screen shows at that moment. Load it after `sound-engine.js` (and `transport.js` if used).
+
+```js
+const player = createNotePlayer('acoustic_grand_piano');
+player.onStatus(s => …);        // 'loading' | 'ready' | 'suspended' | 'error'
+player.preload();               // on page load — first Play doesn't wait for the network
+await player.ready();           // from the Play gesture: instrument loaded + context running
+player.note('C4', t, { dur, gain });  player.click(t);   // t = AudioContext time
+player.ui(t, () => …);          // UI callback fired when the audio reaches t
+player.cancel();                // stops only what THIS player scheduled
+```
+
+- With `transport.js`, schedule inside `onStep` via `player.note/click/ui`; don't pass
+  `onDraw` or keep your own UI queue.
+- For one-off phrases (scales, chords) use `player.now + n` offsets — never `setTimeout`.
+- Reference implementation: `apps/vocalizer` (play/pause/stop, live config, engine status).
+
 ### Page load order (typical tool)
 1. `<head>`: `design.css`, then optionally `soundfont-player` + `sound-engine.js`.
 2. `<body data-page-id data-tool-name>` with the tool markup.

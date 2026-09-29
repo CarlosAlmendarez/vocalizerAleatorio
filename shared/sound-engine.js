@@ -112,6 +112,22 @@ class SoundEngine {
     // Devuelve un instrumento listo para tocar (carga desde CDN si es la primera vez).
     async get(name) {
         await this.start();
+        return this._load(name);
+    }
+
+    /**
+     * Descarga y decodifica un instrumento SIN esperar un gesto del usuario.
+     * Crea el AudioContext (queda suspendido hasta el primer toque, que ya
+     * lo reanuda _initIOSUnlock), así el primer Play no tiene que esperar la red.
+     */
+    preload(name) {
+        if (!this._ac) {
+            this._ac = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return this._load(name);
+    }
+
+    _load(name) {
         if (typeof Soundfont === 'undefined') {
             throw new Error(
                 'soundfont-player no está disponible. ' +
@@ -120,7 +136,10 @@ class SoundEngine {
             );
         }
         if (!this._cache[name]) {
-            this._cache[name] = Soundfont.instrument(this._ac, name);
+            this._cache[name] = Soundfont.instrument(this._ac, name).catch(err => {
+                delete this._cache[name];   // permitir reintentar si falló la red
+                throw err;
+            });
         }
         return this._cache[name];
     }
