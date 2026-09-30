@@ -346,7 +346,7 @@ function setPlayStyle(style) {
     store.set('style', style);
     document.querySelectorAll('.play-style .hand-btn').forEach(b => b.classList.toggle('on', b.dataset.style === style));
 }
-const piano = createNotePlayer('acoustic_grand_piano');
+const piano = createNotePlayer('acoustic_grand_piano', { range: [60, 83] });   // teclado dibujado: Do4–Si5
 piano.preload().catch(() => {});   // el primer toque no espera a la red
 let isPlaying = false;
 

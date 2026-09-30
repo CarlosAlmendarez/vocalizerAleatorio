@@ -366,7 +366,7 @@ let currentTuning     = INSTRUMENTS[currentInstrument].tunings[store.get('tuning
 let selectedString    = null;
 let audioCtx = null, analyser = null, mediaStream = null, rafId = null;
 let isListening = false, lastDetectTime = 0;
-const refPiano = createNotePlayer('acoustic_grand_piano');
+const refPiano = createNotePlayer('acoustic_grand_piano', { range: [23, 76] });   // Si0 (bajo 5 cuerdas) … Mi5 (violín)
 refPiano.preload().catch(() => {});   // el tono de referencia suena al primer toque
 let playingRefBtn = null;
 

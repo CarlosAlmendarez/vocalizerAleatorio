@@ -383,7 +383,7 @@
     let currentScaleKey = SCALES[store.get('scale')] ? store.get('scale') : 'mayor';
     let currentRootIdx  = Number.isInteger(store.get('root')) ? store.get('root') : 0;
     // Notas y resaltados se agendan con el reloj de audio (shared/note-player.js)
-    const piano         = createNotePlayer('acoustic_grand_piano');
+    const piano         = createNotePlayer('acoustic_grand_piano', { range: [48, 71] });   // teclado: Do3–Si4
     piano.preload().catch(() => {});   // el primer toque no espera a la red
     const SCALE_STEP_S  = 0.45;
     let isPlayingScale  = false;

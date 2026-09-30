@@ -542,7 +542,7 @@ let G = {
 };
 
 // ── Audio ────────────────────────────────────────────────────────
-const piano = createNotePlayer('acoustic_grand_piano');
+const piano = createNotePlayer('acoustic_grand_piano', { range: [60, 83] });   // teclado del juego: Do4–Si5
 piano.preload().catch(() => {});   // la primera pregunta suena sin esperar a la red
 function ensureAudio() {
     return piano.ready();

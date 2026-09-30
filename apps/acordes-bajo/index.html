@@ -321,7 +321,7 @@ const store   = createStore('acordes-bajo');
 let rootIdx   = Number.isInteger(store.get('root')) ? store.get('root') : 9;  // La / A
 let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'minor';
 
-const bass = createNotePlayer('electric_bass_finger');
+const bass = createNotePlayer('electric_bass_finger', { range: [28, 57] });   // Mi1 al aire … traste 14
 bass.preload().catch(() => {});   // el primer toque no espera a la red
 
 async function initAudio() {

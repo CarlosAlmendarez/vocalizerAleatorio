@@ -358,7 +358,7 @@ const store   = createStore('acordes-ukulele');
 let rootIdx   = Number.isInteger(store.get('root')) ? store.get('root') : 9;  // La / A
 let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'minor';
 
-const ukulele = createNotePlayer('acoustic_guitar_nylon');
+const ukulele = createNotePlayer('acoustic_guitar_nylon', { range: [60, 90] });   // Do4 al aire … traste 14 + cejillo 7
 ukulele.preload().catch(() => {});   // el primer rasgueo no espera a la red
 
 async function initAudio() {

@@ -111,7 +111,15 @@ test('subir automático: recorre la tesitura sin pasar de "Fin" y termina', asyn
   assert.equal(v.els.progressInfo.innerText, 'Ejercicio completado ✓');
   assert.equal(v.played.length, 30, '6 repeticiones de 5 notas (bases C4 a F4)');
   assert.equal(Math.max(...v.played.map(p => v.midi(p.note))), 72, 'la nota más aguda es C5');
+  assertInRange(v);
 });
+
+// Todo lo que suena debe estar dentro de las notas decodificadas (si no, sonaría en silencio)
+function assertInRange(v) {
+  const [lo, hi] = run(v.ctx, 'player.range.slice()');
+  const out = v.played.map(p => v.midi(p.note)).filter(m => m < lo || m > hi);
+  assert.deepEqual(out, [], `notas fuera del rango decodificado ${lo}–${hi}`);
+}
 
 test('bajar automático: empieza arriba y baja hasta el inicio', async () => {
   const v = createVocalizer();
@@ -184,6 +192,7 @@ test('referencia de acorde antes de cada repetición', async () => {
   assert.deepEqual(first3.map(p => p.note), ['C4', 'E4', 'G4'], 'acorde de Do antes de cantar');
   assert.ok(first3.every(p => p.time === first3[0].time), 'el acorde suena junto');
   assert.equal(v.played.length, 3 * (3 + 5), '3 repeticiones de referencia (3) + tríada (5)');
+  assertInRange(v);
 });
 
 test('rutina de agilidad: encadena 3 ejercicios sin detenerse', async () => {
@@ -211,6 +220,7 @@ test('messa di voce: la nota sostenida no se pisa con la siguiente', async () =>
   await v.play();
   await v.runUntilIdle();
   assert.deepEqual(v.played.map(p => p.note), ['E4', 'D#4', 'D4', 'C#4', 'C4']);
+  assertInRange(v);
   const t = v.played.map(p => p.time);
   for (let i = 1; i < t.length; i++) assert.ok(t[i] - t[i - 1] >= 4, 'separación menor que la nota de 4 s');
 });
@@ -229,4 +239,13 @@ test('micrófono: evalúa la afinación contra la nota que suena (tolera octavas
   assert.deepEqual(sing(E4 / 2 * Math.pow(2, 10 / 1200)), { state: 'ok',    text: 'afinado · -1 oct' });
   assert.deepEqual(sing(E4 * Math.pow(2, -40 / 1200)),    { state: 'close', text: 'bajo -40¢' });
   assert.deepEqual(sing(E4 * Math.pow(2, 80 / 1200)),     { state: 'off',   text: 'alto +80¢' });
+});
+
+test('rango decodificado: tesitura en el límite agudo con referencia de acorde', async () => {
+  const v = createVocalizer();
+  v.configure({ mode: 'loop', start: 'A6', end: 'B6', pattern: 'messa', ref: 'chord' });
+  await v.play();
+  await v.runUntilIdle();
+  assert.ok(v.played.length > 0);
+  assertInRange(v);
 });

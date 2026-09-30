@@ -24,6 +24,7 @@ inline `<script>`. `index.html` at the repo root is the launcher/home screen.
   - `vocalizer.test.js` — modes, pause, live changes, suspension, reference, routines, mic.
   - `apps.test.js` — transposer key detection, progression chord names.
   - `structure.test.js` — each app registered in shell `TOOLS`, home, `sw.js`; files exist.
+  - `ranges.test.js` — every note each app can play is inside its decoded `range`.
   Arrays coming out of a `vm` context have a different prototype: compare with `plain()`.
   When fixing a bug, add a test that fails without the fix. Also load the affected page in a
   browser — there are no DOM/visual tests.
@@ -118,7 +119,7 @@ The layer between `sound-engine.js` and each app: *what* note sounds *when*, and
 screen shows at that moment. Load it after `sound-engine.js` (and `transport.js` if used).
 
 ```js
-const player = createNotePlayer('acoustic_grand_piano');
+const player = createNotePlayer('acoustic_grand_piano', { range: [60, 83] });   // MIDI it can play
 player.onStatus(s => …);        // 'loading' | 'ready' | 'suspended' | 'error'
 player.preload();               // on page load — first Play doesn't wait for the network
 await player.ready();           // from the Play gesture: instrument loaded + context running
@@ -133,6 +134,12 @@ player.cancel();                // stops only what THIS player scheduled
 - Reference implementation: `apps/vocalizer` (play/pause/stop, live config, engine status).
 - Every pitched app uses it (escalas, acordes-*, afinador, entrenamiento-auditivo,
   progresiones, vocalizer): don't call `soundEngine.get()` / `inst.play()` directly in new code.
+- **Always pass `range`**: only those notes are decoded. The full piano is 88 notes ≈ **100 MB**
+  of uncompressed audio in memory (a real risk on phones); 2 octaves ≈ 27 MB. A note outside the
+  range plays **silently** (console warning only), so the range must cover everything the app can
+  play — `tests/ranges.test.js` computes every playable note per app and enforces it. The
+  vocalizer calls `player.setRange()` when the tessitura changes (old range is released).
+  Soundfont files key notes by MIDI, so `C#4`/`Db4`/`61` are the same note.
 - Call `preload()` at script top level (the first tap then doesn't wait for the CDN) and
   `cancel()` before re-triggering a strum/question so sounds don't pile up.
 

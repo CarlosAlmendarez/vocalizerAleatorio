@@ -201,7 +201,7 @@ let mode = 'notes'; // 'notes' | 'roman' | 'sigs'
 // ── Audio: piano compartido (shared/note-player.js) ─────────────
 // Antes usaba osciladores propios con su propio AudioContext; ahora suena
 // el mismo piano que el resto de la app, precargado y con arpegio suave.
-const piano = createNotePlayer('acoustic_grand_piano');
+const piano = createNotePlayer('acoustic_grand_piano', { range: [60, 83] });   // acordes y escala desde Do4
 piano.preload().catch(() => {});
 const CHORD_INTS = { maj:[0,4,7], min:[0,3,7], dim:[0,3,6] };
 const SHARP_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];

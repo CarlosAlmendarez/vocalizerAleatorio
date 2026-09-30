@@ -498,7 +498,7 @@ let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'minor'
 // ─────────────────────────────────────────────
 // AUDIO — acoustic_guitar_nylon via soundfont-player
 // ─────────────────────────────────────────────
-const guitar = createNotePlayer('acoustic_guitar_nylon');
+const guitar = createNotePlayer('acoustic_guitar_nylon', { range: [40, 85] });   // Mi2 al aire … traste 14 + cejillo 7
 guitar.preload().catch(() => {});   // el primer rasgueo no espera a la red
 
 async function initAudio() {

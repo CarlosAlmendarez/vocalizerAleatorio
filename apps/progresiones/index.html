@@ -519,8 +519,9 @@ const CHORD_STEPS = 4;     // corcheas por acorde (= 2 tiempos)
 
 // ── Instrument loading (shared/note-player.js) ────────────────────
 const players = {
-    piano:  createNotePlayer('acoustic_grand_piano'),
-    guitar: createNotePlayer('acoustic_guitar_nylon')
+    // acordes en la octava 4: fundamental + 7ª como máximo → Do4–Si5
+    piano:  createNotePlayer('acoustic_grand_piano', { range: [60, 83] }),
+    guitar: createNotePlayer('acoustic_guitar_nylon', { range: [60, 83] })
 };
 players[instrument].preload().catch(() => {});   // el instrumento guardado: el primer ▶ no espera a la red
 async function ensureInst() {

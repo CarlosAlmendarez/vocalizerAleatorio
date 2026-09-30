@@ -103,14 +103,20 @@ class SoundEngine {
      * Crea el AudioContext (queda suspendido hasta el primer toque, que ya
      * lo reanuda _initIOSUnlock), así el primer Play no tiene que esperar la red.
      */
-    preload(name) {
+    preload(name, range) {
         if (!this._ac) {
             this._ac = new (window.AudioContext || window.webkitAudioContext)();
         }
-        return this._load(name);
+        return this._load(name, range);
     }
 
-    _load(name) {
+    /**
+     * range = [midiMín, midiMáx] opcional: decodifica solo esas notas. El piano
+     * completo son 88 notas y ~100 MB de audio sin comprimir en memoria; las
+     * apps de acordes solo usan 2 octavas (~27 MB). Las notas fuera del rango
+     * suenan en silencio, así que el rango debe cubrir todo lo que la app toca.
+     */
+    _load(name, range) {
         if (typeof Soundfont === 'undefined') {
             throw new Error(
                 'soundfont-player no está disponible. ' +
@@ -118,13 +124,28 @@ class SoundEngine {
                 'soundfont-player.js cargó correctamente.'
             );
         }
-        if (!this._cache[name]) {
-            this._cache[name] = Soundfont.instrument(this._ac, name).catch(err => {
-                delete this._cache[name];   // permitir reintentar si falló la red
+        const key = range ? name + '|' + range[0] + '-' + range[1] : name;
+        if (!this._cache[key]) {
+            const opts = range ? { notes: SoundEngine.noteNames(range[0], range[1]) } : undefined;
+            this._cache[key] = Soundfont.instrument(this._ac, name, opts).catch(err => {
+                delete this._cache[key];   // permitir reintentar si falló la red
                 throw err;
             });
         }
-        return this._cache[name];
+        return this._cache[key];
+    }
+
+    // Olvida un instrumento cargado (p. ej. un rango que ya no se usa) para liberar memoria
+    release(name, range) {
+        delete this._cache[range ? name + '|' + range[0] + '-' + range[1] : name];
+    }
+
+    // Nombres tal como vienen en los archivos de soundfont (bemoles: 'Db4')
+    static noteNames(lo, hi) {
+        const F = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+        const out = [];
+        for (let m = Math.max(21, lo); m <= Math.min(108, hi); m++) out.push(F[m % 12] + (Math.floor(m / 12) - 1));
+        return out;
     }
 
     /**

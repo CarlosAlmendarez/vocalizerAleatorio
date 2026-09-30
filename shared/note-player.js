@@ -5,7 +5,8 @@
  * y qué se ve en pantalla en ese momento". Antes cada app lo resolvía a su
  * manera (setTimeout, colas propias, pianoInst.stop() global…).
  *
- *   const player = createNotePlayer('acoustic_grand_piano');
+ *   const player = createNotePlayer('acoustic_grand_piano', { range: [60, 83] });
+ *                                     // range: MIDI que la app puede tocar (menos memoria)
  *   player.onStatus(s => …);          // 'loading' | 'ready' | 'suspended' | 'error'
  *   player.preload();                 // descarga el instrumento sin esperar a Play
  *   await player.ready();             // instrumento listo + audio activo
@@ -24,8 +25,10 @@
 (function (global) {
   'use strict';
 
-  function NotePlayer(instrument) {
+  function NotePlayer(instrument, opts) {
     this.instrument = instrument;
+    this.range      = (opts && opts.range) || null;   // [midiMín, midiMáx] o null = todas
+    this._warned    = {};
     this.status     = 'idle';
     this._inst      = null;
     this._loading   = null;
@@ -86,7 +89,7 @@
     if (this._loading) return this._loading;
     this._setStatus('loading');
     this._loading = Promise.resolve()
-      .then(function () { return soundEngine.preload(self.instrument); })
+      .then(function () { return soundEngine.preload(self.instrument, self.range); })
       .then(function (inst) {
         self._inst = inst;
         self._loading = null;
@@ -116,8 +119,45 @@
     }
   };
 
+  /**
+   * Cambia el rango de notas (p. ej. el vocalizador al cambiar de tesitura).
+   * Si el nuevo rango ya está cubierto no hace nada; si no, carga el nuevo
+   * subconjunto en segundo plano y lo cambia al estar listo, sin silencios.
+   */
+  NotePlayer.prototype.setRange = function (lo, hi) {
+    var r = this.range;
+    if (r && lo >= r[0] && hi <= r[1]) return Promise.resolve(this._inst);
+    var self = this, next = [lo, hi], prev = r;
+    this.range = next;
+    if (!this._inst) { this._loading = null; return this.preload(); }
+    return Promise.resolve(soundEngine.preload(this.instrument, next)).then(function (inst) {
+      if (self.range === next) {
+        self._inst = inst;
+        // Liberar el rango anterior: si no, cada cambio de tesitura acumularía memoria
+        if (prev && soundEngine.release) soundEngine.release(self.instrument, prev);
+      }
+      return inst;
+    });
+  };
+
+  function toMidi(note) {
+    if (typeof note === 'number') return note;
+    var m = /^([A-Ga-g])(#|b)?(-?\d+)$/.exec(note);
+    if (!m) return null;
+    var pc = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1].toUpperCase()] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+    return (parseInt(m[3], 10) + 1) * 12 + pc;
+  }
+
   NotePlayer.prototype.note = function (note, time, opts) {
     if (!this._inst || !note) return null;
+    // Fuera del rango decodificado sonaría en silencio: avisar (una vez por nota)
+    if (this.range) {
+      var mm = toMidi(note);
+      if (mm !== null && (mm < this.range[0] || mm > this.range[1]) && !this._warned[mm]) {
+        this._warned[mm] = true;
+        console.warn('[NotePlayer] ' + note + ' está fuera del rango decodificado ' + this.range.join('–') + ' de ' + this.instrument);
+      }
+    }
     opts = opts || {};
     var dur  = opts.dur != null ? opts.dur : (opts.duration != null ? opts.duration : 1);
     var node = this._inst.play(note, time, { duration: dur, gain: opts.gain != null ? opts.gain : 0.9 });
@@ -161,6 +201,6 @@
   };
 
   global.NotePlayer = NotePlayer;
-  global.createNotePlayer = function (instrument) { return new NotePlayer(instrument); };
+  global.createNotePlayer = function (instrument, opts) { return new NotePlayer(instrument, opts); };
 
 }(typeof window !== 'undefined' ? window : this));

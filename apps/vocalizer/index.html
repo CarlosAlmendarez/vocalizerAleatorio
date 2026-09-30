@@ -1031,6 +1031,7 @@ function updateRangeWarning() {
 
 function updateChips() {
     updateRangeWarning();
+    if (typeof player !== 'undefined') syncPlayerRange();
     const patternEl = document.getElementById('pattern');
     const vowelEl   = document.getElementById('vowelPattern');
     const bpmEl     = document.getElementById('tempo');
@@ -1257,7 +1258,20 @@ function clearCustomRoutine() {
    · Los ajustes se releen al empezar cada repetición: cambiar patrón,
      vocales, tesitura o modo no obliga a detener el ejercicio.
    ════════════════════════════════════════════════════ */
-const player      = createNotePlayer('acoustic_grand_piano');
+// Rango según la tesitura guardada (se ajusta en syncPlayerRange al cambiarla)
+const player      = createNotePlayer('acoustic_grand_piano', { range: tesituraRange() });
+
+/* Notas que el ejercicio puede tocar: de "Inicio" a "Fin" + 7 (el acorde de
+   referencia sobre la base más aguda en messa di voce). notes[0] = Do2 = MIDI 36. */
+function tesituraRange() {
+    const st = createStore('vocalizer');
+    const s = parseInt(st.get('input:startNote', 24), 10), e = parseInt(st.get('input:endNote', 48), 10);
+    return [36 + Math.min(s, e), 36 + Math.max(s, e) + 7];
+}
+function syncPlayerRange() {
+    const c = readConfig();
+    return player.setRange(36 + c.start, 36 + c.end + 7).catch(() => {});
+}
 const playNotes   = getAllNotes(1, 7);   // rango ampliado: los patrones suben hasta una octava
 const PLAY_OFFSET = 12;                  // notes[i] === playNotes[i + PLAY_OFFSET]
 const GAP_STEPS   = 2;                   // pasos de silencio entre repeticiones
@@ -1504,6 +1518,7 @@ async function startExercise() {
     state = 'loading';
     setPlayBtnState('loading');
     try {
+        await syncPlayerRange();   // las notas de esta tesitura, decodificadas antes de sonar
         await player.ready();
     } catch (err) {
         console.error(err);
