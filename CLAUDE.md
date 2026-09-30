@@ -180,6 +180,13 @@ as the use case allows (lowest string × 0.75, ~65 Hz for voice): cost grows wit
 - Home page sections `#tools`, `#practice`, `#settings` back the bottom-nav tabs.
 - Colors: use tokens; for alpha use `rgba(var(--accent-rgb|--success-rgb|--danger-rgb), a)`.
 
+### Device diagnostics (`shared/diagnostics.js`)
+Home → Ajustes → "Diagnóstico del dispositivo": runs on the user's real phone what automated
+tests can't (audio state/latency, audible test tone, `Transport.validate` on 16ths, optional
+mic + YIN, service worker/cached instruments, storage quota, wake lock) and produces a text
+report to copy. `MTDiag.run(container, { root, mic })` must be called from a user gesture.
+When a user reports a device-specific problem, ask for this report first.
+
 ### Saved settings (`shared/settings.js`)
 Each tool remembers its settings between visits in `localStorage['mt-settings:<app>']`:
 ```js

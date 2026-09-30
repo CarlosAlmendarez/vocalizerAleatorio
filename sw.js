@@ -10,7 +10,7 @@
  * Al cambiar la lista de archivos o la estrategia, subir VERSION.
  * ---------------------------------------------------------------------------
  */
-const VERSION     = 'mt-v3';
+const VERSION     = 'mt-v4';
 const SHELL_CACHE = VERSION + '-shell';
 const ASSET_CACHE = 'mt-assets-v1';   // instrumentos/fuentes: no cambian, sobreviven a versiones
 
@@ -23,7 +23,7 @@ const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'shared/design.css', 'shared/shell.js', 'shared/sound-engine.js', 'shared/note-player.js',
   'shared/transport.js', 'shared/theory.js', 'shared/audio-utils.js', 'shared/settings.js',
-  'shared/pitch.js', 'shared/boot.js',
+  'shared/pitch.js', 'shared/boot.js', 'shared/diagnostics.js',
   'shared/icons/icon-192.png', 'shared/icons/icon-512.png',
   ...APPS.map(a => 'apps/' + a + '/')
 ];

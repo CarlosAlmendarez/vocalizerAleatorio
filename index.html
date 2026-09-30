@@ -78,6 +78,23 @@
       color: var(--ink-dim); font: 600 12px var(--font-sans); cursor: pointer;
     }
     .hs-theme.active { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
+    /* ---- Diagnóstico ---- */
+    .hs-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-dim); margin-bottom: 10px; }
+    .diag-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+    .diag-list:empty { display: none; }
+    .diag-row {
+      display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; align-items: baseline;
+      padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .diag-icon { grid-row: span 2; font-weight: 800; text-align: center; }
+    .diag-name { font-weight: 700; color: var(--ink); }
+    .diag-detail { color: var(--muted); line-height: 1.35; }
+    .diag-row[data-status="ok"]   .diag-icon { color: var(--success); }
+    .diag-row[data-status="warn"] .diag-icon { color: var(--warning); }
+    .diag-row[data-status="fail"] .diag-icon { color: var(--danger); }
+    .diag-row[data-status="fail"] { border-color: rgba(var(--danger-rgb), .4); }
+    .diag-row[data-status="run"]  .diag-icon { color: var(--accent); }
     /* ---- Footer ---- */
     .home-footer {
       text-align: center; padding: 32px 0 16px;
@@ -368,6 +385,15 @@
     </div>
 
     <div class="section-card home-setting">
+      <div class="hs-title">Diagnóstico del dispositivo</div>
+      <div class="hs-desc">Comprueba en este teléfono el audio, la precisión del tempo, el modo sin conexión y el almacenamiento. Si algo no funciona, copia el informe y compártelo.</div>
+      <label class="hs-check"><input type="checkbox" id="diagMic"> Incluir prueba de micrófono (pide permiso)</label>
+      <button class="btn-mini" id="diagBtn" onclick="runDiagnostics()" style="width:100%">Ejecutar diagnóstico</button>
+      <div class="diag-list" id="diagList"></div>
+      <button class="btn-mini" id="diagCopy" onclick="copyDiag()" style="width:100%" hidden>Copiar informe</button>
+    </div>
+
+    <div class="section-card home-setting">
       <div class="hs-title">Ajustes guardados</div>
       <div class="hs-desc">Cada herramienta recuerda tu última configuración (tesitura, BPM, instrumento…). Puedes volver a los valores iniciales.</div>
       <button class="btn-mini" id="resetBtn" onclick="resetSettings()" style="width:100%">Restablecer todas las herramientas</button>
@@ -377,7 +403,30 @@
   <div class="home-footer">MusicTools · Herramientas libres para músicos</div>
 
   <script src="shared/shell.js"></script>
+  <script src="shared/diagnostics.js"></script>
   <script>
+  // ── Ajustes: diagnóstico del dispositivo (shared/diagnostics.js) ──
+  let diagReport = null;
+  async function runDiagnostics() {
+      const btn = document.getElementById('diagBtn');
+      btn.disabled = true;
+      btn.textContent = 'Comprobando…';
+      document.getElementById('diagCopy').hidden = true;
+      try {
+          diagReport = await MTDiag.run(document.getElementById('diagList'), { root: './', mic: document.getElementById('diagMic').checked });
+          document.getElementById('diagCopy').hidden = false;
+      } finally {
+          btn.disabled = false;
+          btn.textContent = 'Repetir diagnóstico';
+      }
+  }
+  async function copyDiag() {
+      if (!diagReport) return;
+      const btn = document.getElementById('diagCopy');
+      try { await navigator.clipboard.writeText(diagReport.text()); btn.textContent = '✓ Informe copiado'; }
+      catch (_) { btn.textContent = 'No se pudo copiar: selecciona el texto a mano'; }
+  }
+
   // ── Ajustes: tema ──
   function renderThemes() {
       const current = MT.getTheme();
