@@ -22,8 +22,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
+  # Pruebas: teoría musical, digitaciones, detector de tono, vocalizador,
+  # estructura del sitio. Si alguna falla, NO se publica.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ejecutar pruebas
+        run: node --test tests/*.test.js
+
   deploy:
+    needs: test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

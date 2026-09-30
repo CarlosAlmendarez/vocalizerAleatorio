@@ -15,8 +15,18 @@ inline `<script>`. `index.html` at the repo root is the launcher/home screen.
 - **Local dev:** serve the repo root over HTTP — e.g. `python3 -m http.server 8000` — then
   open `http://localhost:8000/`. Do **not** open files with `file://`: the tuner and any
   mic feature need `getUserMedia`, which requires `localhost` or HTTPS.
-- **No build, lint, or test tooling exists.** Verify changes by loading the affected page
-  in a browser.
+- **Tests:** `node --test tests/*.test.js` (Node ≥ 20, no dependencies, ~2 s). The deploy
+  workflow runs them first and **does not publish if any fails**. They load the real browser
+  code into `vm` contexts (`tests/helpers.js`) with a fake DOM/AudioContext:
+  - `theory.test.js` — spelling, scales, chords, degrees, transposition.
+  - `voicings.test.js` — every guitar/ukulele/bass position sounds exactly its chord.
+  - `pitch.test.js` — YIN accuracy (< 2 cents, no octave errors) with seeded noise.
+  - `vocalizer.test.js` — modes, pause, live changes, suspension, reference, routines, mic.
+  - `apps.test.js` — transposer key detection, progression chord names.
+  - `structure.test.js` — each app registered in shell `TOOLS`, home, `sw.js`; files exist.
+  Arrays coming out of a `vm` context have a different prototype: compare with `plain()`.
+  When fixing a bug, add a test that fails without the fix. Also load the affected page in a
+  browser — there are no DOM/visual tests.
 - **Deploy:** `.github/workflows/static.yml` publishes the entire repo to GitHub Pages on
   every push to `main`. The published site lives under a `/vocalizerAleatorio/` path
   prefix — keep this in mind for anything path-sensitive (see `ROOT` below).
