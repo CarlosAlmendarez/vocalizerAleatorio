@@ -4,7 +4,7 @@
    Apply theme: <html data-theme="neon|minimal|amber">
    ===================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,800;1,9..144,700&family=Instrument+Serif:ital@0;1&display=swap');
+/* Fuentes: las carga shared/boot.js según el tema activo (sin bloquear el dibujo) */
 
 /* =====================================================
    THEME TOKENS — default = Neón Midnight

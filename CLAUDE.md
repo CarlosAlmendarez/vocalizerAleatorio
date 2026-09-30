@@ -56,8 +56,11 @@ Three themes — `neon` (default, dark), `minimal` (light), `amber` (dark) — s
 properties (`--accent`, `--ink`, `--bg`, `--surface`, `--radius`, `--font-head`, …).
 **Always style with these tokens, never hardcoded colors**, so all three themes work.
 
-- `shell.js` applies the stored theme (`localStorage['mt-theme']`) to `<html>` *before*
-  injecting the shell to avoid a flash, and exposes a theme-cycle button.
+- `shared/boot.js` (in every page's `<head>`, right after `design.css`) applies the stored
+  theme (`localStorage['mt-theme']`) before first paint — `shell.js` runs at the end of the
+  body, too late to avoid a flash — and loads **only the active theme's** Google Fonts without
+  blocking render. Never put a font `@import` back in `design.css` (it blocks first paint);
+  `shell.js` calls `MT_loadThemeFonts(id)` on theme change and exposes the theme button.
 - Canvas-based tools (tuner needle, etc.) can't use CSS vars directly: read them via
   `window.getMTThemeAccent()`, `getMTThemeInk()`, `getMTThemeAccentRgb()`, etc., and
   listen for the `mt-theme-change` window event to redraw.
@@ -66,7 +69,7 @@ properties (`--accent`, `--ink`, `--bg`, `--surface`, `--radius`, `--font-head`,
 ### Audio (`shared/sound-engine.js` + `shared/audio-utils.js`)
 Pages that produce pitched sound load, in the `<head>`:
 ```html
-<script src="https://cdn.jsdelivr.net/npm/soundfont-player/dist/soundfont-player.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.js"></script>
 <script src="../../shared/sound-engine.js"></script>
 ```
 - `soundEngine` is a **global singleton** wrapping one shared `AudioContext`. Instruments
@@ -157,7 +160,8 @@ Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 - Playback still uses MIDI/sharp names; spelling is for display (and `Theory.pc()` for pitch).
 
 ### Page load order (typical tool)
-1. `<head>`: `design.css`, then optionally `soundfont-player` + `sound-engine.js`.
+1. `<head>`: `design.css`, `boot.js`, then optionally `soundfont-player` + `sound-engine.js`.
+   Keep soundfont-player pinned to the same version everywhere (also in `sw.js`); a test enforces it.
 2. `<body data-page-id data-tool-name>` with the tool markup.
 3. Inline `<script>` with the tool logic (often wrapped so it runs on `DOMContentLoaded`).
 4. `shared/audio-utils.js` if used.

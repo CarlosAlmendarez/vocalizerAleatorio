@@ -63,6 +63,7 @@
   }
 
   function applyTheme(id) {
+    if (window.MT_loadThemeFonts) window.MT_loadThemeFonts(id);   // boot.js
     document.documentElement.setAttribute('data-theme', id);
     storeTheme(id);
     updateThemeBtn(id);

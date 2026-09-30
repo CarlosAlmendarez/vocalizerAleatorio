@@ -65,3 +65,24 @@ test('JavaScript compartido e inicio sin errores de sintaxis', () => {
 test('secciones del menú inferior existen en el inicio', () => {
   for (const id of ['tools', 'practice', 'settings']) assert.ok(home.includes(`id="${id}"`), `falta #${id}`);
 });
+
+test('soundfont-player con versión fija e igual en todas las páginas y en sw.js', () => {
+  const files = [...APPS.map(a => `apps/${a}/index.html`), 'sw.js'];
+  const versions = new Set();
+  for (const f of files) {
+    const src = read(f);
+    assert.ok(!src.includes('npm/soundfont-player/'), `${f}: soundfont-player sin versión`);
+    [...src.matchAll(/npm\/soundfont-player@([\d.]+)\//g)].forEach(m => versions.add(m[1]));
+  }
+  assert.equal(versions.size, 1, `versiones distintas: ${[...versions].join(', ')}`);
+});
+
+test('boot.js en el <head> de cada página (tema antes del primer dibujo) y CSS sin @import', () => {
+  for (const f of ['index.html', ...APPS.map(a => `apps/${a}/index.html`)]) {
+    const html = read(f);
+    const head = html.slice(0, html.indexOf('</head>'));
+    const css = head.indexOf('design.css'), boot = head.indexOf('shared/boot.js');
+    assert.ok(boot > css && css >= 0, `${f}: boot.js debe ir en el <head>, después de design.css`);
+  }
+  assert.ok(!/@import/.test(read('shared/design.css')), 'design.css no debe usar @import (bloquea el dibujo)');
+});
