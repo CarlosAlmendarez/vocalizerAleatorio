@@ -11,6 +11,8 @@
  *   const { curve, notes } = Melody.analyze(an.frames);
  *       curve[i]  altura limpia del frame i (MIDI con decimales, NaN = silencio)
  *       notes     [{ start, end, i0, i1, midi, note, cents, wobble, level }]
+ *   Melody.applyCuts(frames, curve, notes, [['split', i], ['merge', i], …])
+ *       en orden: separa una nota en el frame i / une la nota que empieza en i con la anterior
  *   Melody.keyOf(notes)        → { tonic: pc, type: 'major'|'minor', score } o null
  *   Melody.stats(notes, 25)    → { count, inTune, meanCents, low, high, worst }
  *   Melody.toMidiFile(notes)   → Uint8Array (.mid)
@@ -268,29 +270,68 @@
     }
     segs = segs.reduce(function (all, sg) { return all.concat(splitDips(sg)); }, []);
 
-    // 7) Propiedades de cada nota (sin el ataque ni la caída: 15 % a cada lado)
+    // 7) Propiedades de cada nota
     var notes = [];
     segs.forEach(function (sg) {
-      var a = sg[0], b = sg[1], len = b - a + 1;
-      if (len * hop < minDur) return;
-      var trim = Math.floor(len * 0.15), sum = 0, cnt = 0, level = 0, q;
-      for (q = a + trim; q <= b - trim; q++) { sum += curve[q]; cnt++; }
-      for (q = a; q <= b; q++) level = Math.max(level, r[q]);
-      var midi = sum / cnt, v = 0;
-      for (q = a + trim; q <= b - trim; q++) v += (curve[q] - midi) * (curve[q] - midi);
-      var note = Math.round(midi);
-      notes.push({
-        start: frames[a].t - hop / 2,
-        end: frames[b].t + hop / 2,
-        i0: a, i1: b,
-        midi: midi,
-        note: note,
-        cents: Math.round((midi - note) * 100),
-        wobble: Math.round(Math.sqrt(v / cnt) * 100),   // desviación típica en cents (vibrato o inestabilidad)
-        level: level
-      });
+      if ((sg[1] - sg[0] + 1) * hop < minDur) return;
+      var nt = noteFrom(frames, curve, sg[0], sg[1]);
+      if (nt) notes.push(nt);
     });
     return { curve: curve, notes: notes };
+  }
+
+  /** Nota de los frames a..b: altura media sin el ataque ni la caída (15 % a cada lado). */
+  function noteFrom(frames, curve, a, b) {
+    var hop = frames.length > 1 ? frames[1].t - frames[0].t : 0.01;
+    var len = b - a + 1, trim = Math.floor(len * 0.15), sum = 0, cnt = 0, level = 0, q;
+    for (q = a + trim; q <= b - trim; q++) if (!isNaN(curve[q])) { sum += curve[q]; cnt++; }
+    if (!cnt) for (q = a; q <= b; q++) if (!isNaN(curve[q])) { sum += curve[q]; cnt++; }
+    if (!cnt) return null;
+    for (q = a; q <= b; q++) level = Math.max(level, frames[q].rms);
+    var midi = sum / cnt, v = 0;
+    for (q = a + trim; q <= b - trim; q++) if (!isNaN(curve[q])) v += (curve[q] - midi) * (curve[q] - midi);
+    var note = Math.round(midi);
+    return {
+      start: frames[a].t - hop / 2,
+      end: frames[b].t + hop / 2,
+      i0: a, i1: b,
+      midi: midi,
+      note: note,
+      cents: Math.round((midi - note) * 100),
+      wobble: Math.round(Math.sqrt(v / cnt) * 100),   // desviación típica en cents (vibrato o inestabilidad)
+      level: level
+    };
+  }
+
+  /**
+   * Correcciones a mano de la separación automática (edición), EN EL ORDEN en
+   * que se hicieron (separar y luego unir lo separado vuelve a lo de antes):
+   *   ['split', f]   parte en el frame f la nota que lo contiene (cada parte ≥ 4 frames)
+   *   ['merge', i0]  une la nota que empieza en i0 con la anterior
+   */
+  function applyCuts(frames, curve, notes, ops) {
+    var out = notes.slice();
+    (ops || []).forEach(function (op) {
+      var j, n;
+      if (op[0] === 'merge') {
+        for (j = 1; j < out.length; j++) {
+          if (out[j].i0 !== op[1]) continue;
+          n = noteFrom(frames, curve, out[j - 1].i0, out[j].i1);
+          if (n) out.splice(j - 1, 2, n);
+          return;
+        }
+      } else if (op[0] === 'split') {
+        var f = op[1];
+        for (j = 0; j < out.length; j++) {
+          n = out[j];
+          if (f - n.i0 < 4 || n.i1 - f + 1 < 4) continue;
+          var a = noteFrom(frames, curve, n.i0, f - 1), b = noteFrom(frames, curve, f, n.i1);
+          if (a && b) out.splice(j, 1, a, b);
+          return;
+        }
+      }
+    });
+    return out;
   }
 
   /* ── Tonalidad (perfiles de Krumhansl-Kessler) ─────────────────────── */
@@ -412,7 +453,7 @@
 
   global.Melody = {
     VOICE_MIN_HZ: VOICE_MIN_HZ, VOICE_MAX_HZ: VOICE_MAX_HZ,
-    createAnalyzer: createAnalyzer, analyze: analyze, keyOf: keyOf, stats: stats,
+    createAnalyzer: createAnalyzer, analyze: analyze, noteFrom: noteFrom, applyCuts: applyCuts, keyOf: keyOf, stats: stats,
     toMidiFile: toMidiFile, toWav: toWav
   };
 

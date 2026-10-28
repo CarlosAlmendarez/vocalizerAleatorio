@@ -239,3 +239,24 @@ test('rendimiento: 10 s de voz se analizan mucho más rápido que en tiempo real
   const ms = Date.now() - t0, sec = samples.length / 48000;
   assert.ok(ms < sec * 1000 * 0.25, `${ms} ms para ${sec.toFixed(1)} s de audio`);
 });
+
+test('edición: separar una nota en dos y unir dos notas a mano', () => {
+  // Ligado La4–Si4: se separa sola en 2; unirla → 1; separar la unida en su mitad → 2 otra vez
+  const { samples } = sing([{ midi: 69, dur: 0.5 }, { midi: 71, dur: 0.5, gap: 0, glide: 0.03 }]);
+  const { frames, curve, notes } = analyzeSamples(samples);
+  assert.equal(notes.length, 2);
+  const merged = Melody.applyCuts(frames, curve, notes, [['merge', notes[1].i0]]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].i0, notes[0].i0);
+  assert.equal(merged[0].i1, notes[1].i1);
+  assert.ok(merged[0].wobble > 50, 'la unida abarca las dos alturas');
+  const split = Melody.applyCuts(frames, curve, notes, [['merge', notes[1].i0], ['split', notes[1].i0]]);
+  assert.deepEqual(plain(split.map(n => n.note)), [69, 71]);
+  // El orden importa: separar y después unir lo separado vuelve a la nota original
+  const mid = Math.round((notes[0].i0 + notes[0].i1) / 2);
+  const back = Melody.applyCuts(frames, curve, notes, [['split', mid], ['merge', mid]]);
+  assert.deepEqual(plain(back.map(n => [n.i0, n.i1])), plain(notes.map(n => [n.i0, n.i1])));
+  // Un corte demasiado cerca del borde (< 4 frames) se ignora; cortes en el silencio, también
+  assert.equal(Melody.applyCuts(frames, curve, notes, [['split', notes[0].i0 + 2]]).length, 2);
+  assert.equal(Melody.applyCuts(frames, curve, notes, [['split', 0], ['merge', 12345]]).length, 2);
+});

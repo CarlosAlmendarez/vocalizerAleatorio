@@ -25,6 +25,8 @@ inline `<script>`. `index.html` at the repo root is the launcher/home screen.
   - `apps.test.js` — transposer key detection, progression chord names.
   - `structure.test.js` — each app registered in shell `TOOLS`, home, `sw.js`; files exist.
   - `ranges.test.js` — every note each app can play is inside its decoded `range`.
+  - `melody.test.js` — voice analysis on synthetic singing: notes, cents, vibrato, legato, weak mic, cuts.
+  - `psola.test.js` — pitch editing: target pitch reached, formants kept, unedited audio identical.
   Arrays coming out of a `vm` context have a different prototype: compare with `plain()`.
   When fixing a bug, add a test that fails without the fix. Also load the affected page in a
   browser — there are no DOM/visual tests.
@@ -173,6 +175,15 @@ Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 3. Inline `<script>` with the tool logic (often wrapped so it runs on `DOMContentLoaded`).
 4. `shared/audio-utils.js` if used.
 5. `shared/shell.js` **last**.
+
+### Voice analysis and editing (`shared/melody.js`, `shared/psola.js`) — `apps/analisis-vocal`
+- `Melody.createAnalyzer(sr).push(chunk)` → frames `{ t, midi|NaN, rms }` every 10 ms (decimates to
+  ~24 kHz, adaptive noise gate); `Melody.analyze(frames)` → `{ curve, notes }` (octave fixes, note
+  segmentation); `Melody.applyCuts(..., [['split', f], ['merge', i0]])` applies manual cuts **in order**.
+- `Psola.shiftsFor(frames, curve, notes, edits)` + `Psola.render(samples, sr, frames, curve, shifts)`:
+  non-destructive TD-PSOLA pitch editing (`edits[note.i0] = { target, flatten }`), always rendered
+  from the original. Natural up to ±3 semitones.
+- The app stores takes in IndexedDB (`mt-analisis-vocal`: `takes` metadata + `audio` Int16 PCM).
 
 ### Pitch detection (`shared/pitch.js`)
 `Pitch.detect(float32Samples, sampleRate, minFreq)` → Hz or -1 (YIN; ≤1 cent error in tests),

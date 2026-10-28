@@ -13,6 +13,7 @@
     <script src="../../shared/settings.js"></script>
     <script src="../../shared/pitch.js"></script>
     <script src="../../shared/melody.js"></script>
+    <script src="../../shared/psola.js"></script>
     <style>
         /* ── Layout ── */
         .av-screen {
@@ -54,6 +55,8 @@
             cursor: grab;
         }
         .av-roll canvas:active { cursor: grabbing; }
+        .av-roll[data-edit="true"] canvas { touch-action: none; }   /* editando: arrastrar notas en vertical */
+        .av-roll[data-edit="true"] { box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.55), var(--card-shadow); }
         .av-roll-tools {
             position: absolute; right: 10px; bottom: 10px;
             display: flex; gap: 6px;
@@ -66,11 +69,12 @@
             -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
         }
         .av-tool:disabled { opacity: 0.35; cursor: default; }
+        .av-tool.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
         /* ── Controles ── */
         .av-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         .av-controls .btn-primary, .av-controls .btn-ghost { flex: 1; min-width: 140px; }
-        .av-controls .btn-ghost:disabled { opacity: 0.4; cursor: default; }
+        .av-controls .btn-ghost:disabled, .av-controls .btn-primary:disabled { opacity: 0.4; cursor: default; }
         .av-rec[data-recording="true"] {
             background: rgba(var(--danger-rgb), 0.16); color: var(--danger);
             box-shadow: none; border: 1px solid rgba(var(--danger-rgb), 0.45);
@@ -85,38 +89,17 @@
         }
         .av-level-fill.clip { background: var(--danger); }
         .av-level-fill.low  { background: var(--warning); }
-        .av-modes { display: flex; gap: 8px; }
-        .av-modes .diff-pill:disabled { opacity: 0.5; cursor: default; }
-        .av-tips { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
-        /* Aviso "toca para empezar" sobre la gráfica */
-        .av-tapnote {
-            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-            max-width: 82%; padding: 16px 20px; border-radius: var(--radius-sm);
-            border: 1px solid rgba(var(--accent-rgb), 0.45); background: var(--surface-ss); color: var(--ink);
-            font-family: var(--font-sans); cursor: pointer; box-shadow: var(--card-shadow);
-            animation: av-pulse 1.6s ease-in-out infinite;
+        /* ── Barra de edición: A/B, deshacer ── */
+        .av-editbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .av-editbar[hidden] { display: none; }
+        .av-ab { display: flex; gap: 6px; flex: 1; min-width: 200px; }
+        .av-ab .diff-pill:disabled, .av-icon:disabled { opacity: 0.35; cursor: default; }
+        .av-icon {
+            width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer;
         }
-        .av-tapnote[hidden] { display: none; }
-        .av-tapnote strong { font-size: 15px; color: var(--accent); }
-        .av-tapnote span { font-size: 12px; color: var(--ink-dim); }
-
-        /* Confirmación dentro de la app (confirm() del navegador se puede bloquear) */
-        .av-modal {
-            position: fixed; inset: 0; z-index: 1000;
-            display: flex; align-items: center; justify-content: center; padding: 16px;
-            background: rgba(0, 0, 0, 0.55);
-        }
-        .av-modal[hidden] { display: none; }
-        .av-modal-card {
-            width: 100%; max-width: 380px; padding: 20px;
-            background: var(--bg); border: 1px solid var(--border-s); border-radius: var(--radius);
-            box-shadow: var(--card-shadow); color: var(--ink);
-        }
-        .av-modal-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
-        .av-modal-card p { font-size: 13px; color: var(--ink-dim); margin: 8px 0 0; }
-        .av-modal-card .av-actions .btn-primary { flex: 1; min-width: 140px; }
 
         /* ── Nota seleccionada ── */
         .av-note-head { display: flex; align-items: center; gap: 10px; }
@@ -149,10 +132,40 @@
         .av-stat-hint  { font-size: 11px; color: var(--ink-dim); }
         .av-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
         .av-actions .btn-ghost { flex: 1; min-width: 140px; }
+        .av-actions .btn-ghost:disabled { opacity: 0.4; cursor: default; }
         .av-hint { font-size: 13px; color: var(--ink-dim); margin: 0; }
         .av-trend { font-size: 13px; color: var(--ink-dim); margin: 12px 0 0; }
         .av-worst { margin-top: 10px; }
         .av-worst .note-pill { cursor: pointer; font-family: var(--font-sans); }
+
+        /* ── Edición ── */
+        .av-edit { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+        .av-edit-row { display: flex; gap: 8px; }
+        .av-edit-row .btn-ghost { flex: 1; min-width: 0; padding: 10px 8px; }
+        .av-edit-state { font-size: 12px; color: var(--ink-dim); margin: 8px 0 0; }
+        .av-edit-state strong { color: var(--accent); }
+        .av-slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; margin-top: 12px; }
+        .av-slider label { margin: 0 !important; }
+        .av-slider output { font-size: 12px; font-weight: 700; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+        .av-slider input { grid-column: 1 / -1; width: 100%; }
+
+        /* ── Mis tomas ── */
+        .av-takes { display: flex; flex-direction: column; gap: 8px; }
+        .av-take {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: var(--radius-xs);
+            background: var(--surface); border: 1px solid var(--border);
+        }
+        .av-take.current { border-color: rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.08); }
+        .av-take-main { flex: 1; min-width: 0; cursor: pointer; }
+        .av-take-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .av-take-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .av-take .av-icon { width: 34px; height: 34px; }
+
+        /* ── Micrófono ── */
+        .av-modes { display: flex; gap: 8px; }
+        .av-modes .diff-pill:disabled { opacity: 0.5; cursor: default; }
+        .av-tips { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
         /* ── Leyenda ── */
         .av-legend { display: grid; gap: 8px; font-size: 13px; color: var(--ink-dim); margin: 0; padding: 0; list-style: none; }
@@ -162,6 +175,37 @@
         .av-swatch.close { background: var(--surface-s); border: 1px solid var(--warning); }
         .av-swatch.off   { background: rgba(var(--danger-rgb), 0.45); border: 1px solid var(--danger); }
         .av-swatch.line  { height: 2px; margin-top: 8px; border-radius: 1px; background: var(--ink); }
+        .av-swatch.ghost { background: transparent; border: 1px dashed var(--ink-dim); }
+
+        /* Aviso "toca para empezar" sobre la gráfica */
+        .av-tapnote {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            max-width: 82%; padding: 16px 20px; border-radius: var(--radius-sm);
+            border: 1px solid rgba(var(--accent-rgb), 0.45); background: var(--surface-ss); color: var(--ink);
+            font-family: var(--font-sans); cursor: pointer; box-shadow: var(--card-shadow);
+            animation: av-pulse 1.6s ease-in-out infinite;
+        }
+        .av-tapnote[hidden] { display: none; }
+        .av-tapnote strong { font-size: 15px; color: var(--accent); }
+        .av-tapnote span { font-size: 12px; color: var(--ink-dim); }
+
+        /* Diálogo dentro de la app (confirm()/prompt() del navegador se pueden bloquear) */
+        .av-modal {
+            position: fixed; inset: 0; z-index: 1000;
+            display: flex; align-items: center; justify-content: center; padding: 16px;
+            background: rgba(0, 0, 0, 0.55);
+        }
+        .av-modal[hidden] { display: none; }
+        .av-modal-card {
+            width: 100%; max-width: 380px; padding: 20px;
+            background: var(--bg); border: 1px solid var(--border-s); border-radius: var(--radius);
+            box-shadow: var(--card-shadow); color: var(--ink);
+        }
+        .av-modal-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+        .av-modal-card p { font-size: 13px; color: var(--ink-dim); margin: 8px 0 0; }
+        .av-modal-card input[type="text"] { margin-top: 12px; font-size: 16px; }
+        .av-modal-card .av-actions .btn-primary { flex: 1; min-width: 140px; }
     </style>
 </head>
 <body data-page-id="analisis-vocal" data-tool-name="Análisis vocal">
@@ -181,6 +225,9 @@
             <span id="tapNoteSub"></span>
         </button>
         <div class="av-roll-tools">
+            <button class="av-tool" id="editTool" onclick="toggleEditMode()" aria-label="Editar notas arrastrándolas" title="Editar: arrastra las notas arriba o abajo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            </button>
             <button class="av-tool" id="zoomOut" onclick="zoomBy(1 / 1.5)" aria-label="Alejar">−</button>
             <button class="av-tool" id="zoomIn"  onclick="zoomBy(1.5)"     aria-label="Acercar">+</button>
             <button class="av-tool" id="zoomFit" onclick="fitTime(true)"   aria-label="Ver toda la toma">
@@ -205,10 +252,24 @@
         <div class="av-level" id="levelWrap" hidden><div class="av-level-fill" id="levelFill"></div></div>
     </div>
 
+    <!-- A/B y deshacer: visibles con una toma en pausa -->
+    <div class="av-editbar" id="editBar" hidden>
+        <div class="av-ab">
+            <button class="diff-pill" data-ab="orig" onclick="setAB('orig')">Original</button>
+            <button class="diff-pill" data-ab="edit" onclick="setAB('edit')">Editada</button>
+        </div>
+        <button class="av-icon" id="undoBtn" onclick="undo()" aria-label="Deshacer" title="Deshacer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>
+        </button>
+        <button class="av-icon" id="redoBtn" onclick="redo()" aria-label="Rehacer" title="Rehacer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/></svg>
+        </button>
+    </div>
+
     <!-- Nota seleccionada -->
     <div class="section-card" id="noteCard" hidden>
         <div class="section-title">Nota</div>
-        <p class="av-hint" id="noteHint">Toca una nota de la gráfica para ver su afinación.</p>
+        <p class="av-hint" id="noteHint">Toca una nota de la gráfica para ver su afinación y editarla.</p>
         <div id="noteBody" hidden>
             <div class="av-note-head">
                 <button class="av-nav" onclick="stepNote(-1)" aria-label="Nota anterior">‹</button>
@@ -220,14 +281,55 @@
                 <button class="av-nav" onclick="stepNote(1)" aria-label="Nota siguiente">›</button>
             </div>
             <div class="av-stats">
-                <div class="av-stat"><div class="av-stat-label">Desvío</div><div class="av-stat-value" id="noteCents"></div><div class="av-stat-hint">respecto a la nota exacta</div></div>
+                <div class="av-stat"><div class="av-stat-label">Desvío</div><div class="av-stat-value" id="noteCents"></div><div class="av-stat-hint">cantado, respecto a la nota exacta</div></div>
                 <div class="av-stat"><div class="av-stat-label">Duración</div><div class="av-stat-value" id="noteDur"></div></div>
                 <div class="av-stat"><div class="av-stat-label">Estabilidad</div><div class="av-stat-value" id="noteWobble"></div><div class="av-stat-hint" id="noteWobbleHint"></div></div>
             </div>
             <div class="av-actions">
-                <button class="btn-ghost" onclick="playSelected()">Escuchar tu nota</button>
+                <button class="btn-ghost" onclick="playSelected()">Escuchar esta nota</button>
                 <button class="btn-ghost" onclick="playReference()">Nota exacta (piano)</button>
             </div>
+
+            <div class="av-edit">
+                <div class="section-title" style="margin-bottom:8px !important">Editar nota</div>
+                <div class="av-edit-row">
+                    <button class="btn-ghost" onclick="nudgeNote(-1)" aria-label="Bajar un semitono">▼ Semitono</button>
+                    <button class="btn-ghost" onclick="centerNote()">Afinar</button>
+                    <button class="btn-ghost" onclick="nudgeNote(1)" aria-label="Subir un semitono">▲ Semitono</button>
+                </div>
+                <div class="av-slider">
+                    <label for="flatNote">Aplanar vibrato / oscilación</label>
+                    <output id="flatNoteVal">0 %</output>
+                    <input type="range" id="flatNote" min="0" max="100" step="5" value="0"
+                           oninput="previewFlatten(this.value)" onchange="commitFlatten(this.value)">
+                </div>
+                <p class="av-edit-state" id="noteEditState"></p>
+                <div class="av-actions">
+                    <button class="btn-ghost" id="splitBtn" onclick="splitAtCursor()">Separar en el cabezal</button>
+                    <button class="btn-ghost" id="mergeBtn" onclick="mergeNext()">Unir con la siguiente</button>
+                    <button class="btn-ghost" id="resetNoteBtn" onclick="resetNote()">Quitar edición</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Afinar toda la toma -->
+    <div class="section-card" id="tuneCard" hidden>
+        <div class="section-title">Afinar toda la toma</div>
+        <p class="av-hint">Lleva cada nota hacia el centro de su semitono. Entre 50 y 80 % suena natural; 100 % suena "perfecto".</p>
+        <div class="av-slider">
+            <label for="tuneAmt">Corrección de afinación</label>
+            <output id="tuneAmtVal">70 %</output>
+            <input type="range" id="tuneAmt" min="0" max="100" step="5" value="70" oninput="$('tuneAmtVal').textContent = this.value + ' %'">
+        </div>
+        <div class="av-slider">
+            <label for="flatAmt">Aplanar vibrato / oscilación</label>
+            <output id="flatAmtVal">0 %</output>
+            <input type="range" id="flatAmt" min="0" max="100" step="5" value="0" oninput="$('flatAmtVal').textContent = this.value + ' %'">
+        </div>
+        <div class="av-actions">
+            <button class="btn-ghost" onclick="tuneAll()">Aplicar a todas las notas</button>
+            <button class="btn-ghost" id="clearEditsBtn" onclick="clearEdits()">Quitar todas las ediciones</button>
         </div>
     </div>
 
@@ -238,7 +340,7 @@
             <div class="av-stat"><div class="av-stat-label">Tonalidad</div><div class="av-stat-value" id="sumKey">—</div><div class="av-stat-hint">estimada</div></div>
             <div class="av-stat"><div class="av-stat-label">Notas</div><div class="av-stat-value" id="sumCount">—</div></div>
             <div class="av-stat"><div class="av-stat-label">Rango</div><div class="av-stat-value" id="sumRange">—</div></div>
-            <div class="av-stat"><div class="av-stat-label">Afinadas</div><div class="av-stat-value" id="sumTune">—</div><div class="av-stat-hint">a ±25¢ o menos</div></div>
+            <div class="av-stat"><div class="av-stat-label">Afinadas</div><div class="av-stat-value" id="sumTune">—</div><div class="av-stat-hint">al cantar, a ±25¢ o menos</div></div>
         </div>
         <p class="av-trend" id="sumTrend"></p>
         <div class="av-worst" id="sumWorstWrap">
@@ -246,9 +348,16 @@
             <div class="note-pills" id="sumWorst"></div>
         </div>
         <div class="av-actions">
-            <button class="btn-ghost" onclick="downloadWav()">Descargar audio (WAV)</button>
+            <button class="btn-ghost" onclick="downloadWav()" id="wavBtn">Descargar audio (WAV)</button>
             <button class="btn-ghost" onclick="downloadMidi()">Descargar MIDI</button>
         </div>
+    </div>
+
+    <!-- Tomas guardadas en el teléfono -->
+    <div class="section-card">
+        <div class="section-title">Mis tomas</div>
+        <div class="av-takes" id="takesList"></div>
+        <p class="av-tips" id="takesInfo">Las tomas y sus ediciones se guardan solas en este teléfono.</p>
     </div>
 
     <div class="section-card">
@@ -270,6 +379,7 @@
             <li><span class="av-swatch off"></span><span>Rojo: más de 50¢, casi otra nota.</span></li>
             <li><span class="av-swatch line"></span><span>La línea es tu afinación continua: deslizamientos, vibrato y ataques.</span></li>
             <li><span class="av-swatch" style="background:var(--accent)"></span><span>El globo del cabezal indica la nota que suena en ese momento; la escala vertical se ajusta sola a las notas que ves.</span></li>
+            <li><span class="av-swatch ghost"></span><span>Editando: el contorno punteado es dónde cantaste; la forma, dónde quedó. Con el lápiz activo, arrastra una nota arriba o abajo.</span></li>
             <li><span class="av-swatch" style="background:var(--surface-ss)"></span><span>Filas oscuras: notas fuera de la tonalidad estimada (antes de conocerla, las teclas negras). Toca un nombre de nota a la izquierda para escucharla.</span></li>
             <li><span class="av-swatch" style="background:transparent"></span><span>Arrastra para moverte; pellizca o usa − / + para el zoom. Toca una nota para analizarla; con ← / → pasas a la anterior o la siguiente.</span></li>
         </ul>
@@ -277,13 +387,14 @@
 
 </div>
 
-<div class="av-modal" id="confirmModal" hidden onclick="if (event.target === this) closeConfirm()">
-    <div class="av-modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-        <div class="av-modal-title" id="confirmTitle">¿Empezar una toma nueva?</div>
-        <p id="confirmText"></p>
+<div class="av-modal" id="modal" hidden onclick="if (event.target === this) closeModal()">
+    <div class="av-modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="av-modal-title" id="modalTitle"></div>
+        <p id="modalText"></p>
+        <input type="text" id="modalInput" maxlength="60" hidden>
         <div class="av-actions">
-            <button class="btn-ghost" onclick="closeConfirm()">Cancelar</button>
-            <button class="btn-primary" onclick="confirmNewTake()">Borrar y grabar</button>
+            <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
+            <button class="btn-primary" id="modalOk" onclick="modalOk()"></button>
         </div>
     </div>
 </div>
@@ -294,6 +405,9 @@
    · shared/melody.js analiza en vivo (YIN cada 10 ms) y separa las notas.
    · La curva y las notas se dibujan mientras cantas; en pausa se hace el
      análisis (tonalidad, resumen), se puede escuchar y CONTINUAR la toma.
+   · Edición (fase 2): cada nota guarda { target, flatten } y shared/psola.js
+     recalcula la versión editada desde el original (no destructivo, A/B).
+   · Las tomas se guardan solas en IndexedDB ("Mis tomas").
    · shell.js reescribe el <body>: los nodos se buscan siempre por id.
    ════════════════════════════════════════════════════ */
 const MAX_SEC = 180;                   // 3 min ≈ 35 MB de audio a 48 kHz
@@ -303,6 +417,8 @@ const GUTTER = 48, AXIS = 20;          // columna de nombres y eje de tiempo (px
 const MIN_RH = 13;                     // alto mínimo de fila: todas las notas llevan nombre
 const JOIN_GAP = 0.2;                  // silencio (s) entre tramos al continuar una toma
 const STALL_MS = 1000;                 // grabando sin recibir audio → aviso "toca la pantalla"
+const HOP = 0.01;                      // un frame de análisis cada 10 ms
+const UNDO_MAX = 50;
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
 const LOW_PEAK = 0.05;                 // pico de toda la toma por debajo de esto = señal muy baja
@@ -324,10 +440,16 @@ const mod12 = n => ((n % 12) + 12) % 12;
 
 let state = 'idle';          // idle | recording | ready | playing
 let busy = false;            // pidiendo el micrófono
-let take = null;             // { analyzer, frames, curve, notes, analyzed, peak, buffer, gain, rawPeak, duration, joins, range, key, keyName, scale, stats }
-let rec = null;              // { stream, capture, analyzer, chunks, length, sr, level, maxPeak, lastSeg, lastChunk }
+/* take: { id, name, created, frames, curve, notes, analyzed, peak, buffer (original normalizado),
+           gain, rawPeak, duration, joins, range, key, keyName, scale, stats,
+           edits: { i0: { target, flatten } }, cuts: [['split'|'merge', frame]…], shifts, edited (AudioBuffer) } */
+let take = null;
+let rec = null;              // { stream, capture, analyzer, tOffset, chunks, length, sr, level, maxPeak, lastSeg, lastChunk }
 let playback = null;         // { src, startAc, offset }
 let cursor = 0, selected = -1;
+let abMode = 'edit';         // con ediciones: se oye/ve la versión editada u original
+let editMode = false;        // lápiz: arrastrar notas en vertical
+const undoStack = [], redoStack = [];
 // lo/hi: filas visibles (con decimales mientras se animan hacia tlo/thi)
 const view = { t0: 0, pps: store.get('zoom', 120), lo: 55, hi: 72, tlo: 55, thi: 72 };
 
@@ -387,26 +509,32 @@ async function createCapture(ac, source, onChunk) {
     };
 }
 
+/** AudioBuffer sin depender de que exista ya el AudioContext (al abrir una toma guardada). */
+function makeBuffer(data, sampleRate) {
+    const buf = new AudioBuffer({ length: data.length, numberOfChannels: 1, sampleRate });
+    buf.getChannelData(0).set(data);
+    return buf;
+}
+
 /* ── Grabación ── */
-// Grabar → Pausa (analiza y deja escuchar) → Continuar (añade al final) …
+// Grabar → Pausa (analiza y deja escuchar/editar) → Continuar (añade al final) …
 function toggleRecord() {
     if (state === 'recording') stopRecording();
     else startRecording(!!take);
 }
 
-/** Nueva toma: si hay algo grabado, confirmación DENTRO de la app. */
+/** Nueva toma: la actual ya está guardada en "Mis tomas"; si no, confirmación DENTRO de la app. */
 function newTake() {
     if (state === 'recording' || busy) return;
-    if (!take || !take.notes.length) { startRecording(false); return; }
+    if (!take || !take.notes.length || (take.id && !take.dirty)) { startRecording(false); return; }
     const n = take.notes.length;
-    $('confirmText').textContent = `Se borrará la toma actual (${fmtTime(take.duration)}, ${n} ${n === 1 ? 'nota' : 'notas'}). ` +
-        'Si quieres conservarla, descárgala antes en WAV o MIDI.';
-    $('confirmModal').hidden = false;
-}
-function closeConfirm() { $('confirmModal').hidden = true; }
-function confirmNewTake() {
-    closeConfirm();
-    startRecording(false);   // en el mismo toque: el micrófono se pide sin esperas
+    openModal({
+        title: '¿Empezar una toma nueva?',
+        text: `La toma actual (${fmtTime(take.duration)}, ${n} ${n === 1 ? 'nota' : 'notas'}) no se pudo guardar y se perderá. ` +
+              'Si quieres conservarla, descárgala antes en WAV o MIDI.',
+        ok: 'Borrar y grabar',
+        onOk: () => startRecording(false)   // en el mismo toque: el micrófono se pide sin esperas
+    });
 }
 
 /**
@@ -439,12 +567,23 @@ async function startRecording(append, retry) {
         return;
     }
     const ac = soundEngine.ac;
-    if (!append || !take || !take.analyzer) {
-        const analyzer = Melody.createAnalyzer(ac.sampleRate);
-        take = { analyzer, frames: analyzer.frames, curve: [], notes: [], analyzed: 0, peak: 0, buffer: null,
-                 gain: 1, rawPeak: 0, duration: 0, joins: [], range: null, key: null, keyName: null, scale: null, stats: null };
+    if (append && take && take.buffer && take.buffer.sampleRate !== ac.sampleRate) {
+        // Toma guardada con otra frecuencia de muestreo: continuarla mezclaría dos velocidades
+        busy = false;
+        stream.getTracks().forEach(t => t.stop());
+        soundEngine.releaseMic();
+        showMessage('No se puede continuar', 'Esta toma se grabó con otra configuración de audio. Empieza una nueva con "Nueva toma".');
+        return;
+    }
+    setEditMode(false);
+    if (!append || !take) {
+        take = { id: null, name: '', created: 0, dirty: true, frames: [], curve: [], notes: [], analyzed: 0, peak: 0,
+                 buffer: null, gain: 1, rawPeak: 0, duration: 0, joins: [], range: null,
+                 key: null, keyName: null, scale: null, stats: null,
+                 edits: {}, cuts: [], shifts: null, edited: null };
         rec = { chunks: [], length: 0, maxPeak: 0 };
         selected = -1; cursor = 0;
+        undoStack.length = redoStack.length = 0;
         Object.assign(view, { t0: 0, lo: 55, hi: 72, tlo: 55, thi: 72 });
         $('rollWrap').style.height = '';
     } else {
@@ -461,14 +600,15 @@ async function startRecording(append, retry) {
         const gap = new Float32Array(Math.round(JOIN_GAP * ac.sampleRate));
         chunks.push(gap);
         length += gap.length;
-        take.analyzer.push(gap);
         take.joins.push(length / ac.sampleRate);
-        take.buffer = null;   // memoria: el audio vive en los bloques mientras se graba
+        take.buffer = take.edited = null;   // memoria: el audio vive en los bloques mientras se graba
+        take.dirty = true;
         rec = { chunks, length, maxPeak: take.rawPeak };
         selected = -1;
     }
-    Object.assign(rec, { stream, analyzer: take.analyzer, sr: ac.sampleRate, level: 0, lastSeg: 0,
-                         lastChunk: performance.now(), capture: null });
+    // Un analizador por tramo; sus tiempos se desplazan al final de lo ya grabado
+    Object.assign(rec, { stream, analyzer: Melody.createAnalyzer(ac.sampleRate), tOffset: rec.length / ac.sampleRate,
+                         sr: ac.sampleRate, level: 0, lastSeg: 0, lastChunk: performance.now(), capture: null });
     rec.capture = await createCapture(ac, ac.createMediaStreamSource(stream), onChunk);
     busy = false;
     state = 'recording';
@@ -505,7 +645,14 @@ function onChunk(chunk) {
     rec.chunks.push(chunk);
     rec.length += chunk.length;
     rec.lastChunk = performance.now();
-    rec.analyzer.push(chunk);
+    const F = take.frames;
+    for (const f of rec.analyzer.push(chunk)) {
+        f.t += rec.tOffset;
+        // Frames sin voz en el hueco de una unión: el análisis supone un frame cada 10 ms
+        const last = F[F.length - 1];
+        if (last) for (let t = last.t + HOP; t < f.t - HOP / 2; t += HOP) F.push({ t, midi: NaN, rms: 0 });
+        F.push(f);
+    }
     let peak = 0;
     for (let i = 0; i < chunk.length; i++) { const a = Math.abs(chunk[i]); if (a > peak) peak = a; }
     rec.level = Math.max(peak, rec.level * 0.85);
@@ -519,14 +666,13 @@ function stopRecording() {
     rec.stream.getTracks().forEach(t => t.stop());
     soundEngine.releaseMic();
     if (rec.length > 0) {
-        const buf = soundEngine.ac.createBuffer(1, rec.length, rec.sr);
-        const data = buf.getChannelData(0);
+        const data = new Float32Array(rec.length);
         let off = 0;
         rec.chunks.forEach(c => { data.set(c, off); off += c.length; });
         // Normalizar: con el micrófono bajo la toma se oía (y exportaba) muy floja
         const gain = rec.maxPeak > 0 ? Math.min(20, 0.9 / rec.maxPeak) : 1;
         if (gain > 1.05) for (let i = 0; i < data.length; i++) data[i] *= gain;
-        take.buffer = buf;
+        take.buffer = makeBuffer(data, rec.sr);
         take.gain = gain > 1.05 ? gain : 1;   // para deshacerlo si se continúa la toma
     }
     take.rawPeak = rec.maxPeak;
@@ -537,13 +683,14 @@ function stopRecording() {
     soundEngine.keepAwake(false);
     finishTake();
     updateUI();
+    if (take.notes.length) saveTake(true);
 }
 
-/** Análisis (en vivo cada ~300 ms y al terminar). */
+/** Análisis (en vivo cada ~300 ms y al terminar) + cortes hechos a mano. */
 function reanalyze() {
     const res = Melody.analyze(take.frames);
     take.curve = res.curve;
-    take.notes = res.notes;
+    take.notes = Melody.applyCuts(take.frames, res.curve, res.notes, take.cuts);
     take.analyzed = take.frames.length;
     take.peak = take.frames.reduce((mx, f) => Math.max(mx, f.rms), 0);
 }
@@ -556,20 +703,187 @@ function finishTake() {
     take.stats = Melody.stats(take.notes, TUNE_OK);
     cursor = 0; selected = -1;
     fitTime(false);
-    // El piano de referencia decodifica la tesitura de la toma (±2 semitonos)
-    const ms = take.notes.map(n => n.note);
-    take.range = ms.length ? [Math.min(...ms) - 2, Math.max(...ms) + 2] : null;
-    if (take.range) {
-        const [lo, hi] = take.range;
-        refPiano.preload().then(() => refPiano.setRange(lo, hi)).catch(() => {});
-    }
+    updateRange();
     fitRollHeight();
+    renderEdits();
     renderSummary();
     renderNote();
     requestDraw();
 }
 
+/** El piano de referencia decodifica la tesitura de la toma, editada incluida (±2 semitonos). */
+function updateRange() {
+    const ms = take.notes.flatMap(n => [n.note, Math.round(targetOf(n))]);
+    take.range = ms.length ? [Math.min(...ms) - 2, Math.max(...ms) + 2] : null;
+    if (take.range) {
+        const [lo, hi] = take.range;
+        refPiano.preload().then(() => refPiano.setRange(lo, hi)).catch(() => {});
+    }
+}
+
+/* ── Edición (no destructiva: el original no se toca) ── */
+const editOf   = n => take && take.edits[n.i0];
+const targetOf = n => { const e = editOf(n); return e && e.target != null ? e.target : n.midi; };
+const isEdited = n => { const e = editOf(n); return !!e && (Math.abs(targetOf(n) - n.midi) > 0.005 || (e.flatten || 0) > 0); };
+const hasEdits = () => !!take && take.notes.some(isEdited);
+/** Altura con la que se ve una nota: la editada (vista "Editada") o la cantada. */
+const shownMidi = n => abMode === 'edit' ? targetOf(n) : n.midi;
+
+function snapshot() { return JSON.stringify({ edits: take.edits, cuts: take.cuts }); }
+function pushUndo() {
+    undoStack.push(snapshot());
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    redoStack.length = 0;
+}
+function restore(json) {
+    const s = JSON.parse(json);
+    take.edits = s.edits;
+    take.cuts = s.cuts;
+    afterEdit(true);
+}
+function undo() { if (!take || !undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); }
+function redo() { if (!take || !redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); }
+
+/** Tras cualquier edición: (re)separar notas si hizo falta, recalcular el audio, guardar. */
+function afterEdit(reseg) {
+    if (reseg) {
+        const sel = take.notes[selected];
+        reanalyze();
+        take.stats = Melody.stats(take.notes, TUNE_OK);
+        if (sel) selected = take.notes.findIndex(n => n.i0 <= sel.i0 && n.i1 >= sel.i0);
+        renderSummary();
+    }
+    abMode = 'edit';
+    take.dirty = true;
+    renderEditsSoon();
+    updateRange();
+    renderNote();
+    updateUI();
+    requestDraw();
+    saveSoon();
+}
+
+function setEdit(n, patch) {
+    const e = Object.assign({}, take.edits[n.i0], patch);
+    if ((e.target == null || Math.abs(e.target - n.midi) < 0.005) && !(e.flatten > 0)) delete take.edits[n.i0];
+    else take.edits[n.i0] = e;
+}
+
+function nudgeNote(dir) {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    pushUndo();
+    const base = targetOf(n);
+    // Al siguiente semitono exacto por encima/debajo de donde está ahora
+    setEdit(n, { target: dir > 0 ? Math.floor(base + 0.05) + 1 : Math.ceil(base - 0.05) - 1 });
+    afterEdit(false);
+}
+
+function centerNote() {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    pushUndo();
+    setEdit(n, { target: Math.round(targetOf(n)) });
+    afterEdit(false);
+}
+
+function previewFlatten(v) { $('flatNoteVal').textContent = v + ' %'; }
+function commitFlatten(v) {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    pushUndo();
+    setEdit(n, { flatten: v / 100 });
+    afterEdit(false);
+}
+
+function resetNote() {
+    const n = take && take.notes[selected];
+    if (!n || !take.edits[n.i0]) return;
+    pushUndo();
+    delete take.edits[n.i0];
+    afterEdit(false);
+}
+
+/** Afinar todas: cada nota hacia el centro del semitono elegido (el cantado o al que se movió). */
+function tuneAll() {
+    if (!take || !take.notes.length || state === 'recording') return;
+    const amt = $('tuneAmt').value / 100, flat = $('flatAmt').value / 100;
+    pushUndo();
+    take.notes.forEach(n => {
+        const e = editOf(n);
+        const semi = e && e.target != null ? Math.round(e.target) : Math.round(n.midi);
+        const dev = n.midi - Math.round(n.midi);   // desvío al cantar
+        setEdit(n, { target: semi + dev * (1 - amt), flatten: flat });
+    });
+    afterEdit(false);
+}
+
+function clearEdits() {
+    if (!take || (!Object.keys(take.edits).length && !take.cuts.length)) return;
+    pushUndo();
+    take.edits = {};
+    take.cuts = [];
+    afterEdit(true);
+}
+
+function splitAtCursor() {
+    const n = take && take.notes[selected];
+    if (!n) return;
+    const f = frameAt(cursor);
+    if (f - n.i0 < 4 || n.i1 - f + 1 < 4) {
+        $('noteEditState').textContent = 'Coloca el cabezal dentro de la nota (tocando la gráfica) para separarla ahí.';
+        return;
+    }
+    pushUndo();
+    take.cuts.push(['split', f]);
+    if (take.edits[n.i0]) take.edits[f] = Object.assign({}, take.edits[n.i0]);   // la 2ª mitad hereda la edición
+    afterEdit(true);
+}
+
+function mergeNext() {
+    const n = take && take.notes[selected], next = take && take.notes[selected + 1];
+    if (!n || !next) return;
+    pushUndo();
+    take.cuts.push(['merge', next.i0]);
+    delete take.edits[next.i0];
+    afterEdit(true);
+}
+
+function setAB(mode) {
+    if (mode === abMode) return;
+    abMode = mode;
+    if (state === 'playing') startPlayback(playPos());
+    updateUI();
+    renderNote();
+    requestDraw();
+}
+
+/* Audio editado: PSOLA desde el original cada vez que cambian las ediciones */
+let renderTimer = null;
+function renderEditsSoon() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderEdits, 120);
+}
+function renderEdits() {
+    clearTimeout(renderTimer);
+    if (!take || !take.buffer) return;
+    // Ediciones de notas que ya no existen (p. ej. tras unir) se descartan
+    const live = new Set(take.notes.map(n => String(n.i0)));
+    Object.keys(take.edits).forEach(k => { if (!live.has(k)) delete take.edits[k]; });
+    if (!hasEdits()) { take.shifts = take.edited = null; }
+    else {
+        take.shifts = Psola.shiftsFor(take.frames, take.curve, take.notes, take.edits);
+        const out = Psola.render(take.buffer.getChannelData(0), take.buffer.sampleRate, take.frames, take.curve, take.shifts);
+        take.edited = makeBuffer(out, take.buffer.sampleRate);
+    }
+    if (state === 'playing') startPlayback(playPos());
+    updateUI();
+    requestDraw();
+}
+
 /* ── Reproducción de la toma ── */
+const activeBuffer = () => take && (abMode === 'edit' && take.edited ? take.edited : take.buffer);
+
 async function togglePlay() {
     if (state === 'playing') { stopPlayback(); return; }
     if (!take || !take.buffer || state === 'recording') return;
@@ -578,12 +892,12 @@ async function togglePlay() {
 }
 
 function startPlayback(from, to) {
-    if (!take || !take.buffer) return;
+    if (!take || !take.buffer || !soundEngine.ac) return;
     stopPlayback();
     const ac = soundEngine.ac;
     if (to === undefined && from >= take.duration - 0.05) from = 0;
     const src = ac.createBufferSource();
-    src.buffer = take.buffer;
+    src.buffer = activeBuffer();
     src.connect(ac.destination);
     const when = ac.currentTime + 0.03;
     if (to === undefined) src.start(when, from);
@@ -631,7 +945,7 @@ async function playSelected() {
 
 async function playReference() {
     const n = take && take.notes[selected];
-    if (n) playMidi(n.note, Math.min(2, Math.max(0.8, n.end - n.start)));
+    if (n) playMidi(Math.round(shownMidi(n)), Math.min(2, Math.max(0.8, n.end - n.start)));
 }
 
 async function playMidi(midi, dur) {
@@ -665,25 +979,11 @@ function noteLabel(midi) {
 const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const fmtCents = c => (c > 0 ? '+' : c < 0 ? '−' : '±') + Math.abs(c) + '¢';
 const tuneState = c => Math.abs(c) <= TUNE_OK ? 'ok' : Math.abs(c) <= TUNE_CLOSE ? 'close' : 'off';
+const centsOf = m => Math.round((m - Math.round(m)) * 100);
 
 /* ── Vista ── */
 const plotW = () => Math.max(1, cssW - GUTTER);
 const visibleSec = () => plotW() / view.pps;
-
-/**
- * Saltos grandes: la gráfica crece en altura (hasta 4 octavas) para mostrar toda la
- * tesitura de la toma con un nombre en cada fila; la página se desplaza como siempre.
- */
-function fitRollHeight() {
-    const wrap = $('rollWrap');
-    wrap.style.height = '';
-    if (!take) return;
-    const all = rowsFor(take.notes.map(n => n.midi));
-    if (!all) return;
-    const rows = Math.min(48, all[1] - all[0] + 1);
-    const need = rows * MIN_RH + AXIS + 2;
-    if (need > wrap.getBoundingClientRect().height) wrap.style.height = need + 'px';
-}
 
 /** Filas para unas alturas: ±2 semitonos de margen y al menos una octava. */
 function rowsFor(midis) {
@@ -693,17 +993,38 @@ function rowsFor(midis) {
     return [a, b];
 }
 
+/**
+ * Saltos grandes: la gráfica crece en altura (hasta 4 octavas) para mostrar toda la
+ * tesitura de la toma con un nombre en cada fila; la página se desplaza como siempre.
+ */
+function fitRollHeight() {
+    const wrap = $('rollWrap');
+    wrap.style.height = '';
+    if (!take) return;
+    const all = rowsFor(take.notes.flatMap(n => [n.midi, targetOf(n)]));
+    if (!all) return;
+    const rows = Math.min(48, all[1] - all[0] + 1);
+    const need = rows * MIN_RH + AXIS + 2;
+    if (need > wrap.getBoundingClientRect().height) wrap.style.height = need + 'px';
+}
+
 /** Tiempo del cabezal: dónde se graba o se escucha. */
 const headTime = () => state === 'recording' && rec ? rec.length / rec.sr : cursor;
 
-/** Altura cantada cerca de t (MIDI con decimales) o NaN si hay silencio. */
+/** Altura que se ve en el frame i (editada si corresponde) o NaN. */
+function curveAt(i) {
+    const m = i < take.analyzed ? take.curve[i] : take.frames[i].midi;
+    return abMode === 'edit' && take.shifts && i < take.shifts.length ? m + take.shifts[i] : m;
+}
+
+/** Altura cerca de t (MIDI con decimales) o NaN si hay silencio. */
 function pitchAt(t, reach) {
     if (!take || !take.frames.length) return NaN;
     const f = take.frames, i = Math.min(f.length - 1, frameAt(t));
     for (let d = 0; d <= (reach || 4); d++) {
         for (const j of d ? [i - d, i + d] : [i]) {
             if (j < 0 || j >= f.length) continue;
-            const m = j < take.analyzed ? take.curve[j] : f[j].midi;
+            const m = curveAt(j);
             if (!isNaN(m)) return m;
         }
     }
@@ -719,7 +1040,7 @@ function pitchTarget() {
     if (!take) return null;
     const maxSpan = Math.max(12, Math.floor((cssH - AXIS) / MIN_RH) - 1);
     const t0 = view.t0, t1 = t0 + visibleSec();
-    const midis = take.notes.filter(n => n.end >= t0 && n.start <= t1).map(n => n.midi);
+    const midis = take.notes.filter(n => n.end >= t0 && n.start <= t1).flatMap(n => [n.midi, targetOf(n)]);
     const head = pitchAt(headTime(), state === 'recording' ? 12 : 4);
     if (state === 'recording' && !isNaN(head)) midis.push(head);
     const r = rowsFor(midis);
@@ -765,6 +1086,14 @@ function zoomBy(f, anchorX) {
 function ensureVisible(t) {
     const vs = visibleSec();
     if (t < view.t0 || t > view.t0 + vs * 0.92) view.t0 = clampT0(t - vs * 0.1);
+}
+
+function toggleEditMode() { setEditMode(!editMode); }
+function setEditMode(on) {
+    editMode = !!on && !!take && state !== 'recording';
+    $('rollWrap').dataset.edit = editMode ? 'true' : 'false';
+    $('editTool').classList.toggle('active', editMode);
+    if (editMode && abMode !== 'edit') setAB('edit');
 }
 
 /* ── Dibujo ── */
@@ -840,6 +1169,24 @@ function frameAt(t) {
     return a;
 }
 
+/** Contorno de una nota a una altura y (grosor = volumen). */
+function blobPath(n, y, rh, xOf) {
+    const frames = take.frames, peak = take.peak || 1;
+    const maxH = rh * 0.45, minH = Math.max(1.5, rh * 0.1);
+    const every = Math.max(1, Math.round(2 / (view.pps * HOP)));   // ~1 punto cada 2 px
+    const pts = [];
+    for (let k = n.i0; k <= n.i1; k += every) pts.push(k);
+    if (pts[pts.length - 1] !== n.i1) pts.push(n.i1);
+    const half = k => minH + (maxH - minH) * Math.sqrt(Math.min(1, frames[k].rms / peak));
+    cx.beginPath();
+    cx.moveTo(xOf(n.start), y);
+    pts.forEach(k => cx.lineTo(xOf(frames[k].t), y - half(k)));
+    cx.lineTo(xOf(n.end), y);
+    for (let j = pts.length - 1; j >= 0; j--) cx.lineTo(xOf(frames[pts[j]].t), y + half(pts[j]));
+    cx.closePath();
+    return maxH;
+}
+
 function draw() {
     drawQueued = false;
     if (!cx || !cssW) return;
@@ -859,9 +1206,9 @@ function draw() {
     const head = headTime();
     const headPitch = take ? pitchAt(head, state === 'recording' ? 12 : 4) : NaN;
     const onNote = take && state !== 'recording' ? take.notes.find(n => head >= n.start && head <= n.end) : null;
-    const headRow = onNote ? onNote.note : isNaN(headPitch) ? null : Math.round(headPitch);
-    const headY = onNote ? onNote.midi : headPitch;
-    const headCents = onNote ? onNote.cents : Math.round((headPitch - headRow) * 100);
+    const headY = onNote ? shownMidi(onNote) : headPitch;
+    const headRow = isNaN(headY) ? null : Math.round(headY);
+    const headCents = isNaN(headY) ? 0 : centsOf(headY);
     const yOf = m => top + (hi + 0.5 - m) * rh;
     const xOf = t => left + (t - view.t0) * view.pps;
     const tEnd = view.t0 + visibleSec();
@@ -921,53 +1268,59 @@ function draw() {
     cx.clip();
 
     if (take) {
-        const frames = take.frames, peak = take.peak || 1;
-        // Notas: grosor = volumen, color = afinación
+        const frames = take.frames;
+        // Notas: grosor = volumen, color = afinación (la editada, si se ve "Editada")
         take.notes.forEach((n, i) => {
             if (n.end < view.t0 || n.start > tEnd) return;
-            const y = yOf(n.midi), maxH = rh * 0.45, minH = Math.max(1.5, rh * 0.1);
-            const every = Math.max(1, Math.round(2 / (view.pps * 0.01)));   // ~1 punto cada 2 px
-            const pts = [];
-            for (let k = n.i0; k <= n.i1; k += every) pts.push(k);
-            if (pts[pts.length - 1] !== n.i1) pts.push(n.i1);
-            const half = k => minH + (maxH - minH) * Math.sqrt(Math.min(1, frames[k].rms / peak));
-            cx.beginPath();
-            cx.moveTo(xOf(n.start), y);
-            pts.forEach(k => cx.lineTo(xOf(frames[k].t), y - half(k)));
-            cx.lineTo(xOf(n.end), y);
-            for (let j = pts.length - 1; j >= 0; j--) cx.lineTo(xOf(frames[pts[j]].t), y + half(pts[j]));
-            cx.closePath();
-            const rgb = colors.tune[tuneState(n.cents)], sel = i === selected;
+            const m = shownMidi(n), sel = i === selected;
+            const moved = abMode === 'edit' && Math.abs(m - n.midi) > 0.02;
+            if (moved) {   // fantasma: dónde se cantó
+                blobPath(n, yOf(n.midi), rh, xOf);
+                cx.setLineDash([3, 3]);
+                cx.lineWidth = 1;
+                cx.strokeStyle = colors.dim;
+                cx.stroke();
+                cx.setLineDash([]);
+            }
+            const y = yOf(m);
+            const maxH = blobPath(n, y, rh, xOf);
+            const rgb = colors.tune[tuneState(centsOf(m))];
             cx.fillStyle = `rgba(${rgb}, ${sel ? 0.6 : 0.3})`;
             cx.fill();
             cx.lineWidth = sel ? 2 : 1;
             cx.strokeStyle = sel ? colors.ink : `rgba(${rgb}, 0.9)`;
             cx.stroke();
+            const c = centsOf(m);
             if (sel || (xOf(n.end) - xOf(n.start) > 40 && rh >= 11)) {
                 cx.fillStyle = sel ? colors.ink : colors.dim;
                 cx.font = `${sel ? 700 : 500} 10px ${colors.font}`;
                 cx.textAlign = 'left';
-                cx.fillText(noteLabel(n.note) + (Math.abs(n.cents) > TUNE_OK || sel ? ' ' + fmtCents(n.cents) : ''),
+                cx.fillText(noteLabel(Math.round(m)) + (Math.abs(c) > TUNE_OK || sel ? ' ' + fmtCents(c) : '') + (isEdited(n) && abMode === 'edit' ? ' ✎' : ''),
                             xOf(n.start) + 2, y - maxH - 6);
             }
         });
 
         // Curva continua (hasta el último análisis limpia; lo más nuevo, en crudo)
         const i0 = Math.max(0, frameAt(view.t0) - 1), i1 = Math.min(frames.length - 1, frameAt(tEnd) + 1);
-        const every = Math.max(1, Math.floor(1 / (view.pps * 0.01)));
-        cx.beginPath();
-        let pen = false;
-        for (let i = i0; i <= i1; i += every) {
-            const m = i < take.analyzed ? take.curve[i] : frames[i].midi;
-            if (isNaN(m)) { pen = false; continue; }
-            const x = xOf(frames[i].t), y = yOf(m);
-            if (pen) cx.lineTo(x, y); else cx.moveTo(x, y);
-            pen = true;
-        }
-        cx.lineWidth = 1.5;
-        cx.lineJoin = 'round';
-        cx.strokeStyle = `rgba(${colors.inkRgb}, 0.8)`;
-        cx.stroke();
+        const every = Math.max(1, Math.floor(1 / (view.pps * HOP)));
+        const showEdited = abMode === 'edit' && take.shifts;
+        const strokeCurve = (fn, style, width) => {
+            cx.beginPath();
+            let pen = false;
+            for (let i = i0; i <= i1; i += every) {
+                const m = fn(i);
+                if (isNaN(m)) { pen = false; continue; }
+                const x = xOf(frames[i].t), y = yOf(m);
+                if (pen) cx.lineTo(x, y); else cx.moveTo(x, y);
+                pen = true;
+            }
+            cx.lineWidth = width;
+            cx.lineJoin = 'round';
+            cx.strokeStyle = style;
+            cx.stroke();
+        };
+        if (showEdited) strokeCurve(i => i < take.analyzed ? take.curve[i] : NaN, `rgba(${colors.inkRgb}, 0.25)`, 1);
+        strokeCurve(curveAt, `rgba(${colors.inkRgb}, 0.8)`, 1.5);
 
         // Uniones entre tramos (pausa → continuar)
         cx.fillStyle = colors.borderS;
@@ -1039,8 +1392,14 @@ function setupCanvas() {
         cv.setPointerCapture(e.pointerId);
         const p = pos(e);
         pointers.set(e.pointerId, p);
-        if (pointers.size === 1) drag = { x0: p.x, y0: p.y, t0: view.t0, moved: false };
-        else if (pointers.size === 2) {
+        if (pointers.size === 1) {
+            drag = { x0: p.x, y0: p.y, t0: view.t0, moved: false, note: -1 };
+            // Lápiz activo y el dedo sobre una nota: arrastrar = cambiar su altura
+            if (editMode && take && state !== 'recording' && p.x >= GUTTER) {
+                const i = hitNote(p.x, p.y);
+                if (i >= 0) { drag.note = i; drag.from = targetOf(take.notes[i]); drag.before = snapshot(); }
+            }
+        } else if (pointers.size === 2) {
             const [a, b] = [...pointers.values()];
             pinch = { d: dist(), pps: view.pps, x: (a.x + b.x) / 2 };
             drag = null;
@@ -1054,16 +1413,37 @@ function setupCanvas() {
         if (pinch && pointers.size === 2) {
             zoomBy(pinch.pps * dist() / pinch.d / view.pps, pinch.x);
         } else if (drag) {
-            const dx = p.x - drag.x0;
-            if (Math.abs(dx) > 6 || Math.abs(p.y - drag.y0) > 6) drag.moved = true;
-            if (drag.moved) { view.t0 = clampT0(drag.t0 - dx / view.pps); requestDraw(); }
+            const dx = p.x - drag.x0, dy = p.y - drag.y0;
+            if (Math.abs(dx) > 6 || Math.abs(dy) > 6) drag.moved = true;
+            if (!drag.moved) return;
+            if (drag.note >= 0) {
+                // Se ajusta al semitono: cada fila arrastrada = un semitono
+                const rh = (cssH - AXIS) / (view.hi - view.lo + 1);
+                const n = take.notes[drag.note];
+                const steps = Math.round(-dy / rh);
+                const target = steps === 0 ? drag.from : Math.round(drag.from) + steps;
+                setEdit(n, { target });
+                selected = drag.note;
+                renderNote();
+                requestDraw();
+            } else {
+                view.t0 = clampT0(drag.t0 - dx / view.pps);
+                requestDraw();
+            }
         }
     });
     const end = (e, cancelled) => {
         if (!pointers.has(e.pointerId)) return;
         const p = pos(e);
         pointers.delete(e.pointerId);
-        if (drag && !drag.moved && !cancelled) tapAt(p.x, p.y);
+        if (drag && drag.note >= 0 && drag.moved) {
+            if (snapshot() !== drag.before) {
+                undoStack.push(drag.before);
+                if (undoStack.length > UNDO_MAX) undoStack.shift();
+                redoStack.length = 0;
+                afterEdit(false);
+            }
+        } else if (drag && !drag.moved && !cancelled) tapAt(p.x, p.y);
         if (pointers.size < 2) pinch = null;
         drag = null;
     };
@@ -1082,8 +1462,22 @@ function setupCanvas() {
     }, { passive: false });
 }
 
+/** Nota bajo el punto (x, y) del lienzo, o -1. */
+function hitNote(x, y) {
+    const rh = (cssH - AXIS) / (view.hi - view.lo + 1);
+    const t = view.t0 + (x - GUTTER) / view.pps;
+    const yOf = m => AXIS + (view.hi + 0.5 - m) * rh;
+    let best = -1, bestD = Infinity;
+    take.notes.forEach((n, i) => {
+        if (t < n.start - 0.03 || t > n.end + 0.03) return;
+        const d = Math.abs(y - yOf(shownMidi(n)));
+        if (d <= Math.max(rh * 0.7, 16) && d < bestD) { best = i; bestD = d; }
+    });
+    return best;
+}
+
 function tapAt(x, y) {
-    const ph = cssH - AXIS, rh = ph / (view.hi - view.lo + 1);
+    const rh = (cssH - AXIS) / (view.hi - view.lo + 1);
     if (x < GUTTER) {   // nombre de nota: suena esa fila
         const m = Math.round(view.hi + 0.5 - (y - AXIS) / rh);
         if (y > AXIS) playMidi(m, 1.2);
@@ -1091,14 +1485,13 @@ function tapAt(x, y) {
     }
     if (!take || state === 'recording') return;
     const t = view.t0 + (x - GUTTER) / view.pps;
-    const yOf = m => AXIS + (view.hi + 0.5 - m) * rh;
-    let best = -1, bestD = Infinity;
-    take.notes.forEach((n, i) => {
-        if (t < n.start - 0.03 || t > n.end + 0.03) return;
-        const d = Math.abs(y - yOf(n.midi));
-        if (d <= Math.max(rh * 0.7, 16) && d < bestD) { best = i; bestD = d; }
-    });
-    if (best >= 0) { selectNote(best); return; }
+    const best = hitNote(x, y);
+    if (best >= 0) {
+        // Con una nota ya elegida, tocarla de nuevo coloca el cabezal ahí (para "Separar")
+        if (best === selected) { cursor = Math.min(Math.max(0, t), take.duration); requestDraw(); return; }
+        selectNote(best);
+        return;
+    }
     selected = -1;
     cursor = Math.min(Math.max(0, t), take.duration);
     if (state === 'playing') startPlayback(cursor);
@@ -1169,13 +1562,25 @@ function updateUI() {
     $('playText').textContent = state === 'playing' ? 'Pausa' : 'Escuchar';
     $('playIcon').innerHTML = state === 'playing' ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<path d="m8 5 12 7-12 7z"/>';
 
-    ['zoomOut', 'zoomIn', 'zoomFit'].forEach(id => { $(id).disabled = !take || recording; });
+    ['zoomOut', 'zoomIn', 'zoomFit', 'editTool'].forEach(id => { $(id).disabled = !take || recording; });
     $('levelWrap').hidden = !recording;
     renderMicMode();
 
     const hasNotes = !!(take && !recording && take.notes.length);
     $('noteCard').hidden = !hasNotes;
     $('summaryCard').hidden = !hasNotes;
+    $('tuneCard').hidden = !hasNotes;
+    $('editBar').hidden = !hasNotes;
+    if (hasNotes) {
+        const edited = !!take.edited;
+        document.querySelectorAll('.av-ab .diff-pill').forEach(b => {
+            b.classList.toggle('active', edited && b.dataset.ab === abMode);
+            b.disabled = !edited;
+        });
+        $('undoBtn').disabled = !undoStack.length;
+        $('redoBtn').disabled = !redoStack.length;
+        $('wavBtn').textContent = edited && abMode === 'edit' ? 'Descargar audio editado (WAV)' : 'Descargar audio (WAV)';
+    }
 
     if (recording) { updateRecInfo(); return; }
     if (!take) return;
@@ -1185,7 +1590,8 @@ function updateUI() {
     }
     const n = take.notes.length;
     showMessage(`${n} ${n === 1 ? 'nota' : 'notas'} · ${fmtTime(take.duration)}`,
-        `Afinadas el ${Math.round(take.stats.inTune * 100)} %` + (take.keyName ? ` · ${keyLabel()}` : ''));
+        `Afinadas el ${Math.round(take.stats.inTune * 100)} %` + (take.keyName ? ` · ${keyLabel()}` : '') +
+        (take.edited ? (abMode === 'edit' ? ' · escuchas la versión editada' : ' · escuchas el original') : ''));
 }
 
 function setMicMode(mode) {
@@ -1214,16 +1620,30 @@ function renderNote() {
     $('noteHint').hidden = !!n;
     $('noteBody').hidden = !n;
     if (!n) return;
-    $('noteName').textContent = noteLabel(n.note);
+    const m = shownMidi(n), c = centsOf(m);
+    $('noteName').textContent = noteLabel(Math.round(m));
     $('noteMeta').textContent = `Nota ${selected + 1} de ${take.notes.length} · ${fmtTime(n.start)},${String(Math.floor((n.start % 1) * 10))}`;
-    const st = tuneState(n.cents);
+    const st = tuneState(c);
     const pill = $('notePill');
     pill.dataset.state = st;
-    pill.textContent = st === 'ok' ? 'Afinada' : n.cents > 0 ? 'Alta' : 'Baja';
+    pill.textContent = st === 'ok' ? 'Afinada' : c > 0 ? 'Alta' : 'Baja';
     $('noteCents').textContent = fmtCents(n.cents);
     $('noteDur').textContent = (n.end - n.start).toFixed(2).replace('.', ',') + ' s';
     $('noteWobble').textContent = '±' + n.wobble + '¢';
     $('noteWobbleHint').textContent = n.wobble <= 12 ? 'muy estable' : n.wobble <= 30 ? 'estable' : n.wobble <= 60 ? 'con vibrato' : 'vibrato amplio o inestable';
+
+    const e = editOf(n), flat = Math.round(((e && e.flatten) || 0) * 100);
+    $('flatNote').value = flat;
+    $('flatNoteVal').textContent = flat + ' %';
+    const shift = Math.round((targetOf(n) - n.midi) * 100);
+    $('noteEditState').innerHTML = isEdited(n)
+        ? `Editada: <strong>${noteLabel(Math.round(targetOf(n)))} ${fmtCents(centsOf(targetOf(n)))}</strong>` +
+          ` (cantada ${noteLabel(n.note)} ${fmtCents(n.cents)}` + (shift ? `, movida ${shift > 0 ? '+' : '−'}${Math.abs(shift)}¢` : '') +
+          (flat ? `, vibrato −${flat} %` : '') + ')' +
+          (Math.abs(shift) > 300 ? ' · más de 3 semitonos puede sonar artificial' : '')
+        : 'Sin editar. Usa los botones o activa el lápiz y arrastra la nota.';
+    $('resetNoteBtn').disabled = !e;
+    $('mergeBtn').disabled = selected >= take.notes.length - 1;
 }
 
 function renderSummary() {
@@ -1244,41 +1664,258 @@ function renderSummary() {
     }).join('');
 }
 
+/* ── Diálogo dentro de la app ── */
+let modalFn = null;
+function openModal({ title, text, ok, onOk, input }) {
+    $('modalTitle').textContent = title;
+    $('modalText').textContent = text || '';
+    $('modalOk').textContent = ok;
+    const inp = $('modalInput');
+    inp.hidden = input === undefined;
+    if (input !== undefined) inp.value = input;
+    modalFn = onOk;
+    $('modal').hidden = false;
+    if (input !== undefined) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+}
+function closeModal() { $('modal').hidden = true; modalFn = null; }
+function modalOk() {
+    const fn = modalFn, value = $('modalInput').value;
+    closeModal();
+    if (fn) fn(value);
+}
+
+/* ── Mis tomas (IndexedDB: metadatos y audio por separado, para listar sin cargar audio) ── */
+const TakeDB = (() => {
+    let dbP = null;
+    function open() {
+        if (!dbP) dbP = new Promise((res, rej) => {
+            const r = indexedDB.open('mt-analisis-vocal', 1);
+            r.onupgradeneeded = () => {
+                r.result.createObjectStore('takes', { keyPath: 'id' });
+                r.result.createObjectStore('audio');
+            };
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+        });
+        return dbP;
+    }
+    async function run(store, mode, fn) {
+        const db = await open();
+        return new Promise((res, rej) => {
+            const tx = db.transaction(store, mode);
+            const out = fn(tx.objectStore(store));
+            tx.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
+            tx.onerror = tx.onabort = () => rej(tx.error);
+        });
+    }
+    return {
+        list:     () => run('takes', 'readonly', s => s.getAll()),
+        get:      id => run('takes', 'readonly', s => s.get(id)),
+        put:      meta => run('takes', 'readwrite', s => s.put(meta)),
+        getAudio: id => run('audio', 'readonly', s => s.get(id)),
+        putAudio: (id, ab) => run('audio', 'readwrite', s => s.put(ab, id)),
+        del: async id => { await run('takes', 'readwrite', s => s.delete(id)); await run('audio', 'readwrite', s => s.delete(id)); },
+    };
+})();
+
+let saveTimer = null, persistAsked = false;
+function saveSoon() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveTake(false), 800);
+}
+
+async function saveTake(withAudio) {
+    clearTimeout(saveTimer);
+    if (!take || !take.buffer || !window.indexedDB) return;
+    if (!take.id) {
+        take.id = Date.now().toString(36);
+        take.created = Date.now();
+        take.name = 'Toma del ' + new Date().toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        withAudio = true;
+    }
+    const F = take.frames, n = F.length;
+    const ft = new Float32Array(n), fm = new Float32Array(n), fr = new Float32Array(n);
+    for (let i = 0; i < n; i++) { ft[i] = F[i].t; fm[i] = F[i].midi; fr[i] = F[i].rms; }
+    const meta = {
+        id: take.id, name: take.name, created: take.created, updated: Date.now(),
+        duration: take.duration, notes: take.notes.length, sampleRate: take.buffer.sampleRate,
+        gain: take.gain, rawPeak: take.rawPeak, joins: take.joins, edits: take.edits, cuts: take.cuts,
+        edited: hasEdits(), ft: ft.buffer, fm: fm.buffer, fr: fr.buffer,
+    };
+    const id = take.id, t = take;
+    try {
+        if (withAudio) {
+            // 16 bits: la mitad de espacio que Float32 y sin pérdida audible
+            const d = take.buffer.getChannelData(0), pcm = new Int16Array(d.length);
+            for (let i = 0; i < d.length; i++) pcm[i] = Math.max(-32767, Math.min(32767, Math.round(d[i] * 32767)));
+            await TakeDB.putAudio(id, pcm.buffer);
+        }
+        await TakeDB.put(meta);
+        if (take === t) take.dirty = false;
+        if (!persistAsked && navigator.storage && navigator.storage.persist) {
+            persistAsked = true;
+            navigator.storage.persist().catch(() => {});   // que el sistema no lo borre por falta de espacio
+        }
+    } catch (err) {
+        $('takesInfo').textContent = 'No se pudo guardar la toma (¿sin espacio o modo privado?). Descárgala en WAV para no perderla.';
+    }
+    renderTakes();
+}
+
+async function openTake(id) {
+    if (state === 'recording' || busy) return;
+    if (take && take.id === id) return;
+    try {
+        const [meta, pcmBuf] = await Promise.all([TakeDB.get(id), TakeDB.getAudio(id)]);
+        if (!meta || !pcmBuf) throw new Error('incompleta');
+        stopPlayback();
+        setEditMode(false);
+        const pcm = new Int16Array(pcmBuf), data = new Float32Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 32767;
+        const ft = new Float32Array(meta.ft), fm = new Float32Array(meta.fm), fr = new Float32Array(meta.fr);
+        const frames = new Array(ft.length);
+        for (let i = 0; i < ft.length; i++) frames[i] = { t: ft[i], midi: fm[i], rms: fr[i] };
+        take = { id: meta.id, name: meta.name, created: meta.created, dirty: false, frames, curve: [], notes: [], analyzed: 0, peak: 0,
+                 buffer: makeBuffer(data, meta.sampleRate), gain: meta.gain || 1, rawPeak: meta.rawPeak || 0,
+                 duration: meta.duration, joins: meta.joins || [], range: null, key: null, keyName: null, scale: null, stats: null,
+                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, edited: null };
+        undoStack.length = redoStack.length = 0;
+        abMode = 'edit';
+        state = 'ready';
+        finishTake();
+        updateUI();
+        renderTakes();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+        $('takesInfo').textContent = 'No se pudo abrir esa toma.';
+    }
+}
+
+function renameTake(id) {
+    TakeDB.get(id).then(meta => {
+        if (!meta) return;
+        openModal({
+            title: 'Cambiar nombre', ok: 'Guardar', input: meta.name,
+            onOk: async value => {
+                const name = (value || '').trim().slice(0, 60);
+                if (!name) return;
+                meta.name = name;
+                await TakeDB.put(meta);
+                if (take && take.id === id) take.name = name;
+                renderTakes();
+            }
+        });
+    });
+}
+
+function deleteTake(id, name) {
+    openModal({
+        title: '¿Borrar la toma?', text: `"${name}" se borrará de este teléfono. No se puede deshacer.`, ok: 'Borrar',
+        onOk: async () => {
+            await TakeDB.del(id).catch(() => {});
+            if (take && take.id === id) {   // era la abierta: se cierra
+                stopPlayback();
+                take = null; selected = -1; cursor = 0;
+                $('rollWrap').style.height = '';
+                showMessage('Canta y mira tu voz', 'Graba hasta 3 minutos: verás la curva de tu afinación y cada nota que cantes.');
+                updateUI();
+                requestDraw();
+            }
+            renderTakes();
+        }
+    });
+}
+
+async function renderTakes() {
+    const list = $('takesList');
+    if (!window.indexedDB) { list.innerHTML = ''; $('takesInfo').textContent = 'Este navegador no permite guardar tomas.'; return; }
+    let takes = [];
+    try { takes = await TakeDB.list(); } catch (err) { $('takesInfo').textContent = 'No se pudieron leer las tomas guardadas.'; return; }
+    takes.sort((a, b) => b.updated - a.updated);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    list.innerHTML = takes.length ? takes.map(t => `
+        <div class="av-take${take && take.id === t.id ? ' current' : ''}">
+            <div class="av-take-main" onclick="openTake('${t.id}')">
+                <div class="av-take-name">${esc(t.name)}</div>
+                <div class="av-take-meta">${fmtTime(t.duration)} · ${t.notes} ${t.notes === 1 ? 'nota' : 'notas'}${t.edited ? ' · editada' : ''}${take && take.id === t.id ? ' · abierta' : ''}</div>
+            </div>
+            <button class="av-icon" onclick="renameTake('${t.id}')" aria-label="Cambiar nombre">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            </button>
+            <button class="av-icon" onclick="deleteTake('${t.id}', this.closest('.av-take').querySelector('.av-take-name').textContent)" aria-label="Borrar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+            </button>
+        </div>`).join('') : '<p class="av-hint">Aún no hay tomas guardadas: graba una y se guardará sola al pausar.</p>';
+    let info = 'Las tomas y sus ediciones se guardan solas en este teléfono (no se suben a ningún sitio).';
+    if (navigator.storage && navigator.storage.estimate) {
+        try {
+            const e = await navigator.storage.estimate();
+            const mb = e.usage / 1048576;
+            info += ` Espacio usado: ${mb < 10 ? mb.toFixed(1).replace('.', ',') : Math.round(mb)} MB.`;
+        } catch (err) {}
+    }
+    $('takesInfo').textContent = info;
+}
+
 /* ── Exportar ── */
 function download(bytes, ext, type) {
     const d = new Date(), p = v => String(v).padStart(2, '0');
-    const name = `toma-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;
+    const base = take && take.name ? take.name.replace(/[^\wáéíóúñü -]+/gi, '').trim().replace(/\s+/g, '-') : 'toma';
+    const name = `${base || 'toma'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-function downloadWav()  { if (take && take.buffer) download(Melody.toWav(take.buffer.getChannelData(0), take.buffer.sampleRate), 'wav', 'audio/wav'); }
-function downloadMidi() { if (take && take.notes.length) download(Melody.toMidiFile(take.notes), 'mid', 'audio/midi'); }
+function downloadWav() {
+    const buf = activeBuffer();
+    if (buf) download(Melody.toWav(buf.getChannelData(0), buf.sampleRate), 'wav', 'audio/wav');
+}
+function downloadMidi() {
+    if (!take || !take.notes.length) return;
+    // Con la vista "Editada", las notas van a su altura editada
+    const notes = take.notes.map(n => Object.assign({}, n, { note: Math.round(shownMidi(n)) }));
+    download(Melody.toMidiFile(notes), 'mid', 'audio/midi');
+}
 
 /* ── Arranque ── */
 window.addEventListener('load', () => {
     // El diálogo, directamente en <body>: fuera de contenedores con desenfoque o scroll
-    document.body.appendChild($('confirmModal'));
+    document.body.appendChild($('modal'));
     setupCanvas();
+    setEditMode(false);
     updateUI();
+    renderTakes();
 });
 window.addEventListener('mt-theme-change', () => { readColors(); requestDraw(); });
-window.addEventListener('pagehide', () => { if (state === 'recording') stopRecording(); });
+window.addEventListener('pagehide', () => {
+    if (state === 'recording') stopRecording();
+    else if (take && take.dirty && take.id) saveTake(false);
+});
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !$('confirmModal').hidden) { closeConfirm(); return; }
+    if (!$('modal').hidden) {
+        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Enter') modalOk();
+        return;
+    }
     if (e.target.closest && e.target.closest('input, select, textarea')) return;
+    if (!take || state === 'recording' || !take.notes.length) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        if (!take || state === 'recording' || !take.notes.length) return;
         e.preventDefault();
         stepNote(e.key === 'ArrowLeft' ? -1 : 1);
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+    } else if (selected >= 0 && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        nudgeNote(e.key === 'ArrowUp' ? 1 : -1);
     }
 });
 
-// Barra espaciadora (la escucha shell.js): grabar / detener / escuchar
+// Barra espaciadora (la escucha shell.js): grabar / pausar / escuchar
 function mtPlayToggle() {
-    if (!$('confirmModal').hidden) return;
+    if (!$('modal').hidden) return;
     if (state === 'recording') stopRecording();
     else if (take && take.buffer) togglePlay();
     else startRecording(false);
