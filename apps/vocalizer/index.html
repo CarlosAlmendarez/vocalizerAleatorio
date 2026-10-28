@@ -1089,10 +1089,13 @@ async function toggleMic() {
     if (micOn) { stopMic(); return; }
     const btnText = document.getElementById('micBtnText');
     try {
-        await soundEngine.start();   // mismo AudioContext que el piano
-        micStream = await navigator.mediaDevices.getUserMedia({
+        // El micrófono se pide ANTES de cualquier await: en iPhone, si llega después
+        // de activar el audio, WebKit puede rechazarlo (InvalidStateError)
+        const micP = navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false }
         });
+        await soundEngine.start();   // mismo AudioContext que el piano
+        micStream = await micP;
     } catch (err) {
         btnText.textContent = location.protocol === 'https:' || location.hostname === 'localhost'
             ? 'Permite el micrófono para usarlo' : 'El micrófono requiere HTTPS';

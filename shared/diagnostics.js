@@ -100,19 +100,32 @@
     }
   }
 
-  async function checkMic(rep, ac, root) {
-    rep.set('mic', 'Micrófono', 'run', 'pidiendo permiso…');
+  /**
+   * Pide el micrófono YA (llamar sin ningún await antes, dentro del toque): en iPhone,
+   * pedido segundos después del toque, WebKit lo rechaza con InvalidStateError.
+   */
+  function requestMic() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      rep.set('mic', 'Micrófono', 'fail', location.protocol === 'https:' ? 'no disponible en este navegador' : 'requiere HTTPS');
-      return;
+      return Promise.resolve({ error: location.protocol === 'https:' ? 'no disponible en este navegador' : 'requiere HTTPS' });
     }
-    var stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } });
-    } catch (e) {
-      rep.set('mic', 'Micrófono', 'fail', 'permiso denegado o sin micrófono (' + e.name + ')');
-      return;
-    }
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } })
+      .then(function (stream) { return { stream: stream }; },
+            function (e) { return { error: micErrorText(e) }; });
+  }
+
+  function micErrorText(e) {
+    var why = e.name === 'NotAllowedError' ? 'permiso denegado'
+            : e.name === 'NotFoundError' ? 'no se encontró micrófono'
+            : e.name === 'NotReadableError' ? 'otra app está usando el micrófono'
+            : 'el navegador lo rechazó';
+    return why + ' (' + e.name + (e.message ? ': ' + e.message : '') + ')';
+  }
+
+  async function checkMic(rep, ac, root, micP) {
+    rep.set('mic', 'Micrófono', 'run', 'pidiendo permiso…');
+    var res = await micP;
+    if (res.error) { rep.set('mic', 'Micrófono', 'fail', res.error); return; }
+    var stream = res.stream;
     try {
       if (!global.Pitch) await loadScript(root + 'shared/pitch.js');
       var an = ac.createAnalyser(); an.fftSize = 4096;
@@ -174,13 +187,13 @@
     rep.set('storage', 'Almacenamiento', ok ? 'ok' : 'fail', detail);
   }
 
-  async function checkWake(rep) {
-    if (!('wakeLock' in navigator)) {
+  async function checkWake(rep, wakeP) {
+    if (!wakeP) {
       rep.set('wake', 'Pantalla encendida', 'warn', 'no disponible: la pantalla puede apagarse mientras practicas');
       return;
     }
     try {
-      var lock = await navigator.wakeLock.request('screen');
+      var lock = await wakeP;
       await lock.release();
       rep.set('wake', 'Pantalla encendida', 'ok', 'disponible');
     } catch (e) {
@@ -200,14 +213,20 @@
     opts = opts || {};
     var root = opts.root || './';
     var rep = new Report(container);
+    // Micrófono y pantalla se piden en el mismo toque (antes del primer await): iOS
+    // los rechaza si llegan después de las pruebas de audio, varios segundos más tarde
+    var micP  = opts.mic ? requestMic() : null;
+    var wakeP = 'wakeLock' in navigator ? navigator.wakeLock.request('screen') : null;
+    if (wakeP) wakeP.catch(function () {});   // el error se informa en checkWake
     device(rep);
     var ac = await checkAudio(rep);
     await checkTone(rep, ac);
     await checkTiming(rep, root);
     await checkOffline(rep).catch(function (e) { rep.set('offline', 'Sin conexión', 'fail', e.message); });
     await checkStorage(rep).catch(function (e) { rep.set('storage', 'Almacenamiento', 'fail', e.message); });
-    await checkWake(rep);
-    if (opts.mic && ac) await checkMic(rep, ac, root).catch(function (e) { rep.set('mic', 'Micrófono', 'fail', e.message); });
+    await checkWake(rep, wakeP);
+    if (micP && ac) await checkMic(rep, ac, root, micP).catch(function (e) { rep.set('mic', 'Micrófono', 'fail', e.message); });
+    else if (micP) micP.then(function (r) { if (r.stream) r.stream.getTracks().forEach(function (t) { t.stop(); }); });
     if (ac && ac.close) ac.close().catch(function () {});
     return rep;
   }

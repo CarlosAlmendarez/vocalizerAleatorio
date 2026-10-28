@@ -86,3 +86,26 @@ test('boot.js en el <head> de cada página (tema antes del primer dibujo) y CSS 
   }
   assert.ok(!/@import/.test(read('shared/design.css')), 'design.css no debe usar @import (bloquea el dibujo)');
 });
+
+test('el micrófono se pide sin ningún await antes (iPhone: InvalidStateError si llega tarde)', () => {
+  // En iOS (Safari y Chrome, ambos WebKit) getUserMedia pedido después de esperar a otra
+  // cosa —activar el audio, pruebas del diagnóstico— se rechaza aunque haya permiso.
+  const files = [...APPS.map(a => `apps/${a}/index.html`), 'shared/diagnostics.js'];
+  let sites = 0;
+  for (const f of files) {
+    const src = read(f);
+    for (const m of src.matchAll(/getUserMedia\(/g)) {
+      if (src.slice(m.index - 30, m.index).includes('!navigator.mediaDevices')) continue;   // comprobación de soporte
+      sites++;
+      const fnStart = src.lastIndexOf('function ', m.index);
+      const before = src.slice(fnStart, m.index).replace(/\/\/.*$/gm, '')
+        .replace(/await\s+navigator\.mediaDevices\.$/, '');   // el await de la propia llamada vale
+      assert.ok(!/\bawait\b/.test(before), `${f}: hay un await antes de getUserMedia`);
+    }
+  }
+  assert.ok(sites >= 4, `solo ${sites} llamadas a getUserMedia`);
+  // El diagnóstico lo pide al empezar, antes de las pruebas de audio
+  const diag = read('shared/diagnostics.js');
+  const run = diag.slice(diag.indexOf('async function run('));
+  assert.ok(run.indexOf('requestMic()') < run.indexOf('await '), 'diagnostics: requestMic() debe ir antes del primer await');
+});
