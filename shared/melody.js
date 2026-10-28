@@ -60,6 +60,14 @@
     this._ring   = new Float32Array(this.win);
     this._frame  = new Float32Array(this.win);
     this._w = 0; this._count = 0; this._sinceHop = this.hop;
+    // Umbral de voz ADAPTATIVO: 3× el ruido de fondo (percentil 5 del volumen de
+    // los últimos 10 s), nunca menos de minRms. El umbral fijo de Pitch.detect
+    // (0,012) perdía la voz cuando el micrófono entra bajo (iPhone sin control
+    // automático de ganancia).
+    this.minRms  = opts.minRms || 0.0015;   // ≈ −56 dBFS
+    this.noise   = this.minRms;
+    this._hist   = new Float32Array(1000);
+    this._histN  = 0;
   }
 
   /** Añade muestras (cualquier tamaño de bloque) y devuelve los frames nuevos. */
@@ -92,13 +100,22 @@
 
     // Volumen solo de la mitad central (~20 ms): con la ventana entera (40 ms)
     // se suavizaban las caídas entre sílabas de una misma nota
-    var f = this._frame, win = this.win, q1 = win >> 2, q3 = win - q1, rms = 0;
+    var f = this._frame, win = this.win, q1 = win >> 2, q3 = win - q1, rms = 0, all = 0;
     for (var j = 0; j < win; j++) {
       var v = this._ring[(this._w + j) % win];
       f[j] = v;
+      all += v * v;
       if (j >= q1 && j < q3) rms += v * v;
     }
-    var hz = Pitch.detect(f, this.rate, this.minFreq);
+    all = Math.sqrt(all / win);
+    this._trackNoise(all);
+    var hz = -1;
+    if (all >= Math.max(this.minRms, this.noise * 3)) {
+      // Normalizado: YIN no depende del volumen, pero Pitch.detect descarta lo flojo
+      var g = 0.1 / all;
+      for (j = 0; j < win; j++) f[j] *= g;
+      hz = Pitch.detect(f, this.rate, this.minFreq);
+    }
     var center = (this._count - win / 2) * this.factor + this.delay;   // en muestras de entrada
     var frame = {
       t: center / this.sampleRate,
@@ -107,6 +124,16 @@
     };
     this.frames.push(frame);
     out.push(frame);
+  };
+
+  /** Ruido de fondo = percentil 5 del volumen reciente (se recalcula cada 25 frames). */
+  Analyzer.prototype._trackNoise = function (rms) {
+    var h = this._hist, n = this._histN++;
+    h[n % h.length] = rms;
+    n++;
+    if (n % 25 !== 0 && n !== 10) return;
+    var s = Array.prototype.slice.call(h, 0, Math.min(n, h.length)).sort(function (a, b) { return a - b; });
+    this.noise = Math.max(this.minRms, s[Math.floor(s.length * 0.05)]);
   };
 
   function createAnalyzer(sampleRate, opts) { return new Analyzer(sampleRate, opts); }

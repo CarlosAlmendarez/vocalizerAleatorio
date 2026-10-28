@@ -84,6 +84,10 @@
             transition: width 0.08s linear;
         }
         .av-level-fill.clip { background: var(--danger); }
+        .av-level-fill.low  { background: var(--warning); }
+        .av-modes { display: flex; gap: 8px; }
+        .av-modes .diff-pill:disabled { opacity: 0.5; cursor: default; }
+        .av-tips { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
         /* ── Nota seleccionada ── */
         .av-note-head { display: flex; align-items: center; gap: 10px; }
@@ -211,6 +215,17 @@
     </div>
 
     <div class="section-card">
+        <div class="section-title">Micrófono</div>
+        <div class="av-modes">
+            <button class="diff-pill" data-mode="boost" onclick="setMicMode('boost')">Realzado</button>
+            <button class="diff-pill" data-mode="natural" onclick="setMicMode('natural')">Natural</button>
+        </div>
+        <p class="av-hint" id="micModeHint" style="margin-top:10px"></p>
+        <p class="av-tips">Sostén el teléfono a 15–30 cm, con el micrófono de abajo hacia tu boca y sin taparlo con la mano.
+            Los auriculares Bluetooth graban con peor calidad: mejor el micrófono del teléfono o unos con cable.</p>
+    </div>
+
+    <div class="section-card">
         <div class="section-title">Cómo leer la gráfica</div>
         <ul class="av-legend">
             <li><span class="av-swatch ok"></span><span>Cada forma es una nota cantada; su grosor sigue tu volumen. Verde: afinada (±25¢).</span></li>
@@ -238,7 +253,17 @@ const ZOOM_MIN = 20, ZOOM_MAX = 600;   // píxeles por segundo
 const GUTTER = 48, AXIS = 20;          // columna de nombres y eje de tiempo (px)
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
+const LOW_PEAK = 0.05;                 // pico de toda la toma por debajo de esto = señal muy baja
+
+// Modos del micrófono. Realzado: el teléfono sube el volumen solo (en iPhone, el
+// procesado de voz del sistema). Natural: sin procesado, timbre fiel pero entra bajo.
+const MIC_MODES = {
+    boost:   { echoCancellation: true,  noiseSuppression: false, autoGainControl: true },
+    natural: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+};
+
 const store    = createStore('analisis-vocal');
+let micMode = MIC_MODES[store.get('micMode')] ? store.get('micMode') : 'boost';
 const refPiano = createNotePlayer('acoustic_grand_piano', { range: [57, 69] });   // se amplía a la tesitura de cada toma
 refPiano.preload();
 
@@ -328,10 +353,7 @@ async function startRecording() {
     try {
         // El micrófono se pide ANTES de cualquier await: en iPhone, si llega después
         // de activar el audio, WebKit puede rechazarlo (InvalidStateError)
-        const micP = soundEngine.getMic({
-            // Sin filtros del navegador: alteran el timbre y la detección de altura
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-        });
+        const micP = soundEngine.getMic({ audio: MIC_MODES[micMode] });
         await soundEngine.start();
         stream = await micP;
     } catch (err) {
@@ -343,7 +365,7 @@ async function startRecording() {
     const analyzer = Melody.createAnalyzer(ac.sampleRate);
     take = { frames: analyzer.frames, curve: [], notes: [], analyzed: 0, peak: 0, buffer: null, duration: 0,
              key: null, keyName: null, scale: null, stats: null };
-    rec = { stream, analyzer, chunks: [], length: 0, sr: ac.sampleRate, level: 0, lastSeg: 0, capture: null };
+    rec = { stream, analyzer, chunks: [], length: 0, sr: ac.sampleRate, level: 0, maxPeak: 0, lastSeg: 0, capture: null };
     selected = -1; cursor = 0;
     Object.assign(view, { t0: 0, lo: 55, hi: 72, fitted: false });
     rec.capture = await createCapture(ac, ac.createMediaStreamSource(stream), onChunk);
@@ -370,6 +392,7 @@ function onChunk(chunk) {
     let peak = 0;
     for (let i = 0; i < chunk.length; i++) { const a = Math.abs(chunk[i]); if (a > peak) peak = a; }
     rec.level = Math.max(peak, rec.level * 0.85);
+    rec.maxPeak = Math.max(rec.maxPeak, peak);
     if (rec.length >= MAX_SEC * rec.sr) stopRecording();
 }
 
@@ -383,6 +406,9 @@ function stopRecording() {
         const data = buf.getChannelData(0);
         let off = 0;
         rec.chunks.forEach(c => { data.set(c, off); off += c.length; });
+        // Normalizar: con el micrófono bajo la toma se oía (y exportaba) muy floja
+        const gain = rec.maxPeak > 0 ? Math.min(20, 0.9 / rec.maxPeak) : 1;
+        if (gain > 1.05) for (let i = 0; i < data.length; i++) data[i] *= gain;
         take.buffer = buf;
     }
     take.duration = rec.length / rec.sr;
@@ -878,10 +904,15 @@ function updateRecInfo() {
     const sec = rec.length / rec.sr;
     $('avTitle').textContent = `${fmtTime(sec)} / ${fmtTime(MAX_SEC)}`;
     const n = take.notes.length;
-    $('avSub').textContent = n ? `${n} ${n === 1 ? 'nota' : 'notas'} hasta ahora` : 'Canta… la gráfica se dibuja en vivo';
+    const low = sec > 3 && rec.maxPeak < LOW_PEAK;
+    $('avSub').textContent = low ? 'Señal muy baja: acerca el teléfono' + (micMode === 'natural' ? ' o usa el modo Realzado' : '')
+        : n ? `${n} ${n === 1 ? 'nota' : 'notas'} hasta ahora` : 'Canta… la gráfica se dibuja en vivo';
+    // Medidor en dB (−60…0): con la escala lineal una voz baja apenas se veía
+    const db = 20 * Math.log10(Math.max(rec.level, 1e-4));
     const fill = $('levelFill');
-    fill.style.width = Math.min(100, rec.level * 140) + '%';
+    fill.style.width = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
     fill.classList.toggle('clip', rec.level > 0.98);
+    fill.classList.toggle('low', rec.level < LOW_PEAK && rec.level > 0);
 }
 
 function updateUI() {
@@ -902,6 +933,7 @@ function updateUI() {
 
     ['zoomOut', 'zoomIn', 'zoomFit'].forEach(id => { $(id).disabled = !take || recording; });
     $('levelWrap').hidden = !recording;
+    renderMicMode();
 
     const hasNotes = !!(take && !recording && take.notes.length);
     $('noteCard').hidden = !hasNotes;
@@ -916,6 +948,23 @@ function updateUI() {
     const n = take.notes.length;
     showMessage(`${n} ${n === 1 ? 'nota' : 'notas'} · ${fmtTime(take.duration)}`,
         `Afinadas el ${Math.round(take.stats.inTune * 100)} %` + (take.keyName ? ` · ${keyLabel()}` : ''));
+}
+
+function setMicMode(mode) {
+    if (state === 'recording' || !MIC_MODES[mode]) return;
+    micMode = mode;
+    store.set('micMode', mode);
+    renderMicMode();
+}
+
+function renderMicMode() {
+    document.querySelectorAll('.av-modes .diff-pill').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === micMode);
+        b.disabled = state === 'recording';
+    });
+    $('micModeHint').textContent = micMode === 'boost'
+        ? 'El teléfono ajusta el volumen solo: más señal con voz suave o lejos del micrófono.'
+        : 'Sin procesado: el timbre más fiel, pero entra más bajo. Acerca el teléfono.';
 }
 
 function keyLabel() {

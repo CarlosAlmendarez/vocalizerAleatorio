@@ -146,10 +146,29 @@ test('el análisis en streaming no depende del tamaño de los bloques', () => {
   }
 });
 
+test('micrófono bajo (iPhone sin ganancia automática): la voz débil no se pierde', () => {
+  // ~−40 dBFS: por debajo del umbral fijo de Pitch.detect (0,012), que la perdía entera
+  const { samples, plan } = sing(SCALE);
+  const quiet = samples.map(x => x * 0.08);
+  const { notes } = analyzeSamples(quiet);
+  assertNotes(plain(notes), plan, { cents: 4 });
+});
+
+test('voz débil sobre ruido de fondo constante', () => {
+  const rnd = seededRandom(5);
+  const { samples, plan } = sing(SCALE);
+  const mixed = samples.map(x => x * 0.15 + (rnd() - 0.5) * 0.01);   // ruido ≈ −50 dBFS
+  const { notes } = analyzeSamples(mixed);
+  assertNotes(plain(notes), plan, { cents: 5 });
+});
+
 test('silencio y ruido no producen notas', () => {
   const rnd = seededRandom(9);
   const noise = new Float32Array(48000 * 2).map(() => (rnd() - 0.5) * 0.01);
   assert.equal(analyzeSamples(noise).notes.length, 0);
+  const loud = new Float32Array(48000 * 3).map(() => (rnd() - 0.5) * 0.2);   // ruido fuerte: tampoco
+  assert.equal(analyzeSamples(loud).notes.length, 0);
+  assert.equal(analyzeSamples(new Float32Array(48000)).notes.length, 0, 'silencio digital');
 });
 
 test('errores de octava y frames sueltos se corrigen', () => {
