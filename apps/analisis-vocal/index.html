@@ -524,16 +524,23 @@ function toggleRecord() {
 }
 
 /** Nueva toma: la actual ya está guardada en "Mis tomas"; si no, confirmación DENTRO de la app. */
+/** Nueva toma: se confirma DOS veces dentro de la app (nunca con confirm() del navegador). */
 function newTake() {
     if (state === 'recording' || busy) return;
-    if (!take || !take.notes.length || (take.id && !take.dirty)) { startRecording(false); return; }
-    const n = take.notes.length;
+    if (!take || !take.notes.length) { startRecording(false); return; }
+    const n = take.notes.length, saved = take.id && !take.dirty;
+    const desc = `La toma actual (${fmtTime(take.duration)}, ${n} ${n === 1 ? 'nota' : 'notas'})`;
     openModal({
         title: '¿Empezar una toma nueva?',
-        text: `La toma actual (${fmtTime(take.duration)}, ${n} ${n === 1 ? 'nota' : 'notas'}) no se pudo guardar y se perderá. ` +
-              'Si quieres conservarla, descárgala antes en WAV o MIDI.',
-        ok: 'Borrar y grabar',
-        onOk: () => startRecording(false)   // en el mismo toque: el micrófono se pide sin esperas
+        text: saved ? `${desc} queda guardada en Mis tomas.`
+                    : `${desc} no se pudo guardar y se perderá. Si quieres conservarla, descárgala antes en WAV o MIDI.`,
+        ok: 'Sí, nueva toma',
+        onOk: () => openModal({
+            title: '¿Seguro?',
+            text: 'Se cerrará la toma actual y empezará a grabar en cuanto confirmes.',
+            ok: saved ? 'Empezar a grabar' : 'Borrar y grabar',
+            onOk: () => startRecording(false)   // en el mismo toque: el micrófono se pide sin esperas
+        })
     });
 }
 
