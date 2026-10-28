@@ -5,7 +5,7 @@
 'use strict';
 const test   = require('node:test');
 const assert = require('node:assert/strict');
-const { createContext, inlineScripts, run, plain } = require('./helpers');
+const { createContext, inlineScripts, run, plain, read } = require('./helpers');
 
 function loadTransposer() {
   const ctx = createContext(['theory.js'], { createStore: () => ({ get: (k, d) => d, set() {} }) });
@@ -53,4 +53,41 @@ test('progresiones: acordes escritos por grado en cualquier tonalidad', () => {
   assert.equal(labels('golden', 0), 'C G Am F');
   assert.equal(labels('golden', 1), 'D♭ A♭ B♭m G♭');
   assert.equal(labels('jazz_251', 10), 'Cm F7 B♭');
+});
+
+test('micrófono en iPhone: sesión de grabación mientras se usa y reintento con "auto"', async () => {
+
+  // iPhone simulado: getUserMedia solo funciona con la sesión 'play-and-record' o 'auto'
+  const make = acceptPlayAndRecord => {
+    const calls = [];
+    const audioSession = { type: 'auto' };
+    const ctx = createContext([], {
+      document: { addEventListener() {} },
+      navigator: {
+        audioSession,
+        mediaDevices: {
+          getUserMedia: () => {
+            calls.push(audioSession.type);
+            const ok = audioSession.type === 'auto' || (acceptPlayAndRecord && audioSession.type === 'play-and-record');
+            return ok ? Promise.resolve({ id: 'mic' })
+                      : Promise.reject(Object.assign(new Error('AudioSession category is not compatible with audio capture.'), { name: 'InvalidStateError' }));
+          },
+        },
+      },
+    });
+    ctx.addEventListener = () => {};
+    run(ctx, read('shared/sound-engine.js') + '\n;globalThis.__se = soundEngine;', 'sound-engine.js');
+    return { se: ctx.__se, audioSession, calls };
+  };
+
+  const a = make(true);
+  assert.equal(a.audioSession.type, 'playback', 'por defecto, sesión de reproducción (interruptor de silencio)');
+  assert.equal((await a.se.getMic({ audio: true })).id, 'mic');
+  assert.deepEqual(plain(a.calls), ['play-and-record']);
+  a.se.releaseMic();
+  assert.equal(a.audioSession.type, 'playback');
+
+  const b = make(false);   // iOS que solo acepta 'auto'
+  assert.equal((await b.se.getMic({ audio: true })).id, 'mic');
+  assert.deepEqual(plain(b.calls), ['play-and-record', 'auto']);
 });

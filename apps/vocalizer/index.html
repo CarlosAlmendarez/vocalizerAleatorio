@@ -1091,7 +1091,7 @@ async function toggleMic() {
     try {
         // El micrófono se pide ANTES de cualquier await: en iPhone, si llega después
         // de activar el audio, WebKit puede rechazarlo (InvalidStateError)
-        const micP = navigator.mediaDevices.getUserMedia({
+        const micP = soundEngine.getMic({
             audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false }
         });
         await soundEngine.start();   // mismo AudioContext que el piano
@@ -1120,6 +1120,7 @@ function stopMic() {
     cancelAnimationFrame(micRaf);
     if (micStream) micStream.getTracks().forEach(t => t.stop());
     if (micSource) micSource.disconnect();
+    soundEngine.releaseMic();
     micStream = micSource = micAnalyser = null;
     document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
     document.getElementById('micBtnText').textContent = 'Afinación de tu voz';

@@ -328,7 +328,7 @@ async function startRecording() {
     try {
         // El micrófono se pide ANTES de cualquier await: en iPhone, si llega después
         // de activar el audio, WebKit puede rechazarlo (InvalidStateError)
-        const micP = navigator.mediaDevices.getUserMedia({
+        const micP = soundEngine.getMic({
             // Sin filtros del navegador: alteran el timbre y la detección de altura
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
         });
@@ -355,7 +355,7 @@ async function startRecording() {
 }
 
 function micErrorText(err) {
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') return 'El micrófono requiere HTTPS.';
+    if (!window.isSecureContext) return 'El micrófono requiere HTTPS.';
     if (err.name === 'NotAllowedError') return 'Permite el micrófono para este sitio (y para el navegador en los Ajustes del teléfono).';
     if (err.name === 'NotReadableError') return 'Otra app está usando el micrófono: ciérrala y vuelve a intentarlo.';
     if (err.name === 'NotFoundError') return 'No se encontró ningún micrófono.';
@@ -377,6 +377,7 @@ function stopRecording() {
     if (state !== 'recording') return;
     rec.capture.stop();
     rec.stream.getTracks().forEach(t => t.stop());
+    soundEngine.releaseMic();
     if (rec.length > 0) {
         const buf = soundEngine.ac.createBuffer(1, rec.length, rec.sr);
         const data = buf.getChannelData(0);

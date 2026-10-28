@@ -45,6 +45,30 @@ class SoundEngine {
     }
 
     /**
+     * Micrófono compatible con iPhone. La sesión 'playback' (arriba, para el
+     * interruptor de silencio) impide grabar: WebKit rechaza getUserMedia con
+     * InvalidStateError "AudioSession category is not compatible with audio
+     * capture". Mientras se graba se usa 'play-and-record' (tampoco la silencia
+     * el interruptor); si aun así lo rechaza, se reintenta con 'auto'.
+     * Llamar sin ningún await antes (dentro del toque) y releaseMic() al soltarlo.
+     */
+    getMic(constraints) {
+        this._setSession('play-and-record');
+        const md = navigator.mediaDevices;
+        return md.getUserMedia(constraints).catch(err => {
+            if (err.name !== 'InvalidStateError' || !navigator.audioSession) { this.releaseMic(); throw err; }
+            this._setSession('auto');
+            return md.getUserMedia(constraints).catch(e => { this.releaseMic(); throw e; });
+        });
+    }
+
+    releaseMic() { this._setSession('playback'); }
+
+    _setSession(type) {
+        try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (_) {}
+    }
+
+    /**
      * Registra listeners de gestos para desbloquear el AudioContext lo antes
      * posible — antes incluso de que el usuario pulse un botón de reproducción.
      * El buffer silencioso es el mecanismo estándar para pasar por encima del

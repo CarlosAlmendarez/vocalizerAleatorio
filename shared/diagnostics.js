@@ -108,9 +108,19 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.resolve({ error: location.protocol === 'https:' ? 'no disponible en este navegador' : 'requiere HTTPS' });
     }
-    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } })
-      .then(function (stream) { return { stream: stream }; },
-            function (e) { return { error: micErrorText(e) }; });
+    // Sesión de audio de iOS: 'playback' o 'ambient' impiden grabar (ver soundEngine.getMic)
+    var as = navigator.audioSession, prev = as ? as.type : null;
+    function setType(t) { try { if (as) as.type = t; } catch (_) {} }
+    var c = { audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } };
+    setType('play-and-record');
+    return navigator.mediaDevices.getUserMedia(c)
+      .catch(function (e) {
+        if (e.name !== 'InvalidStateError' || !as) throw e;
+        setType('auto');
+        return navigator.mediaDevices.getUserMedia(c);
+      })
+      .then(function (stream) { return { stream: stream, restore: function () { setType(prev); } }; },
+            function (e) { setType(prev); return { error: micErrorText(e) + (as ? ' · sesión ' + prev : '') }; });
   }
 
   function micErrorText(e) {
@@ -151,6 +161,7 @@
       else rep.set('mic', 'Micrófono', 'ok', 'nivel ' + level + ' dB · nota detectada ' + top);
     } finally {
       stream.getTracks().forEach(function (t) { t.stop(); });
+      res.restore();
     }
   }
 
@@ -226,7 +237,7 @@
     await checkStorage(rep).catch(function (e) { rep.set('storage', 'Almacenamiento', 'fail', e.message); });
     await checkWake(rep, wakeP);
     if (micP && ac) await checkMic(rep, ac, root, micP).catch(function (e) { rep.set('mic', 'Micrófono', 'fail', e.message); });
-    else if (micP) micP.then(function (r) { if (r.stream) r.stream.getTracks().forEach(function (t) { t.stop(); }); });
+    else if (micP) micP.then(function (r) { if (r.stream) { r.stream.getTracks().forEach(function (t) { t.stop(); }); r.restore(); } });
     if (ac && ac.close) ac.close().catch(function () {});
     return rep;
   }

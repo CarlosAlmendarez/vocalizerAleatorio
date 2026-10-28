@@ -512,7 +512,7 @@ async function startListening() {
     if (title) title.textContent = 'Esperando permiso…';
 
     try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        mediaStream = await soundEngine.getMic({ audio: true, video: false });
     } catch (e) {
         let msg = 'No se pudo acceder al micrófono.';
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
@@ -556,6 +556,7 @@ function stopListening() {
     isListening = false;
     if (rafId) cancelAnimationFrame(rafId);
     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (mediaStream) soundEngine.releaseMic();
     if (audioCtx) audioCtx.close();
     mediaStream = audioCtx = analyser = null;
     updateMicUI(false);
