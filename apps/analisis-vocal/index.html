@@ -89,6 +89,35 @@
         .av-modes .diff-pill:disabled { opacity: 0.5; cursor: default; }
         .av-tips { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
+        /* Aviso "toca para empezar" sobre la gráfica */
+        .av-tapnote {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            max-width: 82%; padding: 16px 20px; border-radius: var(--radius-sm);
+            border: 1px solid rgba(var(--accent-rgb), 0.45); background: var(--surface-ss); color: var(--ink);
+            font-family: var(--font-sans); cursor: pointer; box-shadow: var(--card-shadow);
+            animation: av-pulse 1.6s ease-in-out infinite;
+        }
+        .av-tapnote[hidden] { display: none; }
+        .av-tapnote strong { font-size: 15px; color: var(--accent); }
+        .av-tapnote span { font-size: 12px; color: var(--ink-dim); }
+
+        /* Confirmación dentro de la app (confirm() del navegador se puede bloquear) */
+        .av-modal {
+            position: fixed; inset: 0; z-index: 1000;
+            display: flex; align-items: center; justify-content: center; padding: 16px;
+            background: rgba(0, 0, 0, 0.55);
+        }
+        .av-modal[hidden] { display: none; }
+        .av-modal-card {
+            width: 100%; max-width: 380px; padding: 20px;
+            background: var(--bg); border: 1px solid var(--border-s); border-radius: var(--radius);
+            box-shadow: var(--card-shadow); color: var(--ink);
+        }
+        .av-modal-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+        .av-modal-card p { font-size: 13px; color: var(--ink-dim); margin: 8px 0 0; }
+        .av-modal-card .av-actions .btn-primary { flex: 1; min-width: 140px; }
+
         /* ── Nota seleccionada ── */
         .av-note-head { display: flex; align-items: center; gap: 10px; }
         .av-nav {
@@ -147,6 +176,10 @@
 
     <div class="av-roll glass" id="rollWrap">
         <canvas id="roll" aria-label="Gráfica de las notas cantadas"></canvas>
+        <button class="av-tapnote" id="tapNote" onclick="tapNoteAction()" hidden>
+            <strong id="tapNoteTitle">Toca aquí para empezar a grabar</strong>
+            <span id="tapNoteSub"></span>
+        </button>
         <div class="av-roll-tools">
             <button class="av-tool" id="zoomOut" onclick="zoomBy(1 / 1.5)" aria-label="Alejar">−</button>
             <button class="av-tool" id="zoomIn"  onclick="zoomBy(1.5)"     aria-label="Acercar">+</button>
@@ -164,6 +197,10 @@
         <button class="btn-ghost" id="playBtn" onclick="togglePlay()" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="m8 5 12 7-12 7z"/></svg>
             <span id="playText">Escuchar</span>
+        </button>
+        <button class="btn-ghost" id="newBtn" onclick="newTake()" hidden>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            <span>Nueva toma</span>
         </button>
         <div class="av-level" id="levelWrap" hidden><div class="av-level-fill" id="levelFill"></div></div>
     </div>
@@ -232,6 +269,7 @@
             <li><span class="av-swatch close"></span><span>Ámbar: entre 25 y 50¢ de desvío.</span></li>
             <li><span class="av-swatch off"></span><span>Rojo: más de 50¢, casi otra nota.</span></li>
             <li><span class="av-swatch line"></span><span>La línea es tu afinación continua: deslizamientos, vibrato y ataques.</span></li>
+            <li><span class="av-swatch" style="background:var(--accent)"></span><span>El globo del cabezal indica la nota que suena en ese momento; la escala vertical se ajusta sola a las notas que ves.</span></li>
             <li><span class="av-swatch" style="background:var(--surface-ss)"></span><span>Filas oscuras: notas fuera de la tonalidad estimada (antes de conocerla, las teclas negras). Toca un nombre de nota a la izquierda para escucharla.</span></li>
             <li><span class="av-swatch" style="background:transparent"></span><span>Arrastra para moverte; pellizca o usa − / + para el zoom. Toca una nota para analizarla; con ← / → pasas a la anterior o la siguiente.</span></li>
         </ul>
@@ -239,18 +277,32 @@
 
 </div>
 
+<div class="av-modal" id="confirmModal" hidden onclick="if (event.target === this) closeConfirm()">
+    <div class="av-modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div class="av-modal-title" id="confirmTitle">¿Empezar una toma nueva?</div>
+        <p id="confirmText"></p>
+        <div class="av-actions">
+            <button class="btn-ghost" onclick="closeConfirm()">Cancelar</button>
+            <button class="btn-primary" onclick="confirmNewTake()">Borrar y grabar</button>
+        </div>
+    </div>
+</div>
+
 <script>
 /* ════════════════════════════════════════════════════
    ANÁLISIS VOCAL — graba la voz y la dibuja nota a nota (estilo Melodyne)
    · shared/melody.js analiza en vivo (YIN cada 10 ms) y separa las notas.
-   · La curva y las notas se dibujan mientras cantas; al detener se hace el
-     análisis final (tonalidad, resumen) y se puede escuchar la toma.
+   · La curva y las notas se dibujan mientras cantas; en pausa se hace el
+     análisis (tonalidad, resumen), se puede escuchar y CONTINUAR la toma.
    · shell.js reescribe el <body>: los nodos se buscan siempre por id.
    ════════════════════════════════════════════════════ */
 const MAX_SEC = 180;                   // 3 min ≈ 35 MB de audio a 48 kHz
 const TUNE_OK = 25, TUNE_CLOSE = 50;   // cents: mismas tolerancias que el vocalizador
 const ZOOM_MIN = 20, ZOOM_MAX = 600;   // píxeles por segundo
 const GUTTER = 48, AXIS = 20;          // columna de nombres y eje de tiempo (px)
+const MIN_RH = 13;                     // alto mínimo de fila: todas las notas llevan nombre
+const JOIN_GAP = 0.2;                  // silencio (s) entre tramos al continuar una toma
+const STALL_MS = 1000;                 // grabando sin recibir audio → aviso "toca la pantalla"
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
 const LOW_PEAK = 0.05;                 // pico de toda la toma por debajo de esto = señal muy baja
@@ -272,11 +324,12 @@ const mod12 = n => ((n % 12) + 12) % 12;
 
 let state = 'idle';          // idle | recording | ready | playing
 let busy = false;            // pidiendo el micrófono
-let take = null;             // { frames, curve, notes, analyzed, peak, buffer, duration, key, keyName, scale, stats }
-let rec = null;              // { stream, capture, analyzer, chunks, length, sr, level, lastSeg }
+let take = null;             // { analyzer, frames, curve, notes, analyzed, peak, buffer, gain, rawPeak, duration, joins, range, key, keyName, scale, stats }
+let rec = null;              // { stream, capture, analyzer, chunks, length, sr, level, maxPeak, lastSeg, lastChunk }
 let playback = null;         // { src, startAc, offset }
 let cursor = 0, selected = -1;
-const view = { t0: 0, pps: store.get('zoom', 120), lo: 55, hi: 72, fitted: false };
+// lo/hi: filas visibles (con decimales mientras se animan hacia tlo/thi)
+const view = { t0: 0, pps: store.get('zoom', 120), lo: 55, hi: 72, tlo: 55, thi: 72 };
 
 let cv = null, cx = null, cssW = 0, cssH = 0, dpr = 1;
 let colors = {};
@@ -335,39 +388,87 @@ async function createCapture(ac, source, onChunk) {
 }
 
 /* ── Grabación ── */
+// Grabar → Pausa (analiza y deja escuchar) → Continuar (añade al final) …
 function toggleRecord() {
     if (state === 'recording') stopRecording();
-    else startRecording();
+    else startRecording(!!take);
 }
 
-async function startRecording() {
-    if (busy) return;
-    if (take && take.notes.length && !confirm('¿Descartar la toma actual y grabar otra?')) return;
+/** Nueva toma: si hay algo grabado, confirmación DENTRO de la app. */
+function newTake() {
+    if (state === 'recording' || busy) return;
+    if (!take || !take.notes.length) { startRecording(false); return; }
+    const n = take.notes.length;
+    $('confirmText').textContent = `Se borrará la toma actual (${fmtTime(take.duration)}, ${n} ${n === 1 ? 'nota' : 'notas'}). ` +
+        'Si quieres conservarla, descárgala antes en WAV o MIDI.';
+    $('confirmModal').hidden = false;
+}
+function closeConfirm() { $('confirmModal').hidden = true; }
+function confirmNewTake() {
+    closeConfirm();
+    startRecording(false);   // en el mismo toque: el micrófono se pide sin esperas
+}
+
+/**
+ * append = continuar la toma actual. Sin ningún await antes de getMic():
+ * en iPhone el micrófono debe pedirse dentro del toque.
+ */
+async function startRecording(append, retry) {
+    if (busy || state === 'recording') return;
     stopPlayback();
+    hideTapNote();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showMessage('Sin micrófono', 'Este navegador no permite usar el micrófono.');
         return;
     }
+    if (append && take && take.duration >= MAX_SEC - 1) return;
     busy = true;
     let stream;
     try {
-        // El micrófono se pide ANTES de cualquier await: en iPhone, si llega después
-        // de activar el audio, WebKit puede rechazarlo (InvalidStateError)
         const micP = soundEngine.getMic({ audio: MIC_MODES[micMode] });
         await soundEngine.start();
         stream = await micP;
     } catch (err) {
         busy = false;
-        showMessage('Sin micrófono', micErrorText(err));
+        // Sin toque válido (iOS) u otro rechazo pasajero: pedir un toque y reintentar
+        if (!retry && window.isSecureContext && err.name !== 'NotFoundError' && err.name !== 'NotReadableError') {
+            showTapNote('Toca aquí para empezar a grabar', micErrorText(err), () => startRecording(append, true));
+        } else {
+            showMessage('Sin micrófono', micErrorText(err));
+        }
         return;
     }
     const ac = soundEngine.ac;
-    const analyzer = Melody.createAnalyzer(ac.sampleRate);
-    take = { frames: analyzer.frames, curve: [], notes: [], analyzed: 0, peak: 0, buffer: null, duration: 0,
-             key: null, keyName: null, scale: null, stats: null };
-    rec = { stream, analyzer, chunks: [], length: 0, sr: ac.sampleRate, level: 0, maxPeak: 0, lastSeg: 0, capture: null };
-    selected = -1; cursor = 0;
-    Object.assign(view, { t0: 0, lo: 55, hi: 72, fitted: false });
+    if (!append || !take || !take.analyzer) {
+        const analyzer = Melody.createAnalyzer(ac.sampleRate);
+        take = { analyzer, frames: analyzer.frames, curve: [], notes: [], analyzed: 0, peak: 0, buffer: null,
+                 gain: 1, rawPeak: 0, duration: 0, joins: [], range: null, key: null, keyName: null, scale: null, stats: null };
+        rec = { chunks: [], length: 0, maxPeak: 0 };
+        selected = -1; cursor = 0;
+        Object.assign(view, { t0: 0, lo: 55, hi: 72, tlo: 55, thi: 72 });
+        $('rollWrap').style.height = '';
+    } else {
+        // Continuar: el audio ya grabado vuelve a bloques (sin normalizar) + un silencio de unión
+        const chunks = [];
+        let length = 0;
+        if (take.buffer) {
+            const data = take.buffer.getChannelData(0), g = take.gain || 1;
+            const raw = new Float32Array(data.length);
+            for (let i = 0; i < data.length; i++) raw[i] = data[i] / g;
+            chunks.push(raw);
+            length = raw.length;
+        }
+        const gap = new Float32Array(Math.round(JOIN_GAP * ac.sampleRate));
+        chunks.push(gap);
+        length += gap.length;
+        take.analyzer.push(gap);
+        take.joins.push(length / ac.sampleRate);
+        take.buffer = null;   // memoria: el audio vive en los bloques mientras se graba
+        rec = { chunks, length, maxPeak: take.rawPeak };
+        selected = -1;
+    }
+    Object.assign(rec, { stream, analyzer: take.analyzer, sr: ac.sampleRate, level: 0, lastSeg: 0,
+                         lastChunk: performance.now(), capture: null });
     rec.capture = await createCapture(ac, ac.createMediaStreamSource(stream), onChunk);
     busy = false;
     state = 'recording';
@@ -376,18 +477,34 @@ async function startRecording() {
     startLoop();
 }
 
+/* Aviso sobre la gráfica: el navegador necesita un toque para empezar/seguir */
+let tapNoteFn = null;
+function showTapNote(title, sub, fn) {
+    tapNoteFn = fn;
+    $('tapNoteTitle').textContent = title;
+    $('tapNoteSub').textContent = sub || '';
+    $('tapNote').hidden = false;
+}
+function hideTapNote() { tapNoteFn = null; const el = $('tapNote'); if (el) el.hidden = true; }
+function tapNoteAction() {
+    const fn = tapNoteFn;
+    hideTapNote();
+    if (fn) fn();
+}
+
 function micErrorText(err) {
     if (!window.isSecureContext) return 'El micrófono requiere HTTPS.';
     if (err.name === 'NotAllowedError') return 'Permite el micrófono para este sitio (y para el navegador en los Ajustes del teléfono).';
     if (err.name === 'NotReadableError') return 'Otra app está usando el micrófono: ciérrala y vuelve a intentarlo.';
     if (err.name === 'NotFoundError') return 'No se encontró ningún micrófono.';
-    return `El navegador rechazó el micrófono (${err.name}). Vuelve a pulsar Grabar.`;
+    return `El navegador rechazó el micrófono (${err.name}).`;
 }
 
 function onChunk(chunk) {
     if (state !== 'recording' || !rec) return;
     rec.chunks.push(chunk);
     rec.length += chunk.length;
+    rec.lastChunk = performance.now();
     rec.analyzer.push(chunk);
     let peak = 0;
     for (let i = 0; i < chunk.length; i++) { const a = Math.abs(chunk[i]); if (a > peak) peak = a; }
@@ -410,9 +527,12 @@ function stopRecording() {
         const gain = rec.maxPeak > 0 ? Math.min(20, 0.9 / rec.maxPeak) : 1;
         if (gain > 1.05) for (let i = 0; i < data.length; i++) data[i] *= gain;
         take.buffer = buf;
+        take.gain = gain > 1.05 ? gain : 1;   // para deshacerlo si se continúa la toma
     }
+    take.rawPeak = rec.maxPeak;
     take.duration = rec.length / rec.sr;
     rec = null;   // libera los bloques: el audio ya está en el AudioBuffer
+    hideTapNote();
     state = 'ready';
     soundEngine.keepAwake(false);
     finishTake();
@@ -426,7 +546,6 @@ function reanalyze() {
     take.notes = res.notes;
     take.analyzed = take.frames.length;
     take.peak = take.frames.reduce((mx, f) => Math.max(mx, f.rms), 0);
-    fitPitchRange();
 }
 
 function finishTake() {
@@ -437,9 +556,14 @@ function finishTake() {
     take.stats = Melody.stats(take.notes, TUNE_OK);
     cursor = 0; selected = -1;
     fitTime(false);
-    // El piano de referencia decodifica solo las filas visibles (cubren todas las notas)
-    const lo = view.lo, hi = view.hi;
-    refPiano.preload().then(() => refPiano.setRange(lo, hi)).catch(() => {});
+    // El piano de referencia decodifica la tesitura de la toma (±2 semitonos)
+    const ms = take.notes.map(n => n.note);
+    take.range = ms.length ? [Math.min(...ms) - 2, Math.max(...ms) + 2] : null;
+    if (take.range) {
+        const [lo, hi] = take.range;
+        refPiano.preload().then(() => refPiano.setRange(lo, hi)).catch(() => {});
+    }
+    fitRollHeight();
     renderSummary();
     renderNote();
     requestDraw();
@@ -512,7 +636,8 @@ async function playReference() {
 
 async function playMidi(midi, dur) {
     await refPiano.ready();
-    await refPiano.setRange(Math.min(view.lo, midi), Math.max(view.hi, midi));
+    const r = (take && take.range) || [Math.floor(view.lo), Math.ceil(view.hi)];
+    await refPiano.setRange(Math.min(r[0], midi), Math.max(r[1], midi));
     refPiano.cancel();
     refPiano.note(midi, refPiano.now, { dur: dur || 1.2, gain: 0.9 });
 }
@@ -545,19 +670,67 @@ const tuneState = c => Math.abs(c) <= TUNE_OK ? 'ok' : Math.abs(c) <= TUNE_CLOSE
 const plotW = () => Math.max(1, cssW - GUTTER);
 const visibleSec = () => plotW() / view.pps;
 
-function fitPitchRange() {
-    let lo = Infinity, hi = -Infinity;
-    take.notes.forEach(n => { lo = Math.min(lo, n.midi); hi = Math.max(hi, n.midi); });
-    if (lo === Infinity) return;
-    lo = Math.floor(lo) - 2; hi = Math.ceil(hi) + 2;
-    if (hi - lo < 12) { lo = Math.round((lo + hi) / 2) - 6; hi = lo + 12; }
-    if (state === 'recording' && view.fitted) {   // en vivo solo se amplía: la gráfica no salta
-        view.lo = Math.min(view.lo, lo);
-        view.hi = Math.max(view.hi, hi);
-    } else {
-        view.lo = lo; view.hi = hi;
+/**
+ * Saltos grandes: la gráfica crece en altura (hasta 4 octavas) para mostrar toda la
+ * tesitura de la toma con un nombre en cada fila; la página se desplaza como siempre.
+ */
+function fitRollHeight() {
+    const wrap = $('rollWrap');
+    wrap.style.height = '';
+    if (!take) return;
+    const all = rowsFor(take.notes.map(n => n.midi));
+    if (!all) return;
+    const rows = Math.min(48, all[1] - all[0] + 1);
+    const need = rows * MIN_RH + AXIS + 2;
+    if (need > wrap.getBoundingClientRect().height) wrap.style.height = need + 'px';
+}
+
+/** Filas para unas alturas: ±2 semitonos de margen y al menos una octava. */
+function rowsFor(midis) {
+    if (!midis.length) return null;
+    let a = Math.floor(Math.min(...midis)) - 2, b = Math.ceil(Math.max(...midis)) + 2;
+    if (b - a < 12) { a = Math.round((a + b) / 2) - 6; b = a + 12; }
+    return [a, b];
+}
+
+/** Tiempo del cabezal: dónde se graba o se escucha. */
+const headTime = () => state === 'recording' && rec ? rec.length / rec.sr : cursor;
+
+/** Altura cantada cerca de t (MIDI con decimales) o NaN si hay silencio. */
+function pitchAt(t, reach) {
+    if (!take || !take.frames.length) return NaN;
+    const f = take.frames, i = Math.min(f.length - 1, frameAt(t));
+    for (let d = 0; d <= (reach || 4); d++) {
+        for (const j of d ? [i - d, i + d] : [i]) {
+            if (j < 0 || j >= f.length) continue;
+            const m = j < take.analyzed ? take.curve[j] : f[j].midi;
+            if (!isNaN(m)) return m;
+        }
     }
-    view.fitted = true;
+    return NaN;
+}
+
+/**
+ * Escala vertical automática: abarca las notas que se ven (±2 semitonos, mínimo
+ * una octava). Si no caben con filas de MIN_RH px (saltos grandes), se centra en
+ * la nota del cabezal: así siempre se leen todos los nombres, no solo los Do.
+ */
+function pitchTarget() {
+    if (!take) return null;
+    const maxSpan = Math.max(12, Math.floor((cssH - AXIS) / MIN_RH) - 1);
+    const t0 = view.t0, t1 = t0 + visibleSec();
+    const midis = take.notes.filter(n => n.end >= t0 && n.start <= t1).map(n => n.midi);
+    const head = pitchAt(headTime(), state === 'recording' ? 12 : 4);
+    if (state === 'recording' && !isNaN(head)) midis.push(head);
+    const r = rowsFor(midis);
+    if (!r) return null;
+    let [a, b] = r;
+    if (b - a > maxSpan) {
+        const c = !isNaN(head) ? head : (a + b) / 2;
+        a = Math.round(c - maxSpan / 2);
+        b = a + maxSpan;
+    }
+    return [a, b];
 }
 
 /** Toda la toma en pantalla si cabe con un zoom razonable; si no, desde el principio. */
@@ -612,7 +785,7 @@ function readColors() {
     colors = {
         ink: v('--ink'), dim: v('--ink-dim'), muted: v('--muted'),
         border: v('--border'), borderS: v('--border-s'),
-        accent: v('--accent'), danger: v('--danger'),
+        accent: v('--accent'), accentRgb: v('--accent-rgb'), accentInk: v('--accent-ink'), danger: v('--danger'),
         inkRgb: rgbOf(v('--ink')),
         tune: { ok: v('--success-rgb'), close: rgbOf(v('--warning')), off: v('--danger-rgb') },
         font: v('--font-sans') || 'sans-serif'
@@ -642,6 +815,13 @@ function tick(now) {
     rafLoop = null;
     if (state === 'recording') {
         if (now - rec.lastSeg > 300) { rec.lastSeg = now; reanalyze(); }
+        // iOS puede dejar el audio en pausa (p. ej. tras un diálogo): sin bloques nuevos, pedir un toque
+        if (performance.now() - rec.lastChunk > STALL_MS && $('tapNote').hidden) {
+            showTapNote('Toca aquí para empezar a grabar', 'El teléfono pausó el audio; un toque lo reactiva.',
+                () => { if (soundEngine.ac) soundEngine.ac.resume().catch(() => {}); });
+        } else if (performance.now() - rec.lastChunk < 200 && !$('tapNote').hidden) {
+            hideTapNote();
+        }
         view.t0 = Math.max(0, rec.length / rec.sr - visibleSec() * 0.85);   // sigue a la voz
         updateRecInfo();
     } else if (state === 'playing') {
@@ -664,7 +844,24 @@ function draw() {
     drawQueued = false;
     if (!cx || !cssW) return;
     const W = cssW, H = cssH, left = GUTTER, top = AXIS, pw = plotW(), ph = H - AXIS;
+
+    // Escala vertical: se desliza suavemente hacia su objetivo
+    const target = pitchTarget();
+    if (target) { view.tlo = target[0]; view.thi = target[1]; }
+    view.lo += (view.tlo - view.lo) * 0.25;
+    view.hi += (view.thi - view.hi) * 0.25;
+    const settling = Math.abs(view.tlo - view.lo) > 0.02 || Math.abs(view.thi - view.hi) > 0.02;
+    if (!settling) { view.lo = view.tlo; view.hi = view.thi; }
+
     const lo = view.lo, hi = view.hi, rh = ph / (hi - lo + 1);
+    // Nota del cabezal: la de la nota que pisa (estable, como en la tarjeta) o,
+    // en silencio o mientras se graba, la altura instantánea
+    const head = headTime();
+    const headPitch = take ? pitchAt(head, state === 'recording' ? 12 : 4) : NaN;
+    const onNote = take && state !== 'recording' ? take.notes.find(n => head >= n.start && head <= n.end) : null;
+    const headRow = onNote ? onNote.note : isNaN(headPitch) ? null : Math.round(headPitch);
+    const headY = onNote ? onNote.midi : headPitch;
+    const headCents = onNote ? onNote.cents : Math.round((headPitch - headRow) * 100);
     const yOf = m => top + (hi + 0.5 - m) * rh;
     const xOf = t => left + (t - view.t0) * view.pps;
     const tEnd = view.t0 + visibleSec();
@@ -675,8 +872,12 @@ function draw() {
     cx.textBaseline = 'middle';
 
     // Filas: una por semitono; oscuras fuera de la tonalidad (o teclas negras)
-    for (let m = lo; m <= hi; m++) {
-        const y = top + (hi - m) * rh, pc = mod12(m);
+    cx.save();
+    cx.beginPath();
+    cx.rect(0, top, W, ph);
+    cx.clip();
+    for (let m = Math.floor(lo); m <= Math.ceil(hi); m++) {
+        const y = yOf(m) - rh / 2, pc = mod12(m);
         const dark = inKey ? !inKey.has(pc) : BLACK.has(pc);
         if (dark) {
             cx.fillStyle = `rgba(${colors.inkRgb}, 0.045)`;
@@ -686,13 +887,19 @@ function draw() {
             cx.fillStyle = colors.borderS;
             cx.fillRect(left, y + rh - 0.5, pw, 1);
         }
-        if (rh >= 12 || pc === 0) {
-            cx.fillStyle = pc === 0 ? colors.dim : colors.muted;
-            cx.font = `${pc === 0 ? 700 : 500} ${Math.min(11, Math.max(9, rh * 0.75))}px ${colors.font}`;
+        const isHead = m === headRow;
+        if (isHead) {   // la nota que suena en el cabezal, resaltada en la columna de nombres
+            cx.fillStyle = `rgba(${colors.accentRgb}, 0.22)`;
+            cx.fillRect(0, y, left - 1, rh);
+        }
+        if (rh >= 11 || pc === 0 || isHead) {
+            cx.fillStyle = isHead ? colors.accent : pc === 0 ? colors.dim : colors.muted;
+            cx.font = `${isHead || pc === 0 ? 700 : 500} ${Math.min(11, Math.max(9, rh * 0.75))}px ${colors.font}`;
             cx.textAlign = 'right';
             cx.fillText(noteLabel(m), left - 6, y + rh / 2);
         }
     }
+    cx.restore();
     cx.fillStyle = colors.border;
     cx.fillRect(left - 0.5, top, 1, ph);
 
@@ -762,8 +969,14 @@ function draw() {
         cx.strokeStyle = `rgba(${colors.inkRgb}, 0.8)`;
         cx.stroke();
 
+        // Uniones entre tramos (pausa → continuar)
+        cx.fillStyle = colors.borderS;
+        (take.joins || []).forEach(t => {
+            const x = xOf(t - JOIN_GAP / 2);
+            for (let y = top; y < top + ph; y += 8) cx.fillRect(x - 0.5, y, 1, 4);
+        });
+
         // Cabezal: dónde se graba o se escucha
-        const head = state === 'recording' ? rec.length / rec.sr : cursor;
         const hx = xOf(head);
         cx.fillStyle = state === 'recording' ? colors.danger : colors.accent;
         cx.fillRect(hx - 1, top, 2, ph);
@@ -771,6 +984,27 @@ function draw() {
             cx.beginPath();
             cx.moveTo(hx - 5, top); cx.lineTo(hx + 5, top); cx.lineTo(hx, top + 7);
             cx.fill();
+        }
+
+        // Globo con la nota que suena en el cabezal
+        if (headRow !== null) {
+            const text = noteLabel(headRow) + ' ' + fmtCents(headCents);
+            cx.font = `700 11px ${colors.font}`;
+            const tw = cx.measureText(text).width, bw = tw + 14, bh = 20;
+            const py = yOf(headY);
+            let bx = hx + 8;
+            if (bx + bw > W - 4) bx = hx - 8 - bw;   // sin salirse por la derecha
+            const by = Math.min(Math.max(top + 2, py - bh - 6), top + ph - bh - 2);
+            cx.beginPath();
+            cx.arc(hx, py, 3.5, 0, Math.PI * 2);
+            cx.fillStyle = colors.accent;
+            cx.fill();
+            cx.beginPath();
+            if (cx.roundRect) cx.roundRect(bx, by, bw, bh, 10); else cx.rect(bx, by, bw, bh);
+            cx.fill();
+            cx.fillStyle = colors.accentInk;
+            cx.textAlign = 'left';
+            cx.fillText(text, bx + 7, by + bh / 2 + 0.5);
         }
     }
     cx.restore();
@@ -783,6 +1017,7 @@ function draw() {
         cx.textAlign = 'center';
         cx.fillText(state === 'recording' ? 'Canta… tu voz aparecerá aquí' : 'Pulsa Grabar y canta', left + pw / 2, top + ph / 2);
     }
+    if (settling && !rafLoop) requestDraw();
 }
 
 /* ── Interacción con la gráfica ── */
@@ -850,8 +1085,8 @@ function setupCanvas() {
 function tapAt(x, y) {
     const ph = cssH - AXIS, rh = ph / (view.hi - view.lo + 1);
     if (x < GUTTER) {   // nombre de nota: suena esa fila
-        const m = view.hi - Math.floor((y - AXIS) / rh);
-        if (y > AXIS && m >= view.lo && m <= view.hi) playMidi(m, 1.2);
+        const m = Math.round(view.hi + 0.5 - (y - AXIS) / rh);
+        if (y > AXIS) playMidi(m, 1.2);
         return;
     }
     if (!take || state === 'recording') return;
@@ -919,12 +1154,15 @@ function updateUI() {
     const recording = state === 'recording';
     const eb = $('avEyebrow');
     eb.dataset.state = state;
-    $('avEyebrowText').textContent = recording ? 'Grabando' : state === 'playing' ? 'Reproduciendo' : take ? 'Toma grabada' : 'Listo para grabar';
+    $('avEyebrowText').textContent = recording ? 'Grabando' : state === 'playing' ? 'Reproduciendo' : take ? 'En pausa' : 'Listo para grabar';
 
     const rb = $('recBtn');
+    const full = !!take && take.duration >= MAX_SEC - 1;
     rb.dataset.recording = recording ? 'true' : 'false';
-    $('recText').textContent = recording ? 'Detener' : take ? 'Grabar otra' : 'Grabar';
-    $('recIcon').innerHTML = recording ? '<rect x="6" y="6" width="12" height="12" rx="2"/>' : '<circle cx="12" cy="12" r="7"/>';
+    rb.disabled = !recording && full;
+    $('recText').textContent = recording ? 'Pausa' : full ? 'Límite de 3 min' : take ? 'Continuar' : 'Grabar';
+    $('recIcon').innerHTML = recording ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<circle cx="12" cy="12" r="7"/>';
+    $('newBtn').hidden = !take || recording;
 
     const canPlay = !!(take && take.buffer) && !recording;
     $('playBtn').disabled = !canPlay;
@@ -1021,12 +1259,15 @@ function downloadMidi() { if (take && take.notes.length) download(Melody.toMidiF
 
 /* ── Arranque ── */
 window.addEventListener('load', () => {
+    // El diálogo, directamente en <body>: fuera de contenedores con desenfoque o scroll
+    document.body.appendChild($('confirmModal'));
     setupCanvas();
     updateUI();
 });
 window.addEventListener('mt-theme-change', () => { readColors(); requestDraw(); });
 window.addEventListener('pagehide', () => { if (state === 'recording') stopRecording(); });
 document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('confirmModal').hidden) { closeConfirm(); return; }
     if (e.target.closest && e.target.closest('input, select, textarea')) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         if (!take || state === 'recording' || !take.notes.length) return;
@@ -1037,9 +1278,10 @@ document.addEventListener('keydown', e => {
 
 // Barra espaciadora (la escucha shell.js): grabar / detener / escuchar
 function mtPlayToggle() {
+    if (!$('confirmModal').hidden) return;
     if (state === 'recording') stopRecording();
     else if (take && take.buffer) togglePlay();
-    else startRecording();
+    else startRecording(false);
 }
 </script>
 <script src="../../shared/shell.js"></script>
