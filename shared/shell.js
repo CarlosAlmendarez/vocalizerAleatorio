@@ -106,6 +106,7 @@
     drum:      '<ellipse cx="12" cy="10" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10v5c0 2.2 4 4 9 4s9-1.8 9-4v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="8.5" y1="2.5" x2="10.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="15.5" y1="2.5" x2="13.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     swap:      '<path d="M7 16V4m0 0L3 8m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8v12m0 0 4-4m-4 4-4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
     circle:    '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="3" x2="12" y2="9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="15" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    blobs:     '<rect x="3" y="14" width="6" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="10" y="9" width="5" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="16" y="4" width="5" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 21h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   };
 
@@ -145,6 +146,7 @@
 
   var TOOLS = [
     { id: 'vocalizer',              name: 'Vocalizer',          icon: 'mic',        href: ROOT + 'apps/vocalizer/' },
+    { id: 'analisis-vocal',         name: 'Análisis vocal',     icon: 'blobs',      href: ROOT + 'apps/analisis-vocal/' },
     { id: 'afinador',               name: 'Afinador',           icon: 'tuning',     href: ROOT + 'apps/afinador/' },
     { id: 'acordes-guitarra',       name: 'Acordes Guitarra',   icon: 'chord',      href: ROOT + 'apps/acordes-guitarra/' },
     { id: 'acordes-ukulele',        name: 'Acordes Ukulele',    icon: 'uke',        href: ROOT + 'apps/acordes-ukulele/' },

@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Análisis vocal - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/boot.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.js"></script>
+    <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/note-player.js"></script>
+    <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
+    <script src="../../shared/pitch.js"></script>
+    <script src="../../shared/melody.js"></script>
+    <style>
+        /* ── Layout ── */
+        .av-screen {
+            display: flex; flex-direction: column; gap: 16px;
+            padding: 12px 0 calc(var(--bottomnav-h) + 24px);
+            color: var(--ink);
+        }
+        @media (min-width: 960px) { .av-screen { padding-bottom: 32px; } }
+
+        /* ── Cabecera ── */
+        .av-hero { text-align: center; }
+        .av-eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-size: 10px; font-weight: 700; color: var(--muted);
+            letter-spacing: 0.2em; text-transform: uppercase;
+        }
+        .av-eyebrow[data-state="recording"] { color: var(--danger); }
+        .av-rec-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--danger);
+            display: none; animation: av-pulse 1.1s ease-in-out infinite;
+        }
+        .av-eyebrow[data-state="recording"] .av-rec-dot { display: inline-block; }
+        @keyframes av-pulse { 50% { opacity: 0.25; } }
+        .av-title {
+            font-family: var(--font-head); font-weight: 800;
+            font-size: clamp(26px, 6vw, 34px); letter-spacing: -0.03em;
+            margin-top: 4px; font-variant-numeric: tabular-nums;
+        }
+        .av-sub { font-size: 13px; color: var(--ink-dim); margin-top: 4px; }
+
+        /* ── Gráfica ── */
+        .av-roll {
+            position: relative; overflow: hidden; padding: 0;
+            height: clamp(280px, 52vh, 460px);
+        }
+        .av-roll canvas {
+            display: block; width: 100%; height: 100%;
+            touch-action: pan-y;   /* arrastre horizontal y pellizco = gráfica; vertical = página */
+            cursor: grab;
+        }
+        .av-roll canvas:active { cursor: grabbing; }
+        .av-roll-tools {
+            position: absolute; right: 10px; bottom: 10px;
+            display: flex; gap: 6px;
+        }
+        .av-tool {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border-s); background: var(--surface-s); color: var(--ink);
+            font-size: 18px; font-weight: 700; cursor: pointer; font-family: var(--font-sans);
+            -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+        }
+        .av-tool:disabled { opacity: 0.35; cursor: default; }
+
+        /* ── Controles ── */
+        .av-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .av-controls .btn-primary, .av-controls .btn-ghost { flex: 1; min-width: 140px; }
+        .av-controls .btn-ghost:disabled { opacity: 0.4; cursor: default; }
+        .av-rec[data-recording="true"] {
+            background: rgba(var(--danger-rgb), 0.16); color: var(--danger);
+            box-shadow: none; border: 1px solid rgba(var(--danger-rgb), 0.45);
+        }
+        .av-level {
+            flex-basis: 100%; height: 4px; border-radius: 2px;
+            background: var(--surface-s); overflow: hidden;
+        }
+        .av-level-fill {
+            height: 100%; width: 0; background: var(--accent);
+            transition: width 0.08s linear;
+        }
+        .av-level-fill.clip { background: var(--danger); }
+
+        /* ── Nota seleccionada ── */
+        .av-note-head { display: flex; align-items: center; gap: 10px; }
+        .av-nav {
+            width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+            border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+            font-size: 20px; cursor: pointer; font-family: var(--font-sans);
+        }
+        .av-note-main { flex: 1; min-width: 0; }
+        .av-note-name { font-family: var(--font-head); font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+        .av-note-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .av-pill {
+            padding: 6px 12px; border-radius: var(--radius-pill);
+            font-size: 12px; font-weight: 700; white-space: nowrap;
+            border: 1px solid var(--border); background: var(--surface); color: var(--ink-dim);
+        }
+        .av-pill[data-state="ok"]    { color: var(--success); background: rgba(var(--success-rgb), 0.12); border-color: rgba(var(--success-rgb), 0.4); }
+        .av-pill[data-state="close"] { color: var(--warning); border-color: var(--warning); }
+        .av-pill[data-state="off"]   { color: var(--danger);  background: rgba(var(--danger-rgb), 0.12); border-color: rgba(var(--danger-rgb), 0.4); }
+        .av-stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 8px; margin-top: 12px;
+        }
+        .av-stat {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-xs); padding: 8px 10px;
+        }
+        .av-stat-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+        .av-stat-value { font-size: 16px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .av-stat-hint  { font-size: 11px; color: var(--ink-dim); }
+        .av-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+        .av-actions .btn-ghost { flex: 1; min-width: 140px; }
+        .av-hint { font-size: 13px; color: var(--ink-dim); margin: 0; }
+        .av-trend { font-size: 13px; color: var(--ink-dim); margin: 12px 0 0; }
+        .av-worst { margin-top: 10px; }
+        .av-worst .note-pill { cursor: pointer; font-family: var(--font-sans); }
+
+        /* ── Leyenda ── */
+        .av-legend { display: grid; gap: 8px; font-size: 13px; color: var(--ink-dim); margin: 0; padding: 0; list-style: none; }
+        .av-legend li { display: flex; gap: 10px; align-items: flex-start; }
+        .av-swatch { width: 26px; height: 12px; border-radius: 6px; flex-shrink: 0; margin-top: 3px; }
+        .av-swatch.ok    { background: rgba(var(--success-rgb), 0.45); border: 1px solid var(--success); }
+        .av-swatch.close { background: var(--surface-s); border: 1px solid var(--warning); }
+        .av-swatch.off   { background: rgba(var(--danger-rgb), 0.45); border: 1px solid var(--danger); }
+        .av-swatch.line  { height: 2px; margin-top: 8px; border-radius: 1px; background: var(--ink); }
+    </style>
+</head>
+<body data-page-id="analisis-vocal" data-tool-name="Análisis vocal">
+
+<div class="av-screen">
+
+    <div class="av-hero">
+        <div class="av-eyebrow" id="avEyebrow"><span class="av-rec-dot"></span><span id="avEyebrowText">Listo para grabar</span></div>
+        <div class="av-title" id="avTitle">Canta y mira tu voz</div>
+        <div class="av-sub" id="avSub">Graba hasta 3 minutos: verás la curva de tu afinación y cada nota que cantes.</div>
+    </div>
+
+    <div class="av-roll glass" id="rollWrap">
+        <canvas id="roll" aria-label="Gráfica de las notas cantadas"></canvas>
+        <div class="av-roll-tools">
+            <button class="av-tool" id="zoomOut" onclick="zoomBy(1 / 1.5)" aria-label="Alejar">−</button>
+            <button class="av-tool" id="zoomIn"  onclick="zoomBy(1.5)"     aria-label="Acercar">+</button>
+            <button class="av-tool" id="zoomFit" onclick="fitTime(true)"   aria-label="Ver toda la toma">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="av-controls">
+        <button class="btn-primary av-rec" id="recBtn" onclick="toggleRecord()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" id="recIcon"><circle cx="12" cy="12" r="7"/></svg>
+            <span id="recText">Grabar</span>
+        </button>
+        <button class="btn-ghost" id="playBtn" onclick="togglePlay()" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="m8 5 12 7-12 7z"/></svg>
+            <span id="playText">Escuchar</span>
+        </button>
+        <div class="av-level" id="levelWrap" hidden><div class="av-level-fill" id="levelFill"></div></div>
+    </div>
+
+    <!-- Nota seleccionada -->
+    <div class="section-card" id="noteCard" hidden>
+        <div class="section-title">Nota</div>
+        <p class="av-hint" id="noteHint">Toca una nota de la gráfica para ver su afinación.</p>
+        <div id="noteBody" hidden>
+            <div class="av-note-head">
+                <button class="av-nav" onclick="stepNote(-1)" aria-label="Nota anterior">‹</button>
+                <div class="av-note-main">
+                    <div class="av-note-name" id="noteName">—</div>
+                    <div class="av-note-meta" id="noteMeta"></div>
+                </div>
+                <span class="av-pill" id="notePill"></span>
+                <button class="av-nav" onclick="stepNote(1)" aria-label="Nota siguiente">›</button>
+            </div>
+            <div class="av-stats">
+                <div class="av-stat"><div class="av-stat-label">Desvío</div><div class="av-stat-value" id="noteCents"></div><div class="av-stat-hint">respecto a la nota exacta</div></div>
+                <div class="av-stat"><div class="av-stat-label">Duración</div><div class="av-stat-value" id="noteDur"></div></div>
+                <div class="av-stat"><div class="av-stat-label">Estabilidad</div><div class="av-stat-value" id="noteWobble"></div><div class="av-stat-hint" id="noteWobbleHint"></div></div>
+            </div>
+            <div class="av-actions">
+                <button class="btn-ghost" onclick="playSelected()">Escuchar tu nota</button>
+                <button class="btn-ghost" onclick="playReference()">Nota exacta (piano)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen de la toma -->
+    <div class="section-card" id="summaryCard" hidden>
+        <div class="section-title">Resumen de la toma</div>
+        <div class="av-stats" style="margin-top:0">
+            <div class="av-stat"><div class="av-stat-label">Tonalidad</div><div class="av-stat-value" id="sumKey">—</div><div class="av-stat-hint">estimada</div></div>
+            <div class="av-stat"><div class="av-stat-label">Notas</div><div class="av-stat-value" id="sumCount">—</div></div>
+            <div class="av-stat"><div class="av-stat-label">Rango</div><div class="av-stat-value" id="sumRange">—</div></div>
+            <div class="av-stat"><div class="av-stat-label">Afinadas</div><div class="av-stat-value" id="sumTune">—</div><div class="av-stat-hint">a ±25¢ o menos</div></div>
+        </div>
+        <p class="av-trend" id="sumTrend"></p>
+        <div class="av-worst" id="sumWorstWrap">
+            <div class="section-title" style="margin:12px 0 8px !important">Más desafinadas</div>
+            <div class="note-pills" id="sumWorst"></div>
+        </div>
+        <div class="av-actions">
+            <button class="btn-ghost" onclick="downloadWav()">Descargar audio (WAV)</button>
+            <button class="btn-ghost" onclick="downloadMidi()">Descargar MIDI</button>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-title">Cómo leer la gráfica</div>
+        <ul class="av-legend">
+            <li><span class="av-swatch ok"></span><span>Cada forma es una nota cantada; su grosor sigue tu volumen. Verde: afinada (±25¢).</span></li>
+            <li><span class="av-swatch close"></span><span>Ámbar: entre 25 y 50¢ de desvío.</span></li>
+            <li><span class="av-swatch off"></span><span>Rojo: más de 50¢, casi otra nota.</span></li>
+            <li><span class="av-swatch line"></span><span>La línea es tu afinación continua: deslizamientos, vibrato y ataques.</span></li>
+            <li><span class="av-swatch" style="background:var(--surface-ss)"></span><span>Filas oscuras: notas fuera de la tonalidad estimada (antes de conocerla, las teclas negras). Toca un nombre de nota a la izquierda para escucharla.</span></li>
+            <li><span class="av-swatch" style="background:transparent"></span><span>Arrastra para moverte; pellizca o usa − / + para el zoom. Toca una nota para analizarla; con ← / → pasas a la anterior o la siguiente.</span></li>
+        </ul>
+    </div>
+
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   ANÁLISIS VOCAL — graba la voz y la dibuja nota a nota (estilo Melodyne)
+   · shared/melody.js analiza en vivo (YIN cada 10 ms) y separa las notas.
+   · La curva y las notas se dibujan mientras cantas; al detener se hace el
+     análisis final (tonalidad, resumen) y se puede escuchar la toma.
+   · shell.js reescribe el <body>: los nodos se buscan siempre por id.
+   ════════════════════════════════════════════════════ */
+const MAX_SEC = 180;                   // 3 min ≈ 35 MB de audio a 48 kHz
+const TUNE_OK = 25, TUNE_CLOSE = 50;   // cents: mismas tolerancias que el vocalizador
+const ZOOM_MIN = 20, ZOOM_MAX = 600;   // píxeles por segundo
+const GUTTER = 48, AXIS = 20;          // columna de nombres y eje de tiempo (px)
+const BLACK = new Set([1, 3, 6, 8, 10]);
+
+const store    = createStore('analisis-vocal');
+const refPiano = createNotePlayer('acoustic_grand_piano', { range: [57, 69] });   // se amplía a la tesitura de cada toma
+refPiano.preload();
+
+const $ = id => document.getElementById(id);
+const mod12 = n => ((n % 12) + 12) % 12;
+
+let state = 'idle';          // idle | recording | ready | playing
+let busy = false;            // pidiendo el micrófono
+let take = null;             // { frames, curve, notes, analyzed, peak, buffer, duration, key, keyName, scale, stats }
+let rec = null;              // { stream, capture, analyzer, chunks, length, sr, level, lastSeg }
+let playback = null;         // { src, startAc, offset }
+let cursor = 0, selected = -1;
+const view = { t0: 0, pps: store.get('zoom', 120), lo: 55, hi: 72, fitted: false };
+
+let cv = null, cx = null, cssW = 0, cssH = 0, dpr = 1;
+let colors = {};
+let rafLoop = null, drawQueued = false;
+
+/* ── Captura del micrófono (AudioWorklet; ScriptProcessor como respaldo) ── */
+const WORKLET_SRC = `
+class MTCapture extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(2048); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === this.buf.length) {
+        this.port.postMessage(this.buf, [this.buf.buffer]);
+        this.buf = new Float32Array(2048); this.n = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('mt-capture', MTCapture);`;
+let workletLoaded = null;
+
+async function createCapture(ac, source, onChunk) {
+    const sink = ac.createGain();   // silencio: el nodo necesita salida para que el navegador lo procese
+    sink.gain.value = 0;
+    sink.connect(ac.destination);
+    let node = null;
+    if (ac.audioWorklet && window.AudioWorkletNode) {
+        try {
+            if (!workletLoaded) {
+                const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'application/javascript' }));
+                workletLoaded = ac.audioWorklet.addModule(url);
+            }
+            await workletLoaded;
+            node = new AudioWorkletNode(ac, 'mt-capture', { channelCount: 1, channelCountMode: 'explicit' });
+            node.port.onmessage = e => onChunk(e.data);
+        } catch (err) {
+            workletLoaded = null;
+            node = null;
+        }
+    }
+    if (!node) {
+        node = ac.createScriptProcessor(2048, 1, 1);
+        node.onaudioprocess = e => onChunk(new Float32Array(e.inputBuffer.getChannelData(0)));
+    }
+    source.connect(node);
+    node.connect(sink);
+    return {
+        stop() {
+            if (node.port) node.port.onmessage = null; else node.onaudioprocess = null;
+            source.disconnect(); node.disconnect(); sink.disconnect();
+        }
+    };
+}
+
+/* ── Grabación ── */
+function toggleRecord() {
+    if (state === 'recording') stopRecording();
+    else startRecording();
+}
+
+async function startRecording() {
+    if (busy) return;
+    if (take && take.notes.length && !confirm('¿Descartar la toma actual y grabar otra?')) return;
+    stopPlayback();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showMessage('Sin micrófono', 'Este navegador no permite usar el micrófono.');
+        return;
+    }
+    busy = true;
+    let stream;
+    try {
+        await soundEngine.start();
+        stream = await navigator.mediaDevices.getUserMedia({
+            // Sin filtros del navegador: alteran el timbre y la detección de altura
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+    } catch (err) {
+        busy = false;
+        showMessage('Sin micrófono', location.protocol === 'https:' || location.hostname === 'localhost'
+            ? 'Permite el uso del micrófono para grabar.' : 'El micrófono requiere HTTPS.');
+        return;
+    }
+    const ac = soundEngine.ac;
+    const analyzer = Melody.createAnalyzer(ac.sampleRate);
+    take = { frames: analyzer.frames, curve: [], notes: [], analyzed: 0, peak: 0, buffer: null, duration: 0,
+             key: null, keyName: null, scale: null, stats: null };
+    rec = { stream, analyzer, chunks: [], length: 0, sr: ac.sampleRate, level: 0, lastSeg: 0, capture: null };
+    selected = -1; cursor = 0;
+    Object.assign(view, { t0: 0, lo: 55, hi: 72, fitted: false });
+    rec.capture = await createCapture(ac, ac.createMediaStreamSource(stream), onChunk);
+    busy = false;
+    state = 'recording';
+    soundEngine.keepAwake(true);
+    updateUI();
+    startLoop();
+}
+
+function onChunk(chunk) {
+    if (state !== 'recording' || !rec) return;
+    rec.chunks.push(chunk);
+    rec.length += chunk.length;
+    rec.analyzer.push(chunk);
+    let peak = 0;
+    for (let i = 0; i < chunk.length; i++) { const a = Math.abs(chunk[i]); if (a > peak) peak = a; }
+    rec.level = Math.max(peak, rec.level * 0.85);
+    if (rec.length >= MAX_SEC * rec.sr) stopRecording();
+}
+
+function stopRecording() {
+    if (state !== 'recording') return;
+    rec.capture.stop();
+    rec.stream.getTracks().forEach(t => t.stop());
+    if (rec.length > 0) {
+        const buf = soundEngine.ac.createBuffer(1, rec.length, rec.sr);
+        const data = buf.getChannelData(0);
+        let off = 0;
+        rec.chunks.forEach(c => { data.set(c, off); off += c.length; });
+        take.buffer = buf;
+    }
+    take.duration = rec.length / rec.sr;
+    rec = null;   // libera los bloques: el audio ya está en el AudioBuffer
+    state = 'ready';
+    soundEngine.keepAwake(false);
+    finishTake();
+    updateUI();
+}
+
+/** Análisis (en vivo cada ~300 ms y al terminar). */
+function reanalyze() {
+    const res = Melody.analyze(take.frames);
+    take.curve = res.curve;
+    take.notes = res.notes;
+    take.analyzed = take.frames.length;
+    take.peak = take.frames.reduce((mx, f) => Math.max(mx, f.rms), 0);
+    fitPitchRange();
+}
+
+function finishTake() {
+    reanalyze();
+    take.key = Melody.keyOf(take.notes);
+    take.keyName = take.key ? Theory.keyForPc(take.key.tonic, take.key.type) : null;
+    take.scale = take.keyName ? Theory.scale(take.keyName, take.key.type).notes : null;
+    take.stats = Melody.stats(take.notes, TUNE_OK);
+    cursor = 0; selected = -1;
+    fitTime(false);
+    // El piano de referencia decodifica solo las filas visibles (cubren todas las notas)
+    const lo = view.lo, hi = view.hi;
+    refPiano.preload().then(() => refPiano.setRange(lo, hi)).catch(() => {});
+    renderSummary();
+    renderNote();
+    requestDraw();
+}
+
+/* ── Reproducción de la toma ── */
+async function togglePlay() {
+    if (state === 'playing') { stopPlayback(); return; }
+    if (!take || !take.buffer || state === 'recording') return;
+    await soundEngine.start();
+    startPlayback(cursor);
+}
+
+function startPlayback(from, to) {
+    if (!take || !take.buffer) return;
+    stopPlayback();
+    const ac = soundEngine.ac;
+    if (to === undefined && from >= take.duration - 0.05) from = 0;
+    const src = ac.createBufferSource();
+    src.buffer = take.buffer;
+    src.connect(ac.destination);
+    const when = ac.currentTime + 0.03;
+    if (to === undefined) src.start(when, from);
+    else src.start(when, from, Math.max(0.05, to - from));
+    playback = { src, startAc: when, offset: from };
+    src.onended = () => {
+        if (!playback || playback.src !== src) return;
+        playback = null;
+        cursor = to === undefined ? take.duration : from;
+        state = 'ready';
+        soundEngine.keepAwake(false);
+        updateUI();
+        requestDraw();
+    };
+    state = 'playing';
+    soundEngine.keepAwake(true);
+    updateUI();
+    startLoop();
+}
+
+function playPos() {
+    if (!playback) return cursor;
+    return Math.min(take.duration, playback.offset + Math.max(0, soundEngine.now - playback.startAc));
+}
+
+function stopPlayback() {
+    if (!playback) return;
+    const p = playback;
+    cursor = playPos();
+    playback = null;
+    p.src.onended = null;
+    try { p.src.stop(); } catch (e) {}
+    state = 'ready';
+    soundEngine.keepAwake(false);
+    updateUI();
+    requestDraw();
+}
+
+async function playSelected() {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    await soundEngine.start();
+    startPlayback(Math.max(0, n.start), n.end);
+}
+
+async function playReference() {
+    const n = take && take.notes[selected];
+    if (n) playMidi(n.note, Math.min(2, Math.max(0.8, n.end - n.start)));
+}
+
+async function playMidi(midi, dur) {
+    await refPiano.ready();
+    await refPiano.setRange(Math.min(view.lo, midi), Math.max(view.hi, midi));
+    refPiano.cancel();
+    refPiano.note(midi, refPiano.now, { dur: dur || 1.2, gain: 0.9 });
+}
+
+/* ── Nombres de nota (según la tonalidad estimada, nunca una tabla fija) ── */
+function spellPc(pc) {
+    if (take && take.scale) {
+        const hit = take.scale.find(n => Theory.pc(n) === pc);
+        if (hit) return hit;
+        const flats = take.scale.some(n => n.includes('b'));
+        const en = Theory.enharmonics(pc);
+        return en.find(n => n.includes(flats ? 'b' : '#')) || en[0];
+    }
+    return Theory.keyForPc(pc);   // sin tonalidad: Re♭, Mi♭, Fa♯, La♭, Si♭
+}
+
+function noteLabel(midi) {
+    const name = spellPc(mod12(midi));
+    let oct = Math.floor(midi / 12) - 1;
+    const m = Theory.midi(name + oct);
+    if (m !== null && m !== midi) oct += (midi - m) / 12;   // Si♯ / Do♭: la octava sigue a la letra
+    return Theory.display(name + oct, 'es');
+}
+
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const fmtCents = c => (c > 0 ? '+' : c < 0 ? '−' : '±') + Math.abs(c) + '¢';
+const tuneState = c => Math.abs(c) <= TUNE_OK ? 'ok' : Math.abs(c) <= TUNE_CLOSE ? 'close' : 'off';
+
+/* ── Vista ── */
+const plotW = () => Math.max(1, cssW - GUTTER);
+const visibleSec = () => plotW() / view.pps;
+
+function fitPitchRange() {
+    let lo = Infinity, hi = -Infinity;
+    take.notes.forEach(n => { lo = Math.min(lo, n.midi); hi = Math.max(hi, n.midi); });
+    if (lo === Infinity) return;
+    lo = Math.floor(lo) - 2; hi = Math.ceil(hi) + 2;
+    if (hi - lo < 12) { lo = Math.round((lo + hi) / 2) - 6; hi = lo + 12; }
+    if (state === 'recording' && view.fitted) {   // en vivo solo se amplía: la gráfica no salta
+        view.lo = Math.min(view.lo, lo);
+        view.hi = Math.max(view.hi, hi);
+    } else {
+        view.lo = lo; view.hi = hi;
+    }
+    view.fitted = true;
+}
+
+/** Toda la toma en pantalla si cabe con un zoom razonable; si no, desde el principio. */
+function fitTime(force) {
+    if (!take || !take.duration) return;
+    const fit = plotW() / take.duration;
+    if (force || take.duration > visibleSec()) {
+        if (fit >= ZOOM_MIN) view.pps = Math.min(ZOOM_MAX, fit);
+        else if (force) view.pps = ZOOM_MIN;
+    }
+    view.t0 = 0;
+    store.set('zoom', view.pps);
+    requestDraw();
+}
+
+function clampT0(t) {
+    const max = take ? Math.max(0, take.duration - visibleSec() * 0.9) : 0;
+    return Math.min(Math.max(0, t), max);
+}
+
+function zoomBy(f, anchorX) {
+    if (state === 'recording') return;
+    const x = anchorX !== undefined ? anchorX - GUTTER
+            : (cursor >= view.t0 && cursor <= view.t0 + visibleSec() ? (cursor - view.t0) * view.pps : plotW() / 2);
+    const tAnchor = view.t0 + x / view.pps;
+    view.pps = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.pps * f));
+    view.t0 = clampT0(tAnchor - x / view.pps);
+    store.set('zoom', view.pps);
+    requestDraw();
+}
+
+function ensureVisible(t) {
+    const vs = visibleSec();
+    if (t < view.t0 || t > view.t0 + vs * 0.92) view.t0 = clampT0(t - vs * 0.1);
+}
+
+/* ── Dibujo ── */
+function rgbOf(c) {
+    c = (c || '').trim();
+    let m = /^#([0-9a-f]{3})$/i.exec(c);
+    if (m) return m[1].split('').map(h => parseInt(h + h, 16)).join(', ');
+    m = /^#([0-9a-f]{6})/i.exec(c);
+    if (m) return [0, 2, 4].map(i => parseInt(m[1].substr(i, 2), 16)).join(', ');
+    m = /rgba?\(([^)]+)\)/.exec(c);
+    if (m) return m[1].split(',').slice(0, 3).map(s => s.trim()).join(', ');
+    return '128, 128, 128';
+}
+
+function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = n => cs.getPropertyValue(n).trim();
+    colors = {
+        ink: v('--ink'), dim: v('--ink-dim'), muted: v('--muted'),
+        border: v('--border'), borderS: v('--border-s'),
+        accent: v('--accent'), danger: v('--danger'),
+        inkRgb: rgbOf(v('--ink')),
+        tune: { ok: v('--success-rgb'), close: rgbOf(v('--warning')), off: v('--danger-rgb') },
+        font: v('--font-sans') || 'sans-serif'
+    };
+}
+
+function resizeCanvas() {
+    if (!cv) return;
+    const r = cv.parentElement.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cssW = r.width; cssH = r.height;
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    if (take && state !== 'recording') view.t0 = clampT0(view.t0);
+    requestDraw();
+}
+
+function requestDraw() {
+    if (drawQueued || rafLoop) return;
+    drawQueued = true;
+    requestAnimationFrame(draw);
+}
+
+function startLoop() { if (!rafLoop) rafLoop = requestAnimationFrame(tick); }
+
+function tick(now) {
+    rafLoop = null;
+    if (state === 'recording') {
+        if (now - rec.lastSeg > 300) { rec.lastSeg = now; reanalyze(); }
+        view.t0 = Math.max(0, rec.length / rec.sr - visibleSec() * 0.85);   // sigue a la voz
+        updateRecInfo();
+    } else if (state === 'playing') {
+        cursor = playPos();
+        ensureVisible(cursor);
+    }
+    draw();
+    if (state === 'recording' || state === 'playing') rafLoop = requestAnimationFrame(tick);
+}
+
+/** Primer frame con t >= t (búsqueda binaria). */
+function frameAt(t) {
+    const f = take.frames;
+    let a = 0, b = f.length;
+    while (a < b) { const m = (a + b) >> 1; if (f[m].t < t) a = m + 1; else b = m; }
+    return a;
+}
+
+function draw() {
+    drawQueued = false;
+    if (!cx || !cssW) return;
+    const W = cssW, H = cssH, left = GUTTER, top = AXIS, pw = plotW(), ph = H - AXIS;
+    const lo = view.lo, hi = view.hi, rh = ph / (hi - lo + 1);
+    const yOf = m => top + (hi + 0.5 - m) * rh;
+    const xOf = t => left + (t - view.t0) * view.pps;
+    const tEnd = view.t0 + visibleSec();
+    const inKey = take && take.scale ? new Set(take.scale.map(n => Theory.pc(n))) : null;
+
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, W, H);
+    cx.textBaseline = 'middle';
+
+    // Filas: una por semitono; oscuras fuera de la tonalidad (o teclas negras)
+    for (let m = lo; m <= hi; m++) {
+        const y = top + (hi - m) * rh, pc = mod12(m);
+        const dark = inKey ? !inKey.has(pc) : BLACK.has(pc);
+        if (dark) {
+            cx.fillStyle = `rgba(${colors.inkRgb}, 0.045)`;
+            cx.fillRect(left, y, pw, rh);
+        }
+        if (pc === 0) {
+            cx.fillStyle = colors.borderS;
+            cx.fillRect(left, y + rh - 0.5, pw, 1);
+        }
+        if (rh >= 12 || pc === 0) {
+            cx.fillStyle = pc === 0 ? colors.dim : colors.muted;
+            cx.font = `${pc === 0 ? 700 : 500} ${Math.min(11, Math.max(9, rh * 0.75))}px ${colors.font}`;
+            cx.textAlign = 'right';
+            cx.fillText(noteLabel(m), left - 6, y + rh / 2);
+        }
+    }
+    cx.fillStyle = colors.border;
+    cx.fillRect(left - 0.5, top, 1, ph);
+
+    // Eje de tiempo
+    const step = [0.25, 0.5, 1, 2, 5, 10, 15, 30, 60].find(s => s * view.pps >= 70) || 60;
+    cx.font = `500 10px ${colors.font}`;
+    cx.textAlign = 'left';
+    for (let t = Math.ceil(view.t0 / step) * step; t <= tEnd; t += step) {
+        const x = xOf(t);
+        cx.fillStyle = colors.border;
+        cx.fillRect(x - 0.5, top, 1, ph);
+        cx.fillStyle = colors.muted;
+        cx.fillText(step < 1 ? t.toFixed(step < 0.5 ? 2 : 1) + 's' : fmtTime(t), x + 3, AXIS / 2);
+    }
+
+    cx.save();
+    cx.beginPath();
+    cx.rect(left, top, pw, ph);
+    cx.clip();
+
+    if (take) {
+        const frames = take.frames, peak = take.peak || 1;
+        // Notas: grosor = volumen, color = afinación
+        take.notes.forEach((n, i) => {
+            if (n.end < view.t0 || n.start > tEnd) return;
+            const y = yOf(n.midi), maxH = rh * 0.45, minH = Math.max(1.5, rh * 0.1);
+            const every = Math.max(1, Math.round(2 / (view.pps * 0.01)));   // ~1 punto cada 2 px
+            const pts = [];
+            for (let k = n.i0; k <= n.i1; k += every) pts.push(k);
+            if (pts[pts.length - 1] !== n.i1) pts.push(n.i1);
+            const half = k => minH + (maxH - minH) * Math.sqrt(Math.min(1, frames[k].rms / peak));
+            cx.beginPath();
+            cx.moveTo(xOf(n.start), y);
+            pts.forEach(k => cx.lineTo(xOf(frames[k].t), y - half(k)));
+            cx.lineTo(xOf(n.end), y);
+            for (let j = pts.length - 1; j >= 0; j--) cx.lineTo(xOf(frames[pts[j]].t), y + half(pts[j]));
+            cx.closePath();
+            const rgb = colors.tune[tuneState(n.cents)], sel = i === selected;
+            cx.fillStyle = `rgba(${rgb}, ${sel ? 0.6 : 0.3})`;
+            cx.fill();
+            cx.lineWidth = sel ? 2 : 1;
+            cx.strokeStyle = sel ? colors.ink : `rgba(${rgb}, 0.9)`;
+            cx.stroke();
+            if (sel || (xOf(n.end) - xOf(n.start) > 40 && rh >= 11)) {
+                cx.fillStyle = sel ? colors.ink : colors.dim;
+                cx.font = `${sel ? 700 : 500} 10px ${colors.font}`;
+                cx.textAlign = 'left';
+                cx.fillText(noteLabel(n.note) + (Math.abs(n.cents) > TUNE_OK || sel ? ' ' + fmtCents(n.cents) : ''),
+                            xOf(n.start) + 2, y - maxH - 6);
+            }
+        });
+
+        // Curva continua (hasta el último análisis limpia; lo más nuevo, en crudo)
+        const i0 = Math.max(0, frameAt(view.t0) - 1), i1 = Math.min(frames.length - 1, frameAt(tEnd) + 1);
+        const every = Math.max(1, Math.floor(1 / (view.pps * 0.01)));
+        cx.beginPath();
+        let pen = false;
+        for (let i = i0; i <= i1; i += every) {
+            const m = i < take.analyzed ? take.curve[i] : frames[i].midi;
+            if (isNaN(m)) { pen = false; continue; }
+            const x = xOf(frames[i].t), y = yOf(m);
+            if (pen) cx.lineTo(x, y); else cx.moveTo(x, y);
+            pen = true;
+        }
+        cx.lineWidth = 1.5;
+        cx.lineJoin = 'round';
+        cx.strokeStyle = `rgba(${colors.inkRgb}, 0.8)`;
+        cx.stroke();
+
+        // Cabezal: dónde se graba o se escucha
+        const head = state === 'recording' ? rec.length / rec.sr : cursor;
+        const hx = xOf(head);
+        cx.fillStyle = state === 'recording' ? colors.danger : colors.accent;
+        cx.fillRect(hx - 1, top, 2, ph);
+        if (state !== 'recording') {
+            cx.beginPath();
+            cx.moveTo(hx - 5, top); cx.lineTo(hx + 5, top); cx.lineTo(hx, top + 7);
+            cx.fill();
+        }
+    }
+    cx.restore();
+
+    // Mensaje cuando aún no hay nada que ver
+    const empty = !take || (state === 'recording' && !take.frames.some(f => !isNaN(f.midi)));
+    if (empty) {
+        cx.fillStyle = colors.muted;
+        cx.font = `600 13px ${colors.font}`;
+        cx.textAlign = 'center';
+        cx.fillText(state === 'recording' ? 'Canta… tu voz aparecerá aquí' : 'Pulsa Grabar y canta', left + pw / 2, top + ph / 2);
+    }
+}
+
+/* ── Interacción con la gráfica ── */
+const pointers = new Map();
+let drag = null, pinch = null;
+
+function setupCanvas() {
+    cv = $('roll');
+    cx = cv.getContext('2d');
+    readColors();
+    resizeCanvas();
+    if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(cv.parentElement);
+    else window.addEventListener('resize', resizeCanvas);
+
+    const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const dist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+
+    cv.addEventListener('pointerdown', e => {
+        cv.setPointerCapture(e.pointerId);
+        const p = pos(e);
+        pointers.set(e.pointerId, p);
+        if (pointers.size === 1) drag = { x0: p.x, y0: p.y, t0: view.t0, moved: false };
+        else if (pointers.size === 2) {
+            const [a, b] = [...pointers.values()];
+            pinch = { d: dist(), pps: view.pps, x: (a.x + b.x) / 2 };
+            drag = null;
+        }
+    });
+    cv.addEventListener('pointermove', e => {
+        if (!pointers.has(e.pointerId)) return;
+        const p = pos(e);
+        pointers.set(e.pointerId, p);
+        if (!take || state === 'recording') return;
+        if (pinch && pointers.size === 2) {
+            zoomBy(pinch.pps * dist() / pinch.d / view.pps, pinch.x);
+        } else if (drag) {
+            const dx = p.x - drag.x0;
+            if (Math.abs(dx) > 6 || Math.abs(p.y - drag.y0) > 6) drag.moved = true;
+            if (drag.moved) { view.t0 = clampT0(drag.t0 - dx / view.pps); requestDraw(); }
+        }
+    });
+    const end = (e, cancelled) => {
+        if (!pointers.has(e.pointerId)) return;
+        const p = pos(e);
+        pointers.delete(e.pointerId);
+        if (drag && !drag.moved && !cancelled) tapAt(p.x, p.y);
+        if (pointers.size < 2) pinch = null;
+        drag = null;
+    };
+    cv.addEventListener('pointerup', e => end(e, false));
+    cv.addEventListener('pointercancel', e => end(e, true));
+    cv.addEventListener('wheel', e => {
+        if (!take || state === 'recording') return;
+        if (e.ctrlKey || e.metaKey) {   // pellizco del trackpad o Ctrl + rueda
+            e.preventDefault();
+            zoomBy(Math.exp(-e.deltaY * 0.01), pos(e).x);
+        } else if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            e.preventDefault();
+            view.t0 = clampT0(view.t0 + (e.deltaX || e.deltaY) / view.pps);
+            requestDraw();
+        }
+    }, { passive: false });
+}
+
+function tapAt(x, y) {
+    const ph = cssH - AXIS, rh = ph / (view.hi - view.lo + 1);
+    if (x < GUTTER) {   // nombre de nota: suena esa fila
+        const m = view.hi - Math.floor((y - AXIS) / rh);
+        if (y > AXIS && m >= view.lo && m <= view.hi) playMidi(m, 1.2);
+        return;
+    }
+    if (!take || state === 'recording') return;
+    const t = view.t0 + (x - GUTTER) / view.pps;
+    const yOf = m => AXIS + (view.hi + 0.5 - m) * rh;
+    let best = -1, bestD = Infinity;
+    take.notes.forEach((n, i) => {
+        if (t < n.start - 0.03 || t > n.end + 0.03) return;
+        const d = Math.abs(y - yOf(n.midi));
+        if (d <= Math.max(rh * 0.7, 16) && d < bestD) { best = i; bestD = d; }
+    });
+    if (best >= 0) { selectNote(best); return; }
+    selected = -1;
+    cursor = Math.min(Math.max(0, t), take.duration);
+    if (state === 'playing') startPlayback(cursor);
+    renderNote();
+    requestDraw();
+}
+
+function selectNote(i) {
+    if (!take || !take.notes.length) return;
+    selected = Math.max(0, Math.min(take.notes.length - 1, i));
+    const n = take.notes[selected];
+    cursor = Math.max(0, n.start);
+    ensureVisible(n.start);
+    if (n.end > view.t0 + visibleSec()) view.t0 = clampT0(n.start - visibleSec() * 0.1);
+    if (state === 'playing') startPlayback(cursor);
+    renderNote();
+    requestDraw();
+}
+
+function stepNote(d) {
+    if (!take || !take.notes.length) return;
+    if (selected < 0) {   // sin selección: la siguiente/anterior al cabezal
+        const idx = take.notes.findIndex(n => n.start >= cursor - 0.01);
+        selectNote(d > 0 ? (idx < 0 ? take.notes.length - 1 : idx) : (idx < 0 ? take.notes.length - 1 : idx - 1));
+    } else {
+        selectNote(selected + d);
+    }
+}
+
+/* ── Paneles ── */
+function showMessage(title, sub) {
+    $('avTitle').textContent = title;
+    $('avSub').textContent = sub;
+}
+
+function updateRecInfo() {
+    if (!rec) return;
+    const sec = rec.length / rec.sr;
+    $('avTitle').textContent = `${fmtTime(sec)} / ${fmtTime(MAX_SEC)}`;
+    const n = take.notes.length;
+    $('avSub').textContent = n ? `${n} ${n === 1 ? 'nota' : 'notas'} hasta ahora` : 'Canta… la gráfica se dibuja en vivo';
+    const fill = $('levelFill');
+    fill.style.width = Math.min(100, rec.level * 140) + '%';
+    fill.classList.toggle('clip', rec.level > 0.98);
+}
+
+function updateUI() {
+    const recording = state === 'recording';
+    const eb = $('avEyebrow');
+    eb.dataset.state = state;
+    $('avEyebrowText').textContent = recording ? 'Grabando' : state === 'playing' ? 'Reproduciendo' : take ? 'Toma grabada' : 'Listo para grabar';
+
+    const rb = $('recBtn');
+    rb.dataset.recording = recording ? 'true' : 'false';
+    $('recText').textContent = recording ? 'Detener' : take ? 'Grabar otra' : 'Grabar';
+    $('recIcon').innerHTML = recording ? '<rect x="6" y="6" width="12" height="12" rx="2"/>' : '<circle cx="12" cy="12" r="7"/>';
+
+    const canPlay = !!(take && take.buffer) && !recording;
+    $('playBtn').disabled = !canPlay;
+    $('playText').textContent = state === 'playing' ? 'Pausa' : 'Escuchar';
+    $('playIcon').innerHTML = state === 'playing' ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<path d="m8 5 12 7-12 7z"/>';
+
+    ['zoomOut', 'zoomIn', 'zoomFit'].forEach(id => { $(id).disabled = !take || recording; });
+    $('levelWrap').hidden = !recording;
+
+    const hasNotes = !!(take && !recording && take.notes.length);
+    $('noteCard').hidden = !hasNotes;
+    $('summaryCard').hidden = !hasNotes;
+
+    if (recording) { updateRecInfo(); return; }
+    if (!take) return;
+    if (!take.notes.length) {
+        showMessage('No se detectó voz', 'Acércate al micrófono y canta más fuerte, o busca un lugar con menos ruido.');
+        return;
+    }
+    const n = take.notes.length;
+    showMessage(`${n} ${n === 1 ? 'nota' : 'notas'} · ${fmtTime(take.duration)}`,
+        `Afinadas el ${Math.round(take.stats.inTune * 100)} %` + (take.keyName ? ` · ${keyLabel()}` : ''));
+}
+
+function keyLabel() {
+    return take.keyName ? `${Theory.display(take.keyName, 'es')} ${take.key.type === 'major' ? 'mayor' : 'menor'}` : '—';
+}
+
+function renderNote() {
+    const n = take && take.notes[selected];
+    $('noteHint').hidden = !!n;
+    $('noteBody').hidden = !n;
+    if (!n) return;
+    $('noteName').textContent = noteLabel(n.note);
+    $('noteMeta').textContent = `Nota ${selected + 1} de ${take.notes.length} · ${fmtTime(n.start)},${String(Math.floor((n.start % 1) * 10))}`;
+    const st = tuneState(n.cents);
+    const pill = $('notePill');
+    pill.dataset.state = st;
+    pill.textContent = st === 'ok' ? 'Afinada' : n.cents > 0 ? 'Alta' : 'Baja';
+    $('noteCents').textContent = fmtCents(n.cents);
+    $('noteDur').textContent = (n.end - n.start).toFixed(2).replace('.', ',') + ' s';
+    $('noteWobble').textContent = '±' + n.wobble + '¢';
+    $('noteWobbleHint').textContent = n.wobble <= 12 ? 'muy estable' : n.wobble <= 30 ? 'estable' : n.wobble <= 60 ? 'con vibrato' : 'vibrato amplio o inestable';
+}
+
+function renderSummary() {
+    const s = take.stats;
+    if (!s || !s.count) return;
+    $('sumKey').textContent = keyLabel();
+    $('sumCount').textContent = s.count;
+    $('sumRange').textContent = `${noteLabel(s.low)} – ${noteLabel(s.high)}`;
+    $('sumTune').textContent = Math.round(s.inTune * 100) + ' %';
+    const mc = s.meanCents;
+    $('sumTrend').textContent = Math.abs(mc) < 8
+        ? `Sin tendencia clara: de media quedas a ${fmtCents(mc)} de la nota exacta.`
+        : `Tiendes a cantar ${mc > 0 ? 'alto' : 'bajo'}: ${fmtCents(mc)} de media.`;
+    $('sumWorstWrap').hidden = !s.worst.length;
+    $('sumWorst').innerHTML = s.worst.map(i => {
+        const n = take.notes[i];
+        return `<button class="note-pill" onclick="selectNote(${i})">${noteLabel(n.note)} ${fmtCents(n.cents)} · ${fmtTime(n.start)}</button>`;
+    }).join('');
+}
+
+/* ── Exportar ── */
+function download(bytes, ext, type) {
+    const d = new Date(), p = v => String(v).padStart(2, '0');
+    const name = `toma-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+function downloadWav()  { if (take && take.buffer) download(Melody.toWav(take.buffer.getChannelData(0), take.buffer.sampleRate), 'wav', 'audio/wav'); }
+function downloadMidi() { if (take && take.notes.length) download(Melody.toMidiFile(take.notes), 'mid', 'audio/midi'); }
+
+/* ── Arranque ── */
+window.addEventListener('load', () => {
+    setupCanvas();
+    updateUI();
+});
+window.addEventListener('mt-theme-change', () => { readColors(); requestDraw(); });
+window.addEventListener('pagehide', () => { if (state === 'recording') stopRecording(); });
+document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, select, textarea')) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (!take || state === 'recording' || !take.notes.length) return;
+        e.preventDefault();
+        stepNote(e.key === 'ArrowLeft' ? -1 : 1);
+    }
+});
+
+// Barra espaciadora (la escucha shell.js): grabar / detener / escuchar
+function mtPlayToggle() {
+    if (state === 'recording') stopRecording();
+    else if (take && take.buffer) togglePlay();
+    else startRecording();
+}
+</script>
+<script src="../../shared/shell.js"></script>
+</body>
+</html>
