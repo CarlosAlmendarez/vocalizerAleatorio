@@ -225,7 +225,7 @@
             <span id="tapNoteSub"></span>
         </button>
         <div class="av-roll-tools">
-            <button class="av-tool" id="editTool" onclick="toggleEditMode()" aria-label="Editar notas arrastrándolas" title="Editar: arrastra las notas arriba o abajo">
+            <button class="av-tool" id="editTool" onclick="toggleEditMode()" aria-label="Editar notas arrastrándolas" title="Editar: arrastra las notas (arriba/abajo: altura; a los lados: tiempo; desde un borde: duración)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
             </button>
             <button class="av-tool" id="zoomOut" onclick="zoomBy(1 / 1.5)" aria-label="Alejar">−</button>
@@ -303,6 +303,12 @@
                     <input type="range" id="flatNote" min="0" max="100" step="5" value="0"
                            oninput="previewFlatten(this.value)" onchange="commitFlatten(this.value)">
                 </div>
+                <div class="av-edit-row" style="margin-top:8px">
+                    <button class="btn-ghost" onclick="moveNote(-1)" aria-label="Mover 50 ms antes">◀ Antes</button>
+                    <button class="btn-ghost" onclick="stretchNote(-1)">Acortar</button>
+                    <button class="btn-ghost" onclick="stretchNote(1)">Alargar</button>
+                    <button class="btn-ghost" onclick="moveNote(1)" aria-label="Mover 50 ms después">Después ▶</button>
+                </div>
                 <p class="av-edit-state" id="noteEditState"></p>
                 <div class="av-actions">
                     <button class="btn-ghost" id="splitBtn" onclick="splitAtCursor()">Separar en el cabezal</button>
@@ -379,7 +385,7 @@
             <li><span class="av-swatch off"></span><span>Rojo: más de 50¢, casi otra nota.</span></li>
             <li><span class="av-swatch line"></span><span>La línea es tu afinación continua: deslizamientos, vibrato y ataques.</span></li>
             <li><span class="av-swatch" style="background:var(--accent)"></span><span>El globo del cabezal indica la nota que suena en ese momento; la escala vertical se ajusta sola a las notas que ves.</span></li>
-            <li><span class="av-swatch ghost"></span><span>Editando: el contorno punteado es dónde cantaste; la forma, dónde quedó. Con el lápiz activo, arrastra una nota arriba o abajo.</span></li>
+            <li><span class="av-swatch ghost"></span><span>Editando: el contorno punteado es dónde cantaste; la forma, dónde quedó. Con el lápiz activo, arrastra una nota arriba o abajo para cambiar su altura, a los lados para moverla en el tiempo, o desde un borde para alargarla o acortarla.</span></li>
             <li><span class="av-swatch" style="background:var(--surface-ss)"></span><span>Filas oscuras: notas fuera de la tonalidad estimada (antes de conocerla, las teclas negras). Toca un nombre de nota a la izquierda para escucharla.</span></li>
             <li><span class="av-swatch" style="background:transparent"></span><span>Arrastra para moverte; pellizca o usa − / + para el zoom. Toca una nota para analizarla; con ← / → pasas a la anterior o la siguiente.</span></li>
         </ul>
@@ -405,8 +411,10 @@
    · shared/melody.js analiza en vivo (YIN cada 10 ms) y separa las notas.
    · La curva y las notas se dibujan mientras cantas; en pausa se hace el
      análisis (tonalidad, resumen), se puede escuchar y CONTINUAR la toma.
-   · Edición (fase 2): cada nota guarda { target, flatten } y shared/psola.js
-     recalcula la versión editada desde el original (no destructivo, A/B).
+   · Edición (fase 2): cada nota guarda { target, flatten, ds, de } (altura,
+     vibrato, desplazamiento de su inicio y su final) y shared/psola.js recalcula
+     la versión editada desde el original (no destructivo, A/B). Con la vista
+     "Editada", los tiempos de pantalla y del cabezal son los del audio editado.
    · Las tomas se guardan solas en IndexedDB ("Mis tomas").
    · shell.js reescribe el <body>: los nodos se buscan siempre por id.
    ════════════════════════════════════════════════════ */
@@ -419,6 +427,9 @@ const JOIN_GAP = 0.2;                  // silencio (s) entre tramos al continuar
 const STALL_MS = 1000;                 // grabando sin recibir audio → aviso "toca la pantalla"
 const HOP = 0.01;                      // un frame de análisis cada 10 ms
 const UNDO_MAX = 50;
+const MIN_GAP = 0.02;                  // silencio mínimo (s) que queda entre notas movidas
+const STRETCH = [0.5, 2.5];            // duración editada / cantada permitida
+const MOVE_STEP = 0.05;                // botones ◀ Antes / Después ▶ (s)
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
 const LOW_PEAK = 0.05;                 // pico de toda la toma por debajo de esto = señal muy baja
@@ -442,7 +453,7 @@ let state = 'idle';          // idle | recording | ready | playing
 let busy = false;            // pidiendo el micrófono
 /* take: { id, name, created, frames, curve, notes, analyzed, peak, buffer (original normalizado),
            gain, rawPeak, duration, joins, range, key, keyName, scale, stats,
-           edits: { i0: { target, flatten } }, cuts: [['split'|'merge', frame]…], shifts, edited (AudioBuffer) } */
+           edits: { i0: { target, flatten, ds, de } }, cuts: [['split'|'merge', frame]…], shifts, tmap, edited (AudioBuffer) } */
 let take = null;
 let rec = null;              // { stream, capture, analyzer, tOffset, chunks, length, sr, level, maxPeak, lastSeg, lastChunk }
 let playback = null;         // { src, startAc, offset }
@@ -587,7 +598,7 @@ async function startRecording(append, retry) {
         take = { id: null, name: '', created: 0, dirty: true, frames: [], curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: null, gain: 1, rawPeak: 0, duration: 0, joins: [], range: null,
                  key: null, keyName: null, scale: null, stats: null,
-                 edits: {}, cuts: [], shifts: null, edited: null };
+                 edits: {}, cuts: [], shifts: null, tmap: null, edited: null };
         rec = { chunks: [], length: 0, maxPeak: 0 };
         selected = -1; cursor = 0;
         undoStack.length = redoStack.length = 0;
@@ -731,10 +742,18 @@ function updateRange() {
 /* ── Edición (no destructiva: el original no se toca) ── */
 const editOf   = n => take && take.edits[n.i0];
 const targetOf = n => { const e = editOf(n); return e && e.target != null ? e.target : n.midi; };
-const isEdited = n => { const e = editOf(n); return !!e && (Math.abs(targetOf(n) - n.midi) > 0.005 || (e.flatten || 0) > 0); };
+/** [ds, de]: cuánto se movieron (s) el inicio y el final de la nota. */
+const timeOf   = n => { const e = editOf(n); return e ? [e.ds || 0, e.de || 0] : [0, 0]; };
+const timeEdited = n => timeOf(n).some(d => Math.abs(d) >= 0.0005);
+const isEdited = n => { const e = editOf(n); return !!e && (Math.abs(targetOf(n) - n.midi) > 0.005 || (e.flatten || 0) > 0 || timeEdited(n)); };
 const hasEdits = () => !!take && take.notes.some(isEdited);
 /** Altura con la que se ve una nota: la editada (vista "Editada") o la cantada. */
 const shownMidi = n => abMode === 'edit' ? targetOf(n) : n.midi;
+/** Instante en pantalla (y en lo que se oye) de un instante del original, y al revés. */
+const warped = () => abMode === 'edit' && !!take && !!take.tmap;
+const shownT = t => warped() ? Psola.toOut(take.tmap, t) : t;
+const srcT   = t => warped() ? Psola.toIn(take.tmap, t) : t;
+function refreshTimeMap() { take.tmap = Psola.timeMap(take.notes, take.edits, take.duration); }
 
 function snapshot() { return JSON.stringify({ edits: take.edits, cuts: take.cuts }); }
 function pushUndo() {
@@ -760,7 +779,8 @@ function afterEdit(reseg) {
         if (sel) selected = take.notes.findIndex(n => n.i0 <= sel.i0 && n.i1 >= sel.i0);
         renderSummary();
     }
-    abMode = 'edit';
+    refreshTimeMap();
+    if (abMode !== 'edit') setAB('edit');
     take.dirty = true;
     renderEditsSoon();
     updateRange();
@@ -772,8 +792,54 @@ function afterEdit(reseg) {
 
 function setEdit(n, patch) {
     const e = Object.assign({}, take.edits[n.i0], patch);
-    if ((e.target == null || Math.abs(e.target - n.midi) < 0.005) && !(e.flatten > 0)) delete take.edits[n.i0];
-    else take.edits[n.i0] = e;
+    if (e.target != null && Math.abs(e.target - n.midi) < 0.005) delete e.target;
+    if (!(e.flatten > 0)) delete e.flatten;
+    ['ds', 'de'].forEach(k => { if (!(Math.abs(e[k]) >= 0.0005)) delete e[k]; });
+    if (Object.keys(e).length) take.edits[n.i0] = e;
+    else delete take.edits[n.i0];
+    refreshTimeMap();
+}
+
+/**
+ * Inicio y final editados de la nota i ({ ds, de }) sin pisar a sus vecinas (ya
+ * movidas o no) y dentro de STRETCH. kind: 'move' (ambos), 'start' o 'end' (un borde).
+ */
+function placeNote(i, kind, ds, de) {
+    const ns = take.notes, n = ns[i], prev = ns[i - 1], next = ns[i + 1];
+    const lo = prev ? prev.end + timeOf(prev)[1] + Math.min(MIN_GAP, n.start - prev.end) : 0;
+    const hi = next ? next.start + timeOf(next)[0] - Math.min(MIN_GAP, next.start - n.end) : take.duration - 0.01;
+    const len = n.end - n.start;
+    let s = n.start + ds, e = n.end + de;
+    if (kind === 'move') {
+        const k = s < lo ? lo - s : e > hi ? hi - e : 0;
+        s += k; e += k;
+    } else if (kind === 'start') {
+        s = Math.min(Math.max(s, lo, e - len * STRETCH[1]), e - len * STRETCH[0]);
+    } else {
+        e = Math.max(Math.min(e, hi, s + len * STRETCH[1]), s + len * STRETCH[0]);
+    }
+    return { ds: s - n.start, de: e - n.end };
+}
+
+/** ◀ Antes / Después ▶ (dir = −1 / 1) y Acortar / Alargar (un 10 % de lo cantado). */
+function moveNote(dir) { timeEdit('move', dir * MOVE_STEP, dir * MOVE_STEP); }
+function stretchNote(dir) {
+    const n = take && take.notes[selected];
+    if (n) timeEdit('end', 0, dir * (n.end - n.start) * 0.1);
+}
+function timeEdit(kind, dS, dE) {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    const [ds, de] = timeOf(n), t = placeNote(selected, kind, ds + dS, de + dE);
+    if (Math.abs(t.ds - ds) < 0.0005 && Math.abs(t.de - de) < 0.0005) {
+        $('noteEditState').textContent = kind === 'move' || dE > 0
+            ? 'No queda sitio: la nota de al lado está pegada (muévela primero) o se llegó al límite.'
+            : 'Ya está en la duración mínima.';
+        return;
+    }
+    pushUndo();
+    setEdit(n, t);
+    afterEdit(false);
 }
 
 function nudgeNote(dir) {
@@ -836,14 +902,22 @@ function clearEdits() {
 function splitAtCursor() {
     const n = take && take.notes[selected];
     if (!n) return;
-    const f = frameAt(cursor);
+    const f = frameAt(srcT(cursor));
     if (f - n.i0 < 4 || n.i1 - f + 1 < 4) {
         $('noteEditState').textContent = 'Coloca el cabezal dentro de la nota (tocando la gráfica) para separarla ahí.';
         return;
     }
     pushUndo();
     take.cuts.push(['split', f]);
-    if (take.edits[n.i0]) take.edits[f] = Object.assign({}, take.edits[n.i0]);   // la 2ª mitad hereda la edición
+    const e = take.edits[n.i0];
+    if (e) {   // la 2ª mitad hereda la edición; en el tiempo, cada mitad se queda donde está
+        take.edits[f] = Object.assign({}, e);
+        if (e.ds || e.de) {
+            const tc = take.frames[f].t - HOP / 2, d = Psola.toOut(take.tmap, tc) - tc;
+            take.edits[n.i0] = Object.assign({}, e, { de: d });
+            take.edits[f].ds = d;
+        }
+    }
     afterEdit(true);
 }
 
@@ -852,14 +926,18 @@ function mergeNext() {
     if (!n || !next) return;
     pushUndo();
     take.cuts.push(['merge', next.i0]);
+    const en = take.edits[next.i0];   // el final de la nota unida es el de la siguiente
+    if (en && en.de) take.edits[n.i0] = Object.assign({}, take.edits[n.i0], { de: en.de });
     delete take.edits[next.i0];
     afterEdit(true);
 }
 
 function setAB(mode) {
     if (mode === abMode) return;
+    const t = srcT(state === 'playing' ? playPos() : cursor);   // el cabezal sigue en el mismo punto del canto
     abMode = mode;
-    if (state === 'playing') startPlayback(playPos());
+    cursor = shownT(t);
+    if (state === 'playing') startPlayback(cursor);
     updateUI();
     renderNote();
     requestDraw();
@@ -877,10 +955,11 @@ function renderEdits() {
     // Ediciones de notas que ya no existen (p. ej. tras unir) se descartan
     const live = new Set(take.notes.map(n => String(n.i0)));
     Object.keys(take.edits).forEach(k => { if (!live.has(k)) delete take.edits[k]; });
-    if (!hasEdits()) { take.shifts = take.edited = null; }
+    if (!hasEdits()) { take.shifts = take.edited = take.tmap = null; }
     else {
+        refreshTimeMap();
         take.shifts = Psola.shiftsFor(take.frames, take.curve, take.notes, take.edits);
-        const out = Psola.render(take.buffer.getChannelData(0), take.buffer.sampleRate, take.frames, take.curve, take.shifts);
+        const out = Psola.render(take.buffer.getChannelData(0), take.buffer.sampleRate, take.frames, take.curve, take.shifts, take.tmap);
         take.edited = makeBuffer(out, take.buffer.sampleRate);
     }
     if (state === 'playing') startPlayback(playPos());
@@ -947,7 +1026,7 @@ async function playSelected() {
     const n = take && take.notes[selected];
     if (!n || state === 'recording') return;
     await soundEngine.start();
-    startPlayback(Math.max(0, n.start), n.end);
+    startPlayback(Math.max(0, shownT(n.start)), shownT(n.end));
 }
 
 async function playReference() {
@@ -1027,7 +1106,7 @@ function curveAt(i) {
 /** Altura cerca de t (MIDI con decimales) o NaN si hay silencio. */
 function pitchAt(t, reach) {
     if (!take || !take.frames.length) return NaN;
-    const f = take.frames, i = Math.min(f.length - 1, frameAt(t));
+    const f = take.frames, i = Math.min(f.length - 1, frameAt(srcT(t)));
     for (let d = 0; d <= (reach || 4); d++) {
         for (const j of d ? [i - d, i + d] : [i]) {
             if (j < 0 || j >= f.length) continue;
@@ -1047,7 +1126,7 @@ function pitchTarget() {
     if (!take) return null;
     const maxSpan = Math.max(12, Math.floor((cssH - AXIS) / MIN_RH) - 1);
     const t0 = view.t0, t1 = t0 + visibleSec();
-    const midis = take.notes.filter(n => n.end >= t0 && n.start <= t1).flatMap(n => [n.midi, targetOf(n)]);
+    const midis = take.notes.filter(n => shownT(n.end) >= t0 && shownT(n.start) <= t1).flatMap(n => [n.midi, targetOf(n)]);
     const head = pitchAt(headTime(), state === 'recording' ? 12 : 4);
     if (state === 'recording' && !isNaN(head)) midis.push(head);
     const r = rowsFor(midis);
@@ -1098,6 +1177,7 @@ function ensureVisible(t) {
 function toggleEditMode() { setEditMode(!editMode); }
 function setEditMode(on) {
     editMode = !!on && !!take && state !== 'recording';
+    if (cv) cv.style.cursor = '';
     $('rollWrap').dataset.edit = editMode ? 'true' : 'false';
     $('editTool').classList.toggle('active', editMode);
     if (editMode && abMode !== 'edit') setAB('edit');
@@ -1212,12 +1292,13 @@ function draw() {
     // en silencio o mientras se graba, la altura instantánea
     const head = headTime();
     const headPitch = take ? pitchAt(head, state === 'recording' ? 12 : 4) : NaN;
-    const onNote = take && state !== 'recording' ? take.notes.find(n => head >= n.start && head <= n.end) : null;
+    const onNote = take && state !== 'recording' ? take.notes.find(n => head >= shownT(n.start) && head <= shownT(n.end)) : null;
     const headY = onNote ? shownMidi(onNote) : headPitch;
     const headRow = isNaN(headY) ? null : Math.round(headY);
     const headCents = isNaN(headY) ? 0 : centsOf(headY);
     const yOf = m => top + (hi + 0.5 - m) * rh;
     const xOf = t => left + (t - view.t0) * view.pps;
+    const xSrc = t => xOf(shownT(t));   // instante del original → x (con las notas movidas)
     const tEnd = view.t0 + visibleSec();
     const inKey = take && take.scale ? new Set(take.scale.map(n => Theory.pc(n))) : null;
 
@@ -1278,10 +1359,11 @@ function draw() {
         const frames = take.frames;
         // Notas: grosor = volumen, color = afinación (la editada, si se ve "Editada")
         take.notes.forEach((n, i) => {
-            if (n.end < view.t0 || n.start > tEnd) return;
+            // Visible si se ve la nota o su fantasma (dónde se cantó)
+            if (Math.max(n.end, shownT(n.end)) < view.t0 || Math.min(n.start, shownT(n.start)) > tEnd) return;
             const m = shownMidi(n), sel = i === selected;
-            const moved = abMode === 'edit' && Math.abs(m - n.midi) > 0.02;
-            if (moved) {   // fantasma: dónde se cantó
+            const moved = abMode === 'edit' && (Math.abs(m - n.midi) > 0.02 || timeEdited(n));
+            if (moved) {   // fantasma: dónde (y cuándo) se cantó
                 blobPath(n, yOf(n.midi), rh, xOf);
                 cx.setLineDash([3, 3]);
                 cx.lineWidth = 1;
@@ -1290,7 +1372,7 @@ function draw() {
                 cx.setLineDash([]);
             }
             const y = yOf(m);
-            const maxH = blobPath(n, y, rh, xOf);
+            const maxH = blobPath(n, y, rh, xSrc);
             const rgb = colors.tune[tuneState(centsOf(m))];
             cx.fillStyle = `rgba(${rgb}, ${sel ? 0.6 : 0.3})`;
             cx.fill();
@@ -1303,21 +1385,30 @@ function draw() {
                 cx.font = `${sel ? 700 : 500} 10px ${colors.font}`;
                 cx.textAlign = 'left';
                 cx.fillText(noteLabel(Math.round(m)) + (Math.abs(c) > TUNE_OK || sel ? ' ' + fmtCents(c) : '') + (isEdited(n) && abMode === 'edit' ? ' ✎' : ''),
-                            xOf(n.start) + 2, y - maxH - 6);
+                            xSrc(n.start) + 2, y - maxH - 6);
+            }
+            if (sel && editMode) {   // asas para alargar/acortar desde los bordes
+                cx.fillStyle = colors.ink;
+                [xSrc(n.start), xSrc(n.end)].forEach(x => {
+                    cx.beginPath();
+                    if (cx.roundRect) cx.roundRect(x - 2, y - maxH - 3, 4, 2 * maxH + 6, 2); else cx.rect(x - 2, y - maxH - 3, 4, 2 * maxH + 6);
+                    cx.fill();
+                });
             }
         });
 
         // Curva continua (hasta el último análisis limpia; lo más nuevo, en crudo)
-        const i0 = Math.max(0, frameAt(view.t0) - 1), i1 = Math.min(frames.length - 1, frameAt(tEnd) + 1);
         const every = Math.max(1, Math.floor(1 / (view.pps * HOP)));
         const showEdited = abMode === 'edit' && take.shifts;
-        const strokeCurve = (fn, style, width) => {
+        const strokeCurve = (fn, style, width, warp) => {
+            const toX = warp ? xSrc : xOf, toSrc = warp ? srcT : (t => t);
+            const i0 = Math.max(0, frameAt(toSrc(view.t0)) - 1), i1 = Math.min(frames.length - 1, frameAt(toSrc(tEnd)) + 1);
             cx.beginPath();
             let pen = false;
             for (let i = i0; i <= i1; i += every) {
                 const m = fn(i);
                 if (isNaN(m)) { pen = false; continue; }
-                const x = xOf(frames[i].t), y = yOf(m);
+                const x = toX(frames[i].t), y = yOf(m);
                 if (pen) cx.lineTo(x, y); else cx.moveTo(x, y);
                 pen = true;
             }
@@ -1326,13 +1417,13 @@ function draw() {
             cx.strokeStyle = style;
             cx.stroke();
         };
-        if (showEdited) strokeCurve(i => i < take.analyzed ? take.curve[i] : NaN, `rgba(${colors.inkRgb}, 0.25)`, 1);
-        strokeCurve(curveAt, `rgba(${colors.inkRgb}, 0.8)`, 1.5);
+        if (showEdited) strokeCurve(i => i < take.analyzed ? take.curve[i] : NaN, `rgba(${colors.inkRgb}, 0.25)`, 1, false);
+        strokeCurve(curveAt, `rgba(${colors.inkRgb}, 0.8)`, 1.5, true);
 
         // Uniones entre tramos (pausa → continuar)
         cx.fillStyle = colors.borderS;
         (take.joins || []).forEach(t => {
-            const x = xOf(t - JOIN_GAP / 2);
+            const x = xSrc(t - JOIN_GAP / 2);
             for (let y = top; y < top + ph; y += 8) cx.fillRect(x - 0.5, y, 1, 4);
         });
 
@@ -1401,10 +1492,16 @@ function setupCanvas() {
         pointers.set(e.pointerId, p);
         if (pointers.size === 1) {
             drag = { x0: p.x, y0: p.y, t0: view.t0, moved: false, note: -1 };
-            // Lápiz activo y el dedo sobre una nota: arrastrar = cambiar su altura
+            // Lápiz activo y el dedo sobre una nota: arriba/abajo = altura, a los lados = tiempo,
+            // desde un borde = duración (el eje se decide con el primer movimiento)
             if (editMode && take && state !== 'recording' && p.x >= GUTTER) {
                 const i = hitNote(p.x, p.y);
-                if (i >= 0) { drag.note = i; drag.from = targetOf(take.notes[i]); drag.before = snapshot(); }
+                if (i >= 0) {
+                    const [ds, de] = timeOf(take.notes[i]);
+                    Object.assign(drag, { note: i, from: targetOf(take.notes[i]), ds, de, before: snapshot() });
+                    drag.edge = edgeAt(i, p.x);
+                    drag.axis = drag.edge ? 'time' : null;
+                }
             }
         } else if (pointers.size === 2) {
             const [a, b] = [...pointers.values()];
@@ -1413,6 +1510,10 @@ function setupCanvas() {
         }
     });
     cv.addEventListener('pointermove', e => {
+        if (!pointers.size && editMode && take && e.pointerType === 'mouse') {   // ratón: qué hará arrastrar
+            const p = pos(e), i = p.x >= GUTTER ? hitNote(p.x, p.y) : -1;
+            cv.style.cursor = i < 0 ? '' : edgeAt(i, p.x) ? 'ew-resize' : 'move';
+        }
         if (!pointers.has(e.pointerId)) return;
         const p = pos(e);
         pointers.set(e.pointerId, p);
@@ -1424,12 +1525,18 @@ function setupCanvas() {
             if (Math.abs(dx) > 6 || Math.abs(dy) > 6) drag.moved = true;
             if (!drag.moved) return;
             if (drag.note >= 0) {
-                // Se ajusta al semitono: cada fila arrastrada = un semitono
-                const rh = (cssH - AXIS) / (view.hi - view.lo + 1);
                 const n = take.notes[drag.note];
-                const steps = Math.round(-dy / rh);
-                const target = steps === 0 ? drag.from : Math.round(drag.from) + steps;
-                setEdit(n, { target });
+                if (!drag.axis) drag.axis = Math.abs(dx) > Math.abs(dy) ? 'time' : 'pitch';
+                if (drag.axis === 'pitch') {
+                    // Se ajusta al semitono: cada fila arrastrada = un semitono
+                    const rh = (cssH - AXIS) / (view.hi - view.lo + 1);
+                    const steps = Math.round(-dy / rh);
+                    setEdit(n, { target: steps === 0 ? drag.from : Math.round(drag.from) + steps });
+                } else {
+                    const dt = dx / view.pps;
+                    setEdit(n, placeNote(drag.note, drag.edge || 'move',
+                        drag.ds + (drag.edge === 'end' ? 0 : dt), drag.de + (drag.edge === 'start' ? 0 : dt)));
+                }
                 selected = drag.note;
                 renderNote();
                 requestDraw();
@@ -1476,11 +1583,19 @@ function hitNote(x, y) {
     const yOf = m => AXIS + (view.hi + 0.5 - m) * rh;
     let best = -1, bestD = Infinity;
     take.notes.forEach((n, i) => {
-        if (t < n.start - 0.03 || t > n.end + 0.03) return;
+        if (t < shownT(n.start) - 0.03 || t > shownT(n.end) + 0.03) return;
         const d = Math.abs(y - yOf(shownMidi(n)));
         if (d <= Math.max(rh * 0.7, 16) && d < bestD) { best = i; bestD = d; }
     });
     return best;
+}
+
+/** 'start' / 'end' si x está en un borde de la nota i (para alargarla o acortarla), si no null. */
+function edgeAt(i, x) {
+    const n = take.notes[i];
+    const xs = GUTTER + (shownT(n.start) - view.t0) * view.pps, xe = GUTTER + (shownT(n.end) - view.t0) * view.pps;
+    const grab = Math.min(16, (xe - xs) * 0.3);
+    return x < xs + grab ? 'start' : x > xe - grab ? 'end' : null;
 }
 
 function tapAt(x, y) {
@@ -1510,9 +1625,10 @@ function selectNote(i) {
     if (!take || !take.notes.length) return;
     selected = Math.max(0, Math.min(take.notes.length - 1, i));
     const n = take.notes[selected];
-    cursor = Math.max(0, n.start);
-    ensureVisible(n.start);
-    if (n.end > view.t0 + visibleSec()) view.t0 = clampT0(n.start - visibleSec() * 0.1);
+    const s = shownT(n.start);
+    cursor = Math.max(0, s);
+    ensureVisible(s);
+    if (shownT(n.end) > view.t0 + visibleSec()) view.t0 = clampT0(s - visibleSec() * 0.1);
     if (state === 'playing') startPlayback(cursor);
     renderNote();
     requestDraw();
@@ -1521,7 +1637,7 @@ function selectNote(i) {
 function stepNote(d) {
     if (!take || !take.notes.length) return;
     if (selected < 0) {   // sin selección: la siguiente/anterior al cabezal
-        const idx = take.notes.findIndex(n => n.start >= cursor - 0.01);
+        const idx = take.notes.findIndex(n => shownT(n.start) >= cursor - 0.01);
         selectNote(d > 0 ? (idx < 0 ? take.notes.length - 1 : idx) : (idx < 0 ? take.notes.length - 1 : idx - 1));
     } else {
         selectNote(selected + d);
@@ -1629,13 +1745,14 @@ function renderNote() {
     if (!n) return;
     const m = shownMidi(n), c = centsOf(m);
     $('noteName').textContent = noteLabel(Math.round(m));
-    $('noteMeta').textContent = `Nota ${selected + 1} de ${take.notes.length} · ${fmtTime(n.start)},${String(Math.floor((n.start % 1) * 10))}`;
+    const ts = shownT(n.start), te = shownT(n.end);
+    $('noteMeta').textContent = `Nota ${selected + 1} de ${take.notes.length} · ${fmtTime(ts)},${String(Math.floor((ts % 1) * 10))}`;
     const st = tuneState(c);
     const pill = $('notePill');
     pill.dataset.state = st;
     pill.textContent = st === 'ok' ? 'Afinada' : c > 0 ? 'Alta' : 'Baja';
     $('noteCents').textContent = fmtCents(n.cents);
-    $('noteDur').textContent = (n.end - n.start).toFixed(2).replace('.', ',') + ' s';
+    $('noteDur').textContent = (te - ts).toFixed(2).replace('.', ',') + ' s';
     $('noteWobble').textContent = '±' + n.wobble + '¢';
     $('noteWobbleHint').textContent = n.wobble <= 12 ? 'muy estable' : n.wobble <= 30 ? 'estable' : n.wobble <= 60 ? 'con vibrato' : 'vibrato amplio o inestable';
 
@@ -1643,12 +1760,21 @@ function renderNote() {
     $('flatNote').value = flat;
     $('flatNoteVal').textContent = flat + ' %';
     const shift = Math.round((targetOf(n) - n.midi) * 100);
+    const [ds, de] = timeOf(n), len = n.end - n.start, factor = (len + de - ds) / len;
+    const ms = d => Math.round(Math.abs(d) * 1000) + ' ms';
+    const parts = [`cantada ${noteLabel(n.note)} ${fmtCents(n.cents)}`];
+    if (shift) parts.push(`movida ${shift > 0 ? '+' : '−'}${Math.abs(shift)}¢`);
+    if (flat) parts.push(`vibrato −${flat} %`);
+    if (Math.abs(ds - de) < 0.0005) { if (Math.abs(ds) >= 0.0005) parts.push(`${ds < 0 ? 'adelantada' : 'atrasada'} ${ms(ds)}`); }
+    else {
+        if (Math.abs(ds) >= 0.0005) parts.push(`empieza ${ms(ds)} ${ds < 0 ? 'antes' : 'después'}`);
+        parts.push(`duración ×${factor.toFixed(2).replace('.', ',')}`);
+    }
     $('noteEditState').innerHTML = isEdited(n)
-        ? `Editada: <strong>${noteLabel(Math.round(targetOf(n)))} ${fmtCents(centsOf(targetOf(n)))}</strong>` +
-          ` (cantada ${noteLabel(n.note)} ${fmtCents(n.cents)}` + (shift ? `, movida ${shift > 0 ? '+' : '−'}${Math.abs(shift)}¢` : '') +
-          (flat ? `, vibrato −${flat} %` : '') + ')' +
-          (Math.abs(shift) > 300 ? ' · más de 3 semitonos puede sonar artificial' : '')
-        : 'Sin editar. Usa los botones o activa el lápiz y arrastra la nota.';
+        ? `Editada: <strong>${noteLabel(Math.round(targetOf(n)))} ${fmtCents(centsOf(targetOf(n)))}</strong> (${parts.join(', ')})` +
+          (Math.abs(shift) > 300 ? ' · más de 3 semitonos puede sonar artificial' : '') +
+          (factor > 2 ? ' · más del doble de largo puede sonar artificial' : '')
+        : 'Sin editar. Usa los botones o activa el lápiz: arrastra la nota arriba o abajo (altura), a los lados (tiempo) o desde un borde (duración).';
     $('resetNoteBtn').disabled = !e;
     $('mergeBtn').disabled = selected >= take.notes.length - 1;
 }
@@ -1785,7 +1911,7 @@ async function openTake(id) {
         take = { id: meta.id, name: meta.name, created: meta.created, dirty: false, frames, curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: makeBuffer(data, meta.sampleRate), gain: meta.gain || 1, rawPeak: meta.rawPeak || 0,
                  duration: meta.duration, joins: meta.joins || [], range: null, key: null, keyName: null, scale: null, stats: null,
-                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, edited: null };
+                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, tmap: null, edited: null };
         undoStack.length = redoStack.length = 0;
         abMode = 'edit';
         state = 'ready';
@@ -1882,7 +2008,7 @@ function downloadWav() {
 function downloadMidi() {
     if (!take || !take.notes.length) return;
     // Con la vista "Editada", las notas van a su altura editada
-    const notes = take.notes.map(n => Object.assign({}, n, { note: Math.round(shownMidi(n)) }));
+    const notes = take.notes.map(n => Object.assign({}, n, { note: Math.round(shownMidi(n)), start: shownT(n.start), end: shownT(n.end) }));
     download(Melody.toMidiFile(notes), 'mid', 'audio/midi');
 }
 
@@ -1908,7 +2034,10 @@ document.addEventListener('keydown', e => {
     }
     if (e.target.closest && e.target.closest('input, select, textarea')) return;
     if (!take || state === 'recording' || !take.notes.length) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (selected >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        moveNote(e.key === 'ArrowLeft' ? -1 : 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         stepNote(e.key === 'ArrowLeft' ? -1 : 1);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {

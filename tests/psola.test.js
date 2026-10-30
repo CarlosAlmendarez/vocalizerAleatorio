@@ -11,11 +11,11 @@ const { createContext, seededRandom, plain } = require('./helpers');
 const { Melody, Psola } = createContext(['pitch.js', 'melody.js', 'psola.js'], { Float32Array, Uint8Array, ArrayBuffer, DataView });
 const SR = 48000;
 
-/** Voz sintética: notas { midi, dur, vib (cents) } separadas por 0,1 s; timbre con un formante en ~800 Hz. */
+/** Voz sintética: notas { midi, dur, vib (cents), gap (s antes, 0,1 por defecto) }; timbre con un formante en ~800 Hz. */
 function voice(parts, seed = 2) {
   const rnd = seededRandom(seed);
   let t = 0.15;
-  const plan = parts.map(p => { const s = { ...p, start: t + 0.1 }; t = s.start + p.dur; s.end = t; return s; });
+  const plan = parts.map(p => { const s = { ...p, start: t + (p.gap != null ? p.gap : 0.1) }; t = s.start + p.dur; s.end = t; return s; });
   const n = Math.ceil((t + 0.15) * SR), x = new Float32Array(n);
   let phase = 0;
   for (let i = 0; i < n; i++) {
@@ -47,7 +47,8 @@ function edit(x, edits) {
   const e = {};
   Object.keys(edits).forEach(k => { e[a.notes[k].i0] = edits[k]; });
   const shifts = Psola.shiftsFor(a.frames, a.curve, a.notes, e);
-  return { a, out: Psola.render(x, SR, a.frames, a.curve, shifts), shifts };
+  const map = Psola.timeMap(a.notes, e, x.length / SR);
+  return { a, out: Psola.render(x, SR, a.frames, a.curve, shifts, map), shifts, map };
 }
 
 const rms = (x, a, b) => { let s = 0; for (let i = a; i < b; i++) s += x[i] * x[i]; return Math.sqrt(s / (b - a)); };
@@ -136,6 +137,83 @@ test('rendimiento: afinar 10 s de voz tarda mucho menos que su duración', () =>
   a.notes.forEach(n => { e[n.i0] = { target: n.note + 0.5, flatten: 0.5 }; });
   const t0 = Date.now();
   Psola.render(x, SR, a.frames, a.curve, Psola.shiftsFor(a.frames, a.curve, a.notes, e));
+  const ms = Date.now() - t0, sec = x.length / SR;
+  assert.ok(ms < sec * 1000 * 0.1, `${ms} ms para ${sec.toFixed(1)} s`);
+});
+
+/* ── Fase 2b: tiempo ── */
+
+test('mapa de tiempo: nulo sin cambios, ida y vuelta exacta, identidad lejos de lo editado', () => {
+  const { x } = voice([{ midi: 57, dur: 0.5 }, { midi: 60, dur: 0.5, gap: 0.4 }, { midi: 64, dur: 0.5, gap: 0.4 }]);
+  const a = analyze(x), D = x.length / SR;
+  assert.equal(Psola.timeMap(a.notes, {}, D), null);
+  assert.equal(Psola.timeMap(a.notes, { [a.notes[1].i0]: { target: 62 } }, D), null);
+  const n = a.notes[1];
+  const map = Psola.timeMap(a.notes, { [n.i0]: { ds: 0.15, de: 0.15 } }, D);
+  assert.ok(Math.abs(Psola.toOut(map, n.start) - (n.start + 0.15)) < 1e-9);
+  assert.ok(Math.abs(Psola.toOut(map, n.end) - (n.end + 0.15)) < 1e-9);
+  for (let t = 0; t < D; t += 0.013) assert.ok(Math.abs(Psola.toIn(map, Psola.toOut(map, t)) - t) < 1e-9, `t=${t}`);
+  for (const t of [a.notes[0].start, a.notes[0].end, a.notes[2].start + 0.01, a.notes[2].end]) assert.equal(Psola.toOut(map, t), t);
+  for (let k = 1; k < map.length; k++) assert.ok(map[k][0] >= map[k - 1][0] && map[k][1] >= map[k - 1][1], 'creciente');
+});
+
+test('mover una nota en el tiempo: empieza donde se pidió, misma altura y duración, el resto intacto', () => {
+  for (const d of [0.15, -0.12]) {
+    const { x } = voice([{ midi: 57, dur: 0.5 }, { midi: 60, dur: 0.5, gap: 0.4 }, { midi: 64, dur: 0.5, gap: 0.4 }]);
+    const { a, out } = edit(x, { 1: { ds: d, de: d } });
+    assert.equal(out.length, x.length);
+    const b = analyze(out);
+    assert.deepEqual(plain(b.notes.map(n => n.note)), [57, 60, 64]);
+    const got = b.notes[1], want = a.notes[1];
+    assert.ok(Math.abs(got.start - (want.start + d)) < 0.03, `${d}: empieza en ${got.start.toFixed(3)}, se pedía ${(want.start + d).toFixed(3)}`);
+    assert.ok(Math.abs((got.end - got.start) - (want.end - want.start)) < 0.04, 'misma duración');
+    assert.ok(Math.abs(got.midi - want.midi) * 100 < 5, `altura ${got.midi.toFixed(3)} (antes ${want.midi.toFixed(3)})`);
+    // Lo que cede es el silencio entre notas (con 30 ms de margen para el fundido)
+    const firstEnd = Math.round((a.notes[0].end - 0.03) * SR), lastStart = Math.round(a.notes[2].start * SR);
+    for (let i = 0; i < firstEnd; i++) assert.equal(out[i], x[i], `muestra ${i} cambió`);
+    for (let i = lastStart; i < x.length; i++) assert.equal(out[i], x[i], `muestra ${i} cambió`);
+  }
+});
+
+test('alargar y acortar una nota: nueva duración, misma altura, mismo timbre y volumen', () => {
+  for (const f of [1.6, 0.6]) {
+    const { x, plan } = voice([{ midi: 55, dur: 0.6 }, { midi: 59, dur: 0.4, gap: 0.6 }]);
+    const a0 = analyze(x), len = a0.notes[0].end - a0.notes[0].start;
+    const { a, out } = edit(x, { 0: { de: len * (f - 1) } });
+    const b = analyze(out);
+    assert.deepEqual(plain(b.notes.map(n => n.note)), [55, 59], `×${f}`);
+    const got = b.notes[0];
+    assert.ok(Math.abs((got.end - got.start) - len * f) < 0.04, `×${f}: dura ${(got.end - got.start).toFixed(3)}, se pedía ${(len * f).toFixed(3)}`);
+    assert.ok(Math.abs(got.start - a.notes[0].start) < 0.02, 'el inicio no se mueve');
+    assert.ok(Math.abs(got.midi - a.notes[0].midi) * 100 < 5, `altura ${got.midi.toFixed(3)}`);
+    const at = Math.round((plan[0].start + 0.15) * SR);
+    assert.ok(Math.abs(centroid(out, at) / centroid(x, at) - 1) < 0.08, 'timbre');
+    const s0 = Math.round((got.start + 0.05) * SR), s1 = Math.round((got.end - 0.05) * SR);
+    const o0 = Math.round((a.notes[0].start + 0.05) * SR), o1 = Math.round((a.notes[0].end - 0.05) * SR);
+    const ratio = rms(out, s0, s1) / rms(x, o0, o1);
+    assert.ok(ratio > 0.8 && ratio < 1.25, `volumen ×${ratio.toFixed(2)}`);
+    assert.deepEqual(plain(b.notes.map(n => n.note)).length, 2);
+    assert.ok(Math.abs(b.notes[1].start - a.notes[1].start) < 0.02, 'la siguiente nota no se mueve');
+  }
+});
+
+test('altura y tiempo a la vez', () => {
+  const { x } = voice([{ midi: 57, dur: 0.6 }, { midi: 60, dur: 0.5, gap: 0.5 }]);
+  const { a, out } = edit(x, { 0: { target: 59, ds: 0.1, de: 0.25 } });
+  const got = analyze(out).notes[0];
+  assert.ok(Math.abs(got.midi - 59) * 100 < 6, `altura ${got.midi.toFixed(3)}`);
+  assert.ok(Math.abs(got.start - (a.notes[0].start + 0.1)) < 0.03, `inicio ${got.start.toFixed(3)}`);
+  assert.ok(Math.abs(got.end - (a.notes[0].end + 0.25)) < 0.04, `final ${got.end.toFixed(3)}`);
+});
+
+test('rendimiento: mover y estirar todas las notas de 10 s tarda mucho menos que su duración', () => {
+  const parts = Array.from({ length: 16 }, (_, i) => ({ midi: 55 + (i % 7), dur: 0.4, gap: 0.2 }));
+  const { x } = voice(parts);
+  const a = analyze(x);
+  const e = {};
+  a.notes.forEach((n, i) => { e[n.i0] = { target: n.note + 0.3, ds: i % 2 ? 0.05 : -0.05, de: 0.06 }; });
+  const t0 = Date.now();
+  Psola.render(x, SR, a.frames, a.curve, Psola.shiftsFor(a.frames, a.curve, a.notes, e), Psola.timeMap(a.notes, e, x.length / SR));
   const ms = Date.now() - t0, sec = x.length / SR;
   assert.ok(ms < sec * 1000 * 0.1, `${ms} ms para ${sec.toFixed(1)} s`);
 });

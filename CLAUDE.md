@@ -26,7 +26,7 @@ inline `<script>`. `index.html` at the repo root is the launcher/home screen.
   - `structure.test.js` — each app registered in shell `TOOLS`, home, `sw.js`; files exist.
   - `ranges.test.js` — every note each app can play is inside its decoded `range`.
   - `melody.test.js` — voice analysis on synthetic singing: notes, cents, vibrato, legato, weak mic, cuts.
-  - `psola.test.js` — pitch editing: target pitch reached, formants kept, unedited audio identical.
+  - `psola.test.js` — pitch/timing editing: target pitch, start and length reached, formants kept, unedited audio identical.
   Arrays coming out of a `vm` context have a different prototype: compare with `plain()`.
   When fixing a bug, add a test that fails without the fix. Also load the affected page in a
   browser — there are no DOM/visual tests.
@@ -180,9 +180,13 @@ Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 - `Melody.createAnalyzer(sr).push(chunk)` → frames `{ t, midi|NaN, rms }` every 10 ms (decimates to
   ~24 kHz, adaptive noise gate); `Melody.analyze(frames)` → `{ curve, notes }` (octave fixes, note
   segmentation); `Melody.applyCuts(..., [['split', f], ['merge', i0]])` applies manual cuts **in order**.
-- `Psola.shiftsFor(frames, curve, notes, edits)` + `Psola.render(samples, sr, frames, curve, shifts)`:
-  non-destructive TD-PSOLA pitch editing (`edits[note.i0] = { target, flatten }`), always rendered
-  from the original. Natural up to ±3 semitones.
+- `Psola.shiftsFor(frames, curve, notes, edits)` + `Psola.timeMap(notes, edits, duration)` +
+  `Psola.render(samples, sr, frames, curve, shifts, map)`: non-destructive TD-PSOLA pitch and timing
+  editing (`edits[note.i0] = { target, flatten, ds, de }`, `ds`/`de` = seconds the note's start/end
+  move), always rendered from the original, same length. Natural up to ±3 semitones and ×0.5–×2.
+  The map is `[[editedT, originalT], …]` (`null` if nothing moved); a moved note carries its attack
+  and tail, the silence next to it absorbs the change. In the app, the "Editada" view shows edited
+  times: convert with `shownT()` / `srcT()` (frames and notes stay in original time).
 - The app stores takes in IndexedDB (`mt-analisis-vocal`: `takes` metadata + `audio` Int16 PCM).
 
 ### Pitch detection (`shared/pitch.js`)
