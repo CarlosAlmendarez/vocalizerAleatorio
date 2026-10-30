@@ -32,12 +32,15 @@
   --accent2:     #00c8ff;
   --accent2-rgb: 0, 200, 255;
   --accent-ink:  #0a0620;
+  --accent-text: #9d6bff;   /* texto en color de acento sobre el fondo (contraste suficiente en letra pequeña) */
   /* Semantic */
   --success:     #39f29d;
   --danger:      #ff5b7f;
   --success-rgb: 57,242,157;
   --danger-rgb:  255,91,127;
   --warning:     #ffb74a;
+  --warning-rgb: 255,183,74;
+  --ink-rgb:     238,240,255;      /* para transparencias del color del texto: rgba(var(--ink-rgb), a) */
   /* Effects */
   --glow:        1;
   --radius:      20px;
@@ -82,11 +85,14 @@
   --accent2:     #1a1a1a;
   --accent2-rgb: 26, 26, 26;
   --accent-ink:  #ffffff;
+  --accent-text: #b8401f;   /* el acento claro no se lee en letra pequeña sobre fondo claro */
   --success:     #2f8f5f;
   --danger:      #c73c3c;
   --success-rgb: 47,143,95;
   --danger-rgb:  199,60,60;
   --warning:     #c9821a;
+  --warning-rgb: 201,130,26;
+  --ink-rgb:     26,26,26;      /* para transparencias del color del texto: rgba(var(--ink-rgb), a) */
   --glow:        0;
   --radius:      18px;
   --accent-glow:   none;
@@ -119,11 +125,14 @@
   --accent2:     #d95e22;
   --accent2-rgb: 217, 94, 34;
   --accent-ink:  #1a0f08;
+  --accent-text: #f0a854;
   --success:     #82c98c;
   --danger:      #e8725a;
   --success-rgb: 130,201,140;
   --danger-rgb:  232,114,90;
   --warning:     #f0a854;
+  --warning-rgb: 240,168,84;
+  --ink-rgb:     244,233,220;      /* para transparencias del color del texto: rgba(var(--ink-rgb), a) */
   --glow:        0.7;
   --radius:      16px;
   --accent-glow:   0 0 30px rgba(240,168,84,0.35), 0 0 60px rgba(240,168,84,0.16);
@@ -522,7 +531,7 @@ body {
 @media (max-width: 359px) {
   .mt-nav-item { padding: 8px 6px; }
 }
-.mt-nav-item.active { color: var(--accent); }
+.mt-nav-item.active { color: var(--accent-text); }
 .mt-nav-item.active::before {
   content: '';
   position: absolute;
@@ -953,9 +962,8 @@ input[type="range"] { accent-color: var(--accent); }
 
 .key-label { color: rgba(30,30,60,0.5) !important; }
 [data-theme="minimal"] .key-label { color: rgba(26,26,26,0.4) !important; }
-.key-white.root .key-label, .key-white.in-scale .key-label { color: white !important; }
-[data-theme="minimal"] .key-white.root .key-label,
-[data-theme="minimal"] .key-white.in-scale .key-label { color: white !important; }
+.key-white.in-scale .key-label { color: white !important; }
+.key-white.root .key-label { color: var(--accent-ink) !important; }   /* sobre el acento: su color de contraste en cada tema */
 
 /* Scale chips */
 .scale-chip {
@@ -1092,3 +1100,16 @@ input[type="range"] { accent-color: var(--accent); }
   .desktop-only { display: flex; }
   .mobile-only  { display: none; }
 }
+
+/* =====================================================
+   OBJETIVOS TÁCTILES (móvil y tablet)
+   Los botones pequeños se tocan con el dedo: al menos 36 px de alto
+   (los de las apps se listan aquí para tener la regla en un solo sitio).
+   ===================================================== */
+.diff-pill, .btn-mini, .instrument-pill, .scale-chip,
+.hand-btn, .switch-btn, .transp-quick-btn, .transp-copy-btn, .transp-action-btn, .transp-detect button,
+.voc-layout-btn, .voc-mic-btn, .groove-sig-btn { min-height: 36px; }
+.note-ref-btn { min-height: 38px; }
+.voc-engine { min-height: 32px; }
+.groove-cell { min-height: 30px; }
+input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }

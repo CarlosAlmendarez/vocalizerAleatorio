@@ -206,7 +206,12 @@ as the use case allows (lowest string × 0.75, ~65 Hz for voice): cost grows wit
   (ignored while typing in inputs).
 - `MT.setTheme(id)`, `MT.getTheme()`, `MT.THEMES`, `MT.filterTools(q)`, `MT.precacheInstruments([...])`.
 - Home page sections `#tools`, `#practice`, `#settings` back the bottom-nav tabs.
-- Colors: use tokens; for alpha use `rgba(var(--accent-rgb|--success-rgb|--danger-rgb), a)`.
+- Colors: use tokens; for alpha use `rgba(var(--accent-rgb|--success-rgb|--danger-rgb|--warning-rgb|--ink-rgb), a)`.
+  Never `rgba(255,255,255,…)` for text-colored things: it vanishes in the light theme (`--ink-rgb` adapts).
+  Small text drawn in the accent color uses `--accent-text` (the light theme's accent is too pale for it);
+  text *on* an accent background uses `--accent-ink`.
+- Touch targets: small buttons must be ≥ 36 px tall on phones/tablets. `design.css` ends with an
+  "OBJETIVOS TÁCTILES" block listing those classes — add new small-button classes there.
 
 ### Device diagnostics (`shared/diagnostics.js`)
 Home → Ajustes → "Diagnóstico del dispositivo": runs on the user's real phone what automated

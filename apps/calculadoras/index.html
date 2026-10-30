@@ -24,6 +24,9 @@
         .calc-table td { text-align: right; padding: 7px 4px; border-top: 1px solid var(--border); color: var(--ink); }
         .calc-table td:first-child { color: var(--ink-dim); font-weight: 600; }
         .calc-table td small { color: var(--muted); }
+        .calc-table th small { font-weight: 600; letter-spacing: 0; text-transform: none; }
+        .calc-scroll { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+        @media (max-width: 420px) { .calc-table { font-size: 12px; } .calc-table td, .calc-table th { padding: 6px 3px; } }
         .calc-hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
         .calc-hint strong { color: var(--ink); }
         .calc-tap { margin-top: 10px; width: 100%; }
@@ -48,10 +51,12 @@
                     <div><label for="bpm">BPM</label><input type="number" id="bpm" min="20" max="400" step="0.1" value="120" oninput="renderTempo()"></div>
                     <div><label>&nbsp;</label><button class="btn-ghost calc-tap" id="tapBtn" onclick="tap()" style="margin-top:0">Tap tempo</button></div>
                 </div>
-                <table class="calc-table" aria-label="Duración de cada figura">
-                    <thead><tr><th>Figura</th><th>Normal</th><th>Puntillo</th><th>Tresillo</th><th>Hz</th></tr></thead>
-                    <tbody id="tempoTable"></tbody>
-                </table>
+                <div class="calc-scroll">
+                    <table class="calc-table" aria-label="Duración de cada figura en milisegundos">
+                        <thead><tr><th>Figura</th><th>Normal<br><small>ms</small></th><th>Puntillo<br><small>ms</small></th><th>Tresillo<br><small>ms</small></th><th>LFO<br><small>Hz</small></th></tr></thead>
+                        <tbody id="tempoTable"></tbody>
+                    </table>
+                </div>
                 <p class="calc-hint">Ajusta el delay a una de estas duraciones para que los ecos caigan a tempo. Los Hz sirven para sincronizar un LFO (trémolo, auto-pan) con la canción.</p>
             </div>
             <div class="section-card">
@@ -149,6 +154,7 @@ const store = createStore('calculadoras');
 const $ = id => document.getElementById(id);
 const num = (v, d) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('es', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtMs = v => v >= 1000 ? num(v / 1000, 3) + ' s' : num(v, v < 10 ? 2 : 1) + ' ms';
+const msNum = v => num(v, v < 10 ? 2 : v < 1000 ? 1 : 0);   // en la tabla la unidad va en la cabecera
 const noteName = midi => Theory.display(Theory.keyForPc(((midi % 12) + 12) % 12) + (Math.floor(midi / 12) - 1), 'es');
 const stat = (label, value, hint) => `<div class="calc-stat"><div class="calc-stat-label">${label}</div><div class="calc-stat-value">${value}</div>${hint ? `<div class="calc-stat-hint">${hint}</div>` : ''}</div>`;
 
@@ -165,7 +171,7 @@ function renderTempo() {
     if (!(bpm >= 20 && bpm <= 400)) return;
     store.set('bpm', bpm);
     $('tempoTable').innerHTML = tempoTable(bpm).map(r =>
-        `<tr><td>${r.name}</td><td>${fmtMs(r.ms)}</td><td>${fmtMs(r.dotted)}</td><td>${fmtMs(r.triplet)}</td><td>${num(r.hz, r.hz < 10 ? 2 : 1)}</td></tr>`).join('');
+        `<tr><td>${r.name}</td><td>${msNum(r.ms)}</td><td>${msNum(r.dotted)}</td><td>${msNum(r.triplet)}</td><td>${num(r.hz, r.hz < 10 ? 2 : 1)}</td></tr>`).join('');
     const f = fxTimes(bpm);
     $('fxOut').innerHTML =
         stat('Pre-delay', fmtMs(f.preDelay), 'una semifusa (1/64)') +

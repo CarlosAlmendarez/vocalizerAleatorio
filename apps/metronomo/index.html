@@ -21,9 +21,9 @@
         .accent-hint { font-size:11px; color:var(--muted); margin-top:2px; }
         .beat-dots { display:flex; gap:2px; flex-wrap:wrap; justify-content:center; max-width:100%; }
         .beat-hit { width:30px; height:36px; display:flex; align-items:center; justify-content:center; background:none; border:0; padding:0; cursor:pointer; touch-action:manipulation; }
-        .beat-dot { width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,0.14); border:1px solid var(--border); transition:background 0.05s, transform 0.05s, box-shadow 0.05s; }
+        .beat-dot { width:14px; height:14px; border-radius:50%; background:rgba(var(--ink-rgb),0.14); border:1px solid var(--border); transition:background 0.05s, transform 0.05s, box-shadow 0.05s; }
         .beat-dot.accent { background:rgba(var(--accent-rgb),0.25); border-color:rgba(var(--accent-rgb),0.4); width:18px; height:18px; }
-        .beat-dot.active { background:var(--ink); transform:scale(1.3); box-shadow:0 0 14px rgba(238,240,255,0.7); }
+        .beat-dot.active { background:var(--ink); transform:scale(1.3); box-shadow:0 0 14px rgba(var(--ink-rgb),0.6); }
         .beat-dot.accent.active { background:var(--accent); border-color:var(--accent); box-shadow:0 0 18px rgba(var(--accent-rgb),0.9); }
         .beat-dot.mid { background:rgba(var(--accent-rgb),0.12); border-color:rgba(var(--accent-rgb),0.4); width:16px; height:16px; }
         .beat-dot.off { background:transparent; border-style:dashed; opacity:0.5; }
