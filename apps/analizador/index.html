@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/boot.js"></script>
+    <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
+    <style>
+        .an-peak { font-family: var(--font-head); font-size: clamp(36px, 10vw, 52px); font-weight: 900; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
+        .an-peak small { font-size: 0.4em; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+        .an-sub { font-size: 14px; font-weight: 700; color: var(--ink-dim); margin-top: 6px; min-height: 20px; font-variant-numeric: tabular-nums; }
+        .an-meter { height: 6px; border-radius: 3px; background: var(--surface-s); overflow: hidden; margin-top: 12px; }
+        .an-meter-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.06s linear; }
+        .an-meter-fill.hot { background: var(--danger); }
+        .an-plot { position: relative; height: 230px; padding: 0 !important; overflow: hidden; }
+        .an-plot canvas { display: block; width: 100%; height: 100%; }
+        .an-plot.scope { height: 170px; }
+        .an-plot-label { position: absolute; left: 10px; top: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+        .an-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .an-pills .diff-pill { flex: 0 0 auto; padding: 8px 14px; }
+        .an-opts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .an-hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+        .an-error { color: var(--danger); }
+        .action-bar .btn-ghost { flex: 0 0 auto !important; padding: 14px 18px !important; }
+    </style>
+</head>
+<body data-page-id="analizador" data-tool-name="Analizador">
+<div class="app-card">
+    <div class="display-section" id="display">
+        <div class="an-peak" id="peakHz">—<small>Hz</small></div>
+        <div class="an-sub" id="peakNote">Activa el micrófono para ver el espectro</div>
+        <div class="an-meter"><div class="an-meter-fill" id="meterFill"></div></div>
+    </div>
+
+    <div class="config-body">
+        <div class="section-card an-plot"><span class="an-plot-label">Espectro · 20 Hz – 20 kHz</span><canvas id="spec" aria-label="Espectro de frecuencias"></canvas></div>
+        <div class="section-card an-plot scope"><span class="an-plot-label" id="scopeLabel">Osciloscopio</span><canvas id="scope" aria-label="Forma de onda"></canvas></div>
+
+        <div class="section-card">
+            <div class="section-title">Opciones</div>
+            <div class="an-opts">
+                <button class="diff-pill" id="holdBtn" onclick="toggleHold()" style="flex:0 0 auto;padding:8px 14px">Mantener picos</button>
+                <button class="diff-pill" id="freezeBtn" onclick="toggleFreeze()" style="flex:0 0 auto;padding:8px 14px">Congelar</button>
+            </div>
+            <label style="margin-top:12px">Ventana del osciloscopio</label>
+            <div class="an-pills" id="winPills">
+                <button class="diff-pill" data-win="5" onclick="setWin(5)">5 ms</button>
+                <button class="diff-pill" data-win="10" onclick="setWin(10)">10 ms</button>
+                <button class="diff-pill" data-win="20" onclick="setWin(20)">20 ms</button>
+                <button class="diff-pill" data-win="50" onclick="setWin(50)">50 ms</button>
+                <button class="diff-pill" data-win="200" onclick="setWin(200)">200 ms</button>
+            </div>
+            <label for="smooth" style="margin-top:12px">Suavizado del espectro</label>
+            <input type="range" id="smooth" min="0" max="95" step="5" value="75" style="width:100%" oninput="setSmooth(+this.value)">
+            <p class="an-hint">El micrófono se usa sin cancelación de eco ni control automático de volumen, para medir lo que llega de verdad. El del teléfono pierde precisión por debajo de ~100 Hz y por encima de ~15 kHz.</p>
+            <p class="an-hint an-error" id="micError" hidden></p>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-primary" id="micBtn" onclick="toggleMic()">🎙 Activar micrófono</button>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  LÓGICA PURA (sin DOM; la usan las pruebas)
+// ══════════════════════════════════════════════
+const F_MIN = 20, F_MAX = 20000, DB_MIN = -100, DB_MAX = 0;
+
+/** x (0…w) de una frecuencia en escala logarítmica. */
+const freqToX = (f, w, fmax) => w * Math.log(f / F_MIN) / Math.log((fmax || F_MAX) / F_MIN);
+
+/**
+ * Frecuencia del pico más alto del espectro (dB por bin), afinada con
+ * interpolación parabólica entre bins; null si nada supera minDb.
+ */
+function peakFreq(db, sampleRate, fftSize, minDb) {
+    const binHz = sampleRate / fftSize, from = Math.max(1, Math.ceil(F_MIN / binHz));
+    let best = -1, bv = minDb == null ? -70 : minDb;
+    for (let i = from; i < db.length - 1; i++) if (db[i] > bv) { bv = db[i]; best = i; }
+    if (best < 0) return null;
+    const a = db[best - 1], b = db[best], c = db[best + 1], den = a - 2 * b + c;
+    const off = den ? 0.5 * (a - c) / den : 0;
+    return { hz: (best + Math.max(-0.5, Math.min(0.5, off))) * binHz, db: b };
+}
+
+/** Desplazamiento del primer cruce por cero ascendente (para que la onda no "baile"). */
+function triggerIndex(x, maxSearch) {
+    for (let i = 1; i < Math.min(x.length - 1, maxSearch); i++) if (x[i - 1] < 0 && x[i] >= 0) return i;
+    return 0;
+}
+
+function hzToNote(hz) {
+    const m = 69 + 12 * Math.log2(hz / 440), midi = Math.round(m);
+    return { midi, cents: Math.round((m - midi) * 100) };
+}
+// ── Fin de la lógica pura ──
+
+/* ════════════════════════════════════════════════════
+   ANALIZADOR — espectro (RTA, escala log 20 Hz–20 kHz) y osciloscopio
+   en vivo desde el micrófono, con AnalyserNode del navegador.
+   ════════════════════════════════════════════════════ */
+const store = createStore('analizador');
+const $ = id => document.getElementById(id);
+const FFT = 16384;              // ~2,9 Hz por bin a 48 kHz: se distinguen bien los graves
+
+let ctx = null, stream = null, analyser = null, raf = 0;
+let fData = null, tData = null, hold = null;
+let holdOn = store.get('hold', false), frozen = false;
+let win = store.get('win', 20), smooth = store.get('smooth', 75);
+let colors = {};
+const canvases = {};
+
+function readColors() {
+    const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+    colors = { ink: v('--ink'), muted: v('--muted'), border: v('--border'), accent: v('--accent'),
+               accentRgb: v('--accent-rgb'), danger: v('--danger'), font: v('--font-sans') || 'sans-serif' };
+}
+
+function setupCanvas(id) {
+    const cv = $(id), c = { cv, cx: cv.getContext('2d'), w: 0, h: 0, dpr: 1 };
+    const resize = () => {
+        const r = cv.getBoundingClientRect();
+        c.dpr = Math.min(2, window.devicePixelRatio || 1);
+        c.w = r.width; c.h = r.height;
+        cv.width = Math.round(r.width * c.dpr); cv.height = Math.round(r.height * c.dpr);
+        drawAll();
+    };
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(cv); else window.addEventListener('resize', resize);
+    canvases[id] = c;
+    resize();
+}
+
+/* ── Micrófono ── */
+async function toggleMic() { if (stream) stopMic(); else await startMic(); }
+function mtPlayToggle() { toggleMic(); }
+
+async function startMic() {
+    $('micError').hidden = true;
+    let s;
+    try {
+        // Sin procesado: medir lo que llega de verdad
+        s = await soundEngine.getMic({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+    } catch (e) {
+        const msg = e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError' ? 'Permiso denegado. Actívalo en los ajustes del navegador.'
+                  : e.name === 'NotFoundError' ? 'No se detectó ningún micrófono.'
+                  : e.name === 'NotReadableError' ? 'El micrófono está en uso por otra app.'
+                  : !window.isSecureContext ? 'El micrófono requiere HTTPS.' : 'No se pudo acceder al micrófono (' + e.name + ').';
+        $('micError').textContent = msg;
+        $('micError').hidden = false;
+        return;
+    }
+    stream = s;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = FFT;
+    analyser.minDecibels = DB_MIN;
+    analyser.maxDecibels = DB_MAX;
+    analyser.smoothingTimeConstant = smooth / 100;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    fData = new Float32Array(analyser.frequencyBinCount);
+    tData = new Float32Array(analyser.fftSize);
+    hold = null;
+    frozen = false;
+    MT.keepAwake(true);
+    updateUI();
+    loop();
+}
+
+function stopMic() {
+    cancelAnimationFrame(raf);
+    if (stream) { stream.getTracks().forEach(t => t.stop()); soundEngine.releaseMic(); }
+    if (ctx) ctx.close();
+    stream = ctx = analyser = null;
+    MT.keepAwake(false);
+    updateUI();
+}
+
+function loop() {
+    raf = requestAnimationFrame(loop);
+    if (frozen || !analyser) return;
+    analyser.getFloatFrequencyData(fData);
+    analyser.getFloatTimeDomainData(tData);
+    if (holdOn) {
+        if (!hold) hold = Float32Array.from(fData);
+        else for (let i = 0; i < fData.length; i++) hold[i] = Math.max(hold[i] - 0.15, fData[i]);   // caen despacio
+    }
+    updateReadout();
+    drawAll();
+}
+
+/* ── Lecturas ── */
+function updateReadout() {
+    let sum = 0, pk = 0;
+    for (let i = 0; i < tData.length; i++) { sum += tData[i] * tData[i]; pk = Math.max(pk, Math.abs(tData[i])); }
+    const rmsDb = 10 * Math.log10(sum / tData.length + 1e-12);
+    const fill = $('meterFill');
+    fill.style.width = Math.max(0, Math.min(100, (rmsDb + 70) / 70 * 100)) + '%';
+    fill.classList.toggle('hot', pk > 0.98);
+    const p = peakFreq(fData, ctx.sampleRate, FFT, -75);
+    if (!p) { $('peakHz').innerHTML = '—<small>Hz</small>'; $('peakNote').textContent = `Nivel ${Math.round(rmsDb)} dBFS · sin señal clara`; return; }
+    const n = hzToNote(p.hz);
+    $('peakHz').innerHTML = (p.hz < 1000 ? p.hz.toFixed(1) : Math.round(p.hz)).toString().replace('.', ',') + '<small>Hz</small>';
+    $('peakNote').textContent = `Pico: ${Theory.display(Theory.keyForPc(((n.midi % 12) + 12) % 12) + (Math.floor(n.midi / 12) - 1), 'es')} ` +
+        `${n.cents > 0 ? '+' : n.cents < 0 ? '−' : '±'}${Math.abs(n.cents)}¢ · ${Math.round(p.db)} dB · nivel ${Math.round(rmsDb)} dBFS`;
+}
+
+/* ── Dibujo ── */
+function drawAll() { drawSpectrum(); drawScope(); }
+
+function drawSpectrum() {
+    const c = canvases.spec;
+    if (!c || !c.w) return;
+    const { cx, w, h, dpr } = c, L = 34, T = 26, B = 18, pw = w - L - 6, ph = h - T - B;
+    const fmax = ctx ? Math.min(F_MAX, ctx.sampleRate / 2) : F_MAX;
+    const X = f => L + freqToX(f, pw, fmax), Y = db => T + (DB_MAX - db) / (DB_MAX - DB_MIN) * ph;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, w, h);
+    cx.font = `500 10px ${colors.font}`;
+    cx.textBaseline = 'middle';
+    // Rejilla: dB cada 20 y frecuencias de referencia
+    for (let db = DB_MIN; db <= DB_MAX; db += 20) {
+        cx.fillStyle = colors.border; cx.fillRect(L, Y(db), pw, 1);
+        cx.fillStyle = colors.muted; cx.textAlign = 'right'; cx.fillText(db, L - 4, Y(db));
+    }
+    cx.textAlign = 'center';
+    [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
+        if (f > fmax) return;
+        cx.fillStyle = colors.border; cx.fillRect(X(f), T, 1, ph);
+        cx.fillStyle = colors.muted;
+        cx.textAlign = X(f) > w - 20 ? 'right' : 'center';   // la última etiqueta no se sale por el borde
+        cx.fillText(f >= 1000 ? f / 1000 + 'k' : f, Math.min(X(f), w - 2), h - B / 2);
+    });
+    if (!fData || !ctx) return;
+    const binHz = ctx.sampleRate / FFT;
+    const path = (data, close) => {
+        cx.beginPath();
+        let started = false, lastX = -1, acc = -Infinity;
+        for (let i = 1; i < data.length; i++) {
+            const f = i * binHz;
+            if (f < F_MIN) continue;
+            if (f > fmax) break;
+            const x = Math.round(X(f));
+            acc = Math.max(acc, data[i]);
+            if (x === lastX) continue;   // varios bins por píxel en los agudos: el máximo
+            const y = Y(Math.max(DB_MIN, Math.min(DB_MAX, acc)));
+            if (!started) { cx.moveTo(x, close ? T + ph : y); if (close) cx.lineTo(x, y); started = true; } else cx.lineTo(x, y);
+            lastX = x; acc = -Infinity;
+        }
+        if (close && started) { cx.lineTo(lastX, T + ph); cx.closePath(); }
+    };
+    if (holdOn && hold) { path(hold, false); cx.strokeStyle = colors.muted; cx.lineWidth = 1; cx.stroke(); }
+    path(fData, true);
+    const grad = cx.createLinearGradient(0, T, 0, T + ph);
+    grad.addColorStop(0, `rgba(${colors.accentRgb}, 0.55)`);
+    grad.addColorStop(1, `rgba(${colors.accentRgb}, 0.05)`);
+    cx.fillStyle = grad; cx.fill();
+    path(fData, false);
+    cx.strokeStyle = colors.accent; cx.lineWidth = 1.5; cx.stroke();
+}
+
+function drawScope() {
+    const c = canvases.scope;
+    if (!c || !c.w) return;
+    const { cx, w, h, dpr } = c, T = 24, ph = h - T - 8;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, w, h);
+    cx.fillStyle = colors.border;
+    cx.fillRect(0, T + ph / 2, w, 1);
+    for (let k = 1; k < 10; k++) cx.fillRect(w * k / 10, T, 1, ph);
+    $('scopeLabel').textContent = `Osciloscopio · ${win} ms · ${win / 10} ms por división`;
+    if (!tData || !ctx) return;
+    const n = Math.min(tData.length, Math.round(ctx.sampleRate * win / 1000));
+    const start = triggerIndex(tData, tData.length - n);
+    let pk = 0;
+    for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(tData[start + i]));
+    const g = 0.45 * ph / Math.max(0.02, pk);   // autoescala: la onda siempre se ve
+    cx.beginPath();
+    const step = Math.max(1, Math.floor(n / (w * 2)));
+    for (let i = 0; i < n; i += step) {
+        const x = i / n * w, y = T + ph / 2 - tData[start + i] * g;
+        if (i) cx.lineTo(x, y); else cx.moveTo(x, y);
+    }
+    cx.strokeStyle = colors.accent;
+    cx.lineWidth = 1.5;
+    cx.stroke();
+}
+
+/* ── Opciones ── */
+function toggleHold() { holdOn = !holdOn; hold = null; store.set('hold', holdOn); updateUI(); drawAll(); }
+function toggleFreeze() { if (!stream) return; frozen = !frozen; updateUI(); }
+function setWin(v) { win = v; store.set('win', v); updateUI(); drawScope(); }
+function setSmooth(v) { smooth = v; store.set('smooth', v); if (analyser) analyser.smoothingTimeConstant = v / 100; }
+
+function updateUI() {
+    $('holdBtn').classList.toggle('active', holdOn);
+    $('freezeBtn').classList.toggle('active', frozen);
+    $('freezeBtn').disabled = !stream;
+    $('freezeBtn').textContent = frozen ? 'Continuar' : 'Congelar';
+    document.querySelectorAll('[data-win]').forEach(b => b.classList.toggle('active', +b.dataset.win === win));
+    $('smooth').value = smooth;
+    const b = $('micBtn');
+    b.textContent = stream ? '■ Detener micrófono' : '🎙 Activar micrófono';
+    b.style.background = stream ? 'linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75))' : '';
+    $('display').classList.toggle('listening', !!stream);
+    if (!stream) { $('peakHz').innerHTML = '—<small>Hz</small>'; $('peakNote').textContent = 'Activa el micrófono para ver el espectro'; $('meterFill').style.width = '0'; }
+}
+
+window.addEventListener('load', () => {
+    readColors();
+    setupCanvas('spec');
+    setupCanvas('scope');
+    updateUI();
+});
+window.addEventListener('mt-theme-change', () => { readColors(); drawAll(); });
+window.addEventListener('pagehide', () => { if (stream) stopMic(); });
+</script>
+<script src="../../shared/shell.js"></script>
+</body>
+</html>

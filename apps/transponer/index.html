@@ -212,6 +212,36 @@
         }
         .transp-finger b { display: block; font: 800 15px var(--font-head); color: var(--ink); }
         .transp-finger code { font: 600 13px ui-monospace, Menlo, Consolas, monospace; color: var(--accent); letter-spacing: .08em; }
+
+        /* ── Vista de ensayo (ChordPro: acordes encima de cada sílaba) ── */
+        .rh-overlay { position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; }
+        .rh-overlay[hidden] { display: none; }
+        .rh-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 12px calc(10px); padding-top: max(10px, env(safe-area-inset-top));
+                  border-bottom: 1px solid var(--border); background: var(--surface-s); }
+        .rh-bar button { min-width: 38px; height: 38px; padding: 0 10px; border-radius: 19px; border: 1px solid var(--border); background: var(--surface);
+                         color: var(--ink); font: 700 14px var(--font-sans); cursor: pointer; }
+        .rh-bar button.on { background: rgba(var(--accent-rgb), .18); border-color: var(--accent); color: var(--accent); }
+        .rh-key { font: 800 16px var(--font-head); color: var(--accent); min-width: 44px; text-align: center; }
+        .rh-sep { flex: 1; }
+        .rh-bar input[type=range] { width: 90px; }
+        .rh-body { flex: 1; overflow-y: auto; padding: 18px 18px 60vh; -webkit-overflow-scrolling: touch; }
+        .sg { font-family: var(--font-sans); line-height: 1.25; }
+        .sg-title { font: 900 1.6em var(--font-head); letter-spacing: -.02em; }
+        .sg-sub { color: var(--ink-dim); font-weight: 600; margin-top: 2px; }
+        .sg-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: .8em; color: var(--muted); margin: 6px 0 4px; }
+        .sg-meta b { color: var(--accent); }
+        .sg-gap { height: .9em; }
+        .sg-comment { font-style: italic; color: var(--ink-dim); margin: .4em 0 .2em; font-weight: 600; }
+        .sg-line { display: flex; flex-wrap: wrap; align-items: flex-end; margin: .15em 0; }
+        .sg-seg { display: inline-flex; flex-direction: column; white-space: pre; }
+        .sg-ch { color: var(--accent); font-weight: 900; font-family: var(--font-head); min-height: 1.15em; padding-right: .35em; }
+        .sg-tx { min-height: 1.2em; }
+        .sg-chords { color: var(--accent); font-weight: 900; font-family: var(--font-head); white-space: pre-wrap; margin: .15em 0; }
+        .sg-section { border-left: 3px solid var(--border-s); padding-left: .7em; margin: .5em 0; }
+        .sg-section.chorus { border-left-color: var(--accent); background: rgba(var(--accent-rgb), .06); border-radius: 0 8px 8px 0; padding: .3em .7em; }
+        .sg-label { font-size: .7em; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: .2em; }
+        .transp-help { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+        .transp-help code { font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: var(--accent); }
 </style>
 </head>
 <body data-tool-name="Transponer" data-page-id="transponer">
@@ -287,22 +317,30 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
                 Ejemplo
             </button>
+            <button class="transp-action-btn" onclick="loadSongExample()">Ejemplo con letra</button>
+            <button class="transp-action-btn" onclick="convertToChordPro()" title="Pasa los acordes escritos encima de la letra a [acordes] dentro de ella">A ChordPro</button>
             <button class="transp-action-btn" onclick="document.getElementById('inputArea').value=''; update();">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                 Limpiar
             </button>
         </div>
         <div class="transp-detect" id="keyDetect" hidden></div>
+        <p class="transp-help">Acepta acordes sueltos, acordes en una línea encima de la letra o formato <b>ChordPro</b>:
+            <code>[Am]Letra con [G]acordes</code>, <code>{title: …}</code>, <code>{key: G}</code>, <code>{soc}</code>…<code>{eoc}</code> para el coro.</p>
     </div>
 
     <!-- Output -->
     <div class="transp-output-card">
         <div class="transp-output-header">
             <div class="transp-section-label" style="margin:0;">Resultado</div>
-            <button class="transp-copy-btn" id="copyBtn" onclick="copyOutput()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copiar
-            </button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                <button class="transp-copy-btn" onclick="openRehearsal()">▶ Vista de ensayo</button>
+                <button class="transp-copy-btn" id="copyProBtn" onclick="copyChordPro()">Copiar ChordPro</button>
+                <button class="transp-copy-btn" id="copyBtn" onclick="copyOutput()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copiar
+                </button>
+            </div>
         </div>
         <div class="transp-output" id="outputArea">
             <p class="transp-placeholder">El resultado aparece aquí en tiempo real…</p>
@@ -330,6 +368,22 @@
     </div>
 
 </div><!-- /transp-screen -->
+
+<!-- Vista de ensayo: pantalla completa, letra grande, desplazamiento automático -->
+<div class="rh-overlay" id="rehearsal" hidden>
+    <div class="rh-bar">
+        <button onclick="closeRehearsal()" aria-label="Cerrar">✕</button>
+        <button onclick="adjSemi(-1)" aria-label="Bajar un semitono">−½</button>
+        <span class="rh-key" id="rhKey"></span>
+        <button onclick="adjSemi(1)" aria-label="Subir un semitono">+½</button>
+        <span class="rh-sep"></span>
+        <button onclick="rhFont(-1)" aria-label="Letra más pequeña">A−</button>
+        <button onclick="rhFont(1)" aria-label="Letra más grande">A+</button>
+        <button id="rhScrollBtn" onclick="toggleScroll()">▶ Auto</button>
+        <input type="range" id="rhSpeed" min="5" max="120" step="5" value="30" oninput="setScrollSpeed(+this.value)" aria-label="Velocidad del desplazamiento">
+    </div>
+    <div class="rh-body" id="rhBody"></div>
+</div>
 
 <script src="../../shared/theory.js"></script>
 <script src="../../shared/settings.js"></script>
@@ -507,7 +561,9 @@ function detectKey(chords) {
 
 function renderKeyDetect(text) {
     const box = document.getElementById('keyDetect');
-    const d = detectKey(extractChords(text));
+    const sk = songKey(parseSong(text));
+    // {key: Am} = tonalidad relativa: el origen se fija con su mayor
+    const d = sk ? { k: sk.minor ? (sk.k + 3) % 12 : sk.k, minor: sk.minor, conf: 1, written: true } : detectKey(extractChords(text));
     if (!d || d.conf < 0.5) { box.hidden = true; return; }
     const major = Theory.keyForPc(d.k, 'major');
     const name = d.minor
@@ -515,7 +571,7 @@ function renderKeyDetect(text) {
         : Theory.display(major, 'es') + ' mayor';
     const same = d.k === fromKeyIdx;
     box.hidden = false;
-    box.innerHTML = `Tonalidad detectada: <strong>${name}</strong>` +
+    box.innerHTML = `${d.written ? 'Tonalidad de la canción' : 'Tonalidad detectada'}: <strong>${name}</strong>` +
         (d.minor ? ` <span>(relativa de ${Theory.display(major, 'es')} mayor)</span>` : '') +
         (same ? '' : `<button onclick="useDetectedKey(${d.k})">Usar como origen</button>`);
 }
@@ -553,6 +609,99 @@ function renderFingerings(text) {
         `<div class="transp-finger"><b>${it.name}</b><code>${it.tab}</code></div>`).join('');
 }
 
+// ── ChordPro ─────────────────────────────────────────────────────
+// Canción como lista de líneas: directivas {title: …}, líneas de letra con sus
+// acordes (de [Am] en línea o de una línea de acordes justo encima), líneas
+// solo de acordes y huecos. Sirve para la vista de ensayo y para copiar.
+const DIRECTIVE = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i;
+const DIRECTIVE_ALIAS = {
+    t: 'title', title: 'title', st: 'subtitle', subtitle: 'subtitle', artist: 'artist', key: 'key', capo: 'capo', tempo: 'tempo',
+    c: 'comment', comment: 'comment', ci: 'comment', comment_italic: 'comment',
+    soc: 'soc', start_of_chorus: 'soc', eoc: 'eoc', end_of_chorus: 'eoc',
+    sov: 'sov', start_of_verse: 'sov', eov: 'eov', end_of_verse: 'eov',
+    sob: 'sob', start_of_bridge: 'sob', eob: 'eob', end_of_bridge: 'eob',
+};
+
+/** "[Am]Hola [G]mundo" → segmentos { chord: {root,rest}|null, raw, text }. */
+function inlineSegs(line) {
+    const segs = [];
+    let last = 0, cur = { chord: null, raw: '', text: '' };
+    line.replace(/\[([^\]]*)\]/g, (m, inner, at) => {
+        const c = parseChord(inner.trim());
+        cur.text += line.slice(last, at);
+        last = at + m.length;
+        if (!c) { cur.text += m; return m; }
+        if (cur.chord || cur.text) segs.push(cur);
+        cur = { chord: c, raw: inner.trim(), text: '' };
+        return m;
+    });
+    cur.text += line.slice(last);
+    if (cur.chord || cur.text) segs.push(cur);
+    return segs;
+}
+
+/** Acordes de una línea (con su columna) sobre la letra de debajo → segmentos. */
+function mergeChordLine(chords, lyric) {
+    const segs = [];
+    if (!chords.length) return [{ chord: null, raw: '', text: lyric }];
+    if (chords[0].col > 0) segs.push({ chord: null, raw: '', text: lyric.slice(0, chords[0].col) });
+    chords.forEach((c, i) => {
+        const end = i + 1 < chords.length ? chords[i + 1].col : Infinity;
+        segs.push({ chord: c.chord, raw: c.tok, text: lyric.slice(c.col, end) });
+    });
+    return segs;
+}
+
+function parseSong(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n'), out = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) { out.push({ type: 'empty' }); continue; }
+        const d = line.match(DIRECTIVE);
+        if (d) { out.push({ type: 'directive', name: DIRECTIVE_ALIAS[d[1].toLowerCase()] || d[1].toLowerCase(), value: (d[2] || '').trim() }); continue; }
+        if (isChordLine(line) && !/\[/.test(line)) {
+            const toks = [];
+            line.replace(/\S+/g, (tok, col) => { toks.push({ col, tok, chord: parseChord(tok) }); return tok; });
+            const next = lines[i + 1];
+            if (next !== undefined && next.trim() && !DIRECTIVE.test(next) && !isChordLine(next) && !/\[[A-G]/.test(next)) {
+                out.push({ type: 'lyric', segs: mergeChordLine(toks.filter(t => t.chord), next) });
+                i++;
+                continue;
+            }
+            out.push({ type: 'chords', toks });
+            continue;
+        }
+        out.push({ type: 'lyric', segs: inlineSegs(line) });
+    }
+    return out;
+}
+
+/** Acorde transpuesto como texto ("Am7/G" → "Bm7/A"). */
+function chordText(c, n) {
+    return transpNote(c.root, n) + c.rest.replace(/\/([A-G][b#]?)/, (_, bass) => '/' + transpNote(bass, n));
+}
+
+/** La canción (transpuesta n semitonos) en ChordPro. */
+function toChordPro(song, n) {
+    return song.map(l => {
+        if (l.type === 'empty') return '';
+        if (l.type === 'directive') {
+            let v = l.value;
+            if (l.name === 'key' && v) { const c = parseChord(v); if (c) v = chordText(c, n); }
+            return v ? `{${l.name}: ${v}}` : `{${l.name}}`;
+        }
+        if (l.type === 'chords') return l.toks.map(t => t.chord ? `[${chordText(t.chord, n)}]` : t.tok).join(' ');
+        return l.segs.map(s => (s.chord ? `[${chordText(s.chord, n)}]` : '') + s.text).join('').replace(/\s+$/, '');
+    }).join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** Tonalidad escrita en {key: …}, si la hay (pc 0-11 y si es menor). */
+function songKey(song) {
+    const d = song.find(l => l.type === 'directive' && l.name === 'key' && l.value);
+    const c = d && parseChord(d.value);
+    return c ? { k: Theory.pc(c.root), minor: /^m(?!aj)/.test(c.rest) } : null;
+}
+
 // ── Actualizar UI ────────────────────────────────────────────────
 function update() {
     const text = document.getElementById('inputArea').value;
@@ -560,6 +709,7 @@ function update() {
     store.set('fromKey', fromKeyIdx); store.set('enharm', enharm);
     document.getElementById('outputArea').innerHTML = renderOutput(text, semitones);
     renderKeyDetect(text);
+    if (!document.getElementById('rehearsal').hidden) renderRehearsal();
     renderFingerings(text);
 
     // Semitone display
@@ -642,6 +792,114 @@ function copyOutput() {
     });
 }
 
+// ── Vista de ensayo ──────────────────────────────────────────────
+const rh = { font: store.get('rhFont', 22), speed: store.get('rhSpeed', 30), scrolling: false, raf: 0, last: 0, acc: 0 };
+const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function songHtml(song, n) {
+    let html = '', open = null;
+    const close = () => { if (open) { html += '</div>'; open = null; } };
+    const meta = [];
+    song.forEach(l => {
+        if (l.type === 'directive') {
+            const v = escHtml(l.value);
+            if (l.name === 'title') html += `<div class="sg-title">${v}</div>`;
+            else if (l.name === 'subtitle' || l.name === 'artist') html += `<div class="sg-sub">${v}</div>`;
+            else if (l.name === 'key') { const c = parseChord(l.value); meta.push(`Tono <b>${escHtml(c ? chordText(c, n) : l.value)}</b>`); }
+            else if (l.name === 'capo') meta.push(`Cejilla <b>${v}</b>`);
+            else if (l.name === 'tempo') meta.push(`<b>${v}</b> BPM`);
+            else if (l.name === 'comment') html += `<div class="sg-comment">${v}</div>`;
+            else if (['soc', 'sov', 'sob'].includes(l.name)) {
+                close();
+                open = l.name;
+                const label = l.value || { soc: 'Coro', sov: 'Estrofa', sob: 'Puente' }[l.name];
+                html += `<div class="sg-section${l.name === 'soc' ? ' chorus' : ''}"><div class="sg-label">${escHtml(label)}</div>`;
+            } else if (['eoc', 'eov', 'eob'].includes(l.name)) close();
+            return;
+        }
+        if (meta.length) { html += `<div class="sg-meta">${meta.join('<span>·</span>')}</div>`; meta.length = 0; }
+        if (l.type === 'empty') html += '<div class="sg-gap"></div>';
+        else if (l.type === 'chords') html += `<div class="sg-chords">${l.toks.map(t => escHtml(t.chord ? chordText(t.chord, n) : t.tok)).join('   ')}</div>`;
+        else if (!l.segs.some(s => s.chord)) html += `<div class="sg-line"><span class="sg-tx">${escHtml(l.segs.map(s => s.text).join(''))}</span></div>`;
+        else html += '<div class="sg-line">' + l.segs.map(s =>
+            `<span class="sg-seg"><span class="sg-ch">${s.chord ? escHtml(chordText(s.chord, n)) : ''}</span><span class="sg-tx">${escHtml(s.text) || ' '}</span></span>`).join('') + '</div>';
+    });
+    if (meta.length) html += `<div class="sg-meta">${meta.join('<span>·</span>')}</div>`;
+    close();
+    return `<div class="sg">${html}</div>`;
+}
+
+function renderRehearsal() {
+    const text = document.getElementById('inputArea').value;
+    const body = document.getElementById('rhBody');
+    body.style.fontSize = rh.font + 'px';
+    const song = parseSong(text);
+    body.innerHTML = text.trim() ? songHtml(song, semitones) : '<p class="transp-placeholder">Escribe o pega una canción primero.</p>';
+    // Tono que suena: el de {key: …} transpuesto si la canción lo indica; si no, el destino elegido
+    const kd = song.find(l => l.type === 'directive' && l.name === 'key' && parseChord(l.value));
+    const keyName = kd ? chordText(parseChord(kd.value), semitones) : toKeyName(semitones);
+    document.getElementById('rhKey').textContent = (semitones > 0 ? '+' : '') + semitones + ' · ' + Theory.display(keyName.replace(/m$/, ''), 'en') + (/m$/.test(keyName) ? 'm' : '');
+    document.getElementById('rhScrollBtn').textContent = rh.scrolling ? '❚❚ Auto' : '▶ Auto';
+    document.getElementById('rhScrollBtn').classList.toggle('on', rh.scrolling);
+    document.getElementById('rhSpeed').value = rh.speed;
+}
+
+function openRehearsal() {
+    document.getElementById('rehearsal').hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    renderRehearsal();
+    document.getElementById('rhBody').scrollTop = 0;
+    if (window.MT) MT.keepAwake(true);   // la pantalla no se apaga mientras ensayas
+}
+function closeRehearsal() {
+    stopScroll();
+    document.getElementById('rehearsal').hidden = true;
+    document.documentElement.style.overflow = '';
+    if (window.MT) MT.keepAwake(false);
+}
+function rhFont(d) { rh.font = Math.max(14, Math.min(48, rh.font + d * 2)); store.set('rhFont', rh.font); renderRehearsal(); }
+function setScrollSpeed(v) { rh.speed = v; store.set('rhSpeed', v); }
+function toggleScroll() { if (rh.scrolling) stopScroll(); else startScroll(); }
+function startScroll() {
+    rh.scrolling = true; rh.last = performance.now(); rh.acc = 0;
+    const step = now => {
+        if (!rh.scrolling) return;
+        const body = document.getElementById('rhBody');
+        rh.acc += rh.speed * (now - rh.last) / 1000;   // píxeles por segundo, con fracciones
+        rh.last = now;
+        if (rh.acc >= 1) { body.scrollTop += Math.floor(rh.acc); rh.acc -= Math.floor(rh.acc); }
+        if (body.scrollTop + body.clientHeight >= body.scrollHeight - 2) { stopScroll(); return; }
+        rh.raf = requestAnimationFrame(step);
+    };
+    rh.raf = requestAnimationFrame(step);
+    renderRehearsal();
+}
+function stopScroll() { rh.scrolling = false; cancelAnimationFrame(rh.raf); if (!document.getElementById('rehearsal').hidden) renderRehearsal(); }
+
+function copyChordPro() {
+    const text = document.getElementById('inputArea').value;
+    if (!text.trim()) return;
+    navigator.clipboard?.writeText(toChordPro(parseSong(text), semitones)).then(() => {
+        const btn = document.getElementById('copyProBtn');
+        btn.classList.add('copied'); btn.textContent = '✓ Copiado';
+        setTimeout(() => { btn.classList.remove('copied'); btn.textContent = 'Copiar ChordPro'; }, 2000);
+    });
+}
+
+/** Pasa la entrada a ChordPro (sin transponer): acordes encima de la letra → [acordes] dentro. */
+function convertToChordPro() {
+    const area = document.getElementById('inputArea');
+    if (!area.value.trim()) return;
+    area.value = toChordPro(parseSong(area.value), 0);
+    update();
+}
+
+function loadSongExample() {
+    document.getElementById('inputArea').value =
+        '{title: Canción de ejemplo}\n{artist: MusicTools}\n{key: G}\n\n{sov}\nG          D\nCanto bajito al amanecer\nEm           C\nmientras despierta la ciudad\n{eov}\n\n{soc}\n[C]Y si me [G]llamas, [D]voy\n[C]donde la [G]luz se [D]queda\n{eoc}\n\n{c: Repetir el coro y terminar en G}';
+    update();
+}
+
 // ── Ejemplo ──────────────────────────────────────────────────────
 function loadExample() {
     document.getElementById('inputArea').value =
@@ -670,7 +928,13 @@ function init() {
 </script>
 <script src="../../shared/shell.js"></script>
 <script>
-window.addEventListener('load', init);
+window.addEventListener('load', () => {
+    document.body.appendChild(document.getElementById('rehearsal'));   // fuera de los contenedores del shell
+    init();
+});
+// Barra espaciadora: con la vista de ensayo abierta, desplazamiento automático
+function mtPlayToggle() { if (!document.getElementById('rehearsal').hidden) toggleScroll(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('rehearsal').hidden) closeRehearsal(); });
 </script>
 </body>
 </html>

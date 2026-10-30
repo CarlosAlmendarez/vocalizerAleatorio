@@ -107,6 +107,10 @@
     swap:      '<path d="M7 16V4m0 0L3 8m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8v12m0 0 4-4m-4 4-4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
     circle:    '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="3" x2="12" y2="9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="15" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     blobs:     '<rect x="3" y="14" width="6" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="10" y="9" width="5" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="16" y="4" width="5" height="4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 21h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    wave:      '<path d="M2 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M22 12h-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    calc:      '<rect x="5" y="3" width="14" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    spectrum:  '<path d="M4 20V14M8 20V8M12 20V11M16 20V5M20 20V13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    quill:     '<path d="M4 20l4-1 10-10a2.1 2.1 0 0 0-3-3L5 16z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 20h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   };
 
@@ -159,6 +163,10 @@
     { id: 'quinta',                 name: 'Quinta',             icon: 'circle',     href: ROOT + 'apps/quinta/' },
     { id: 'progresiones',           name: 'Progresiones',       icon: 'book',       href: ROOT + 'apps/progresiones/' },
     { id: 'entrenamiento-auditivo', name: 'Entrenamiento auditivo', icon: 'headphones', href: ROOT + 'apps/entrenamiento-auditivo/' },
+    { id: 'letras',                 name: 'Letras',             icon: 'quill',      href: ROOT + 'apps/letras/' },
+    { id: 'generador',              name: 'Generador',          icon: 'wave',       href: ROOT + 'apps/generador/' },
+    { id: 'analizador',             name: 'Analizador',         icon: 'spectrum',   href: ROOT + 'apps/analizador/' },
+    { id: 'calculadoras',           name: 'Calculadoras',       icon: 'calc',       href: ROOT + 'apps/calculadoras/' },
   ];
 
   function currentPageId() {

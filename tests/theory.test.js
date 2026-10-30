@@ -88,3 +88,30 @@ test('MIDI y presentación', () => {
   assert.equal(Theory.display('F#4', 'en'), 'F♯4');
   assert.equal(Theory.simplify('Fbb'), 'Eb');
 });
+
+test('buscador inverso: nombra acordes, inversiones y quintas omitidas', () => {
+  const best = m => { const r = Theory.identify(m); return r.matches.length ? r.matches[0].symbol : null; };
+  const all = m => Theory.identify(m).matches.map(x => x.symbol);
+  assert.equal(best([60, 64, 67]), 'C');
+  assert.equal(best([64, 67, 72]), 'C/E');
+  assert.equal(Theory.identify([64, 67, 72]).matches[0].inversion, '1ª inversión');
+  assert.equal(best([67, 72, 76]), 'C/G');
+  assert.equal(best([60, 63, 67]), 'Cm');
+  assert.deepEqual(plain(all([60, 63, 67])), ['Cm'], 'sin lecturas raras si hay una exacta');
+  assert.equal(best([61, 65, 68]), 'Db');
+  assert.equal(best([57, 60, 64, 67]), 'Am7');
+  assert.equal(best([60, 64, 67, 69]), 'C6');
+  assert.ok(all([60, 64, 67, 69]).includes('Am7/C'), 'C6 y Am7/C son las mismas notas');
+  assert.equal(best([60, 64, 70]), 'C7');
+  assert.deepEqual(plain(Theory.identify([60, 64, 70]).matches[0].omitted), ['5']);
+  assert.equal(best([62, 66, 69, 72, 76]), 'D9');
+  assert.equal(best([59, 62, 65, 69]), 'Bm7♭5');
+  assert.equal(best([60, 65, 67]), 'Csus4');
+  assert.equal(best([60, 67]), 'C5');
+  assert.equal(Theory.identify([60, 67]).interval, '5ª justa');
+  assert.equal(Theory.identify([60, 64]).interval, '3ª mayor');
+  assert.equal(Theory.identify([64, 72]).interval, '6ª menor');
+  assert.equal(best([60, 61, 62]), null, 'un cluster no es un acorde');
+  // Escritura por grados: Fa menor = F Ab C (nunca G#)
+  assert.deepEqual(plain(Theory.identify([65, 68, 72]).matches[0].notes), ['F', 'Ab', 'C']);
+});

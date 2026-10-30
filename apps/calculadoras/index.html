@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadoras - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/boot.js"></script>
+    <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
+    <style>
+        .calc-tabs { display: flex; gap: 6px; }
+        .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .calc-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .calc-big { font: 800 22px var(--font-head); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .calc-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }
+        .calc-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 8px 10px; }
+        .calc-stat-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+        .calc-stat-value { font: 700 17px var(--font-head); margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .calc-stat-hint { font-size: 11px; color: var(--ink-dim); }
+        .calc-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 10px; }
+        .calc-table th { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; text-align: right; padding: 6px 4px; }
+        .calc-table th:first-child, .calc-table td:first-child { text-align: left; }
+        .calc-table td { text-align: right; padding: 7px 4px; border-top: 1px solid var(--border); color: var(--ink); }
+        .calc-table td:first-child { color: var(--ink-dim); font-weight: 600; }
+        .calc-table td small { color: var(--muted); }
+        .calc-hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+        .calc-hint strong { color: var(--ink); }
+        .calc-tap { margin-top: 10px; width: 100%; }
+        .calc-harm { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body data-page-id="calculadoras" data-tool-name="Calculadoras">
+<div class="app-card">
+    <div class="config-body">
+        <div class="calc-tabs">
+            <button class="diff-pill" data-tab="tempo" onclick="setTab('tempo')">Tempo → ms</button>
+            <button class="diff-pill" data-tab="freq" onclick="setTab('freq')">Nota ↔ Hz</button>
+            <button class="diff-pill" data-tab="mic" onclick="setTab('mic')">Micrófonos</button>
+        </div>
+
+        <!-- ── Tempo → ms y Hz ── -->
+        <div id="tab-tempo">
+            <div class="section-card">
+                <div class="section-title">Tempo</div>
+                <div class="calc-row">
+                    <div><label for="bpm">BPM</label><input type="number" id="bpm" min="20" max="400" step="0.1" value="120" oninput="renderTempo()"></div>
+                    <div><label>&nbsp;</label><button class="btn-ghost calc-tap" id="tapBtn" onclick="tap()" style="margin-top:0">Tap tempo</button></div>
+                </div>
+                <table class="calc-table" aria-label="Duración de cada figura">
+                    <thead><tr><th>Figura</th><th>Normal</th><th>Puntillo</th><th>Tresillo</th><th>Hz</th></tr></thead>
+                    <tbody id="tempoTable"></tbody>
+                </table>
+                <p class="calc-hint">Ajusta el delay a una de estas duraciones para que los ecos caigan a tempo. Los Hz sirven para sincronizar un LFO (trémolo, auto-pan) con la canción.</p>
+            </div>
+            <div class="section-card">
+                <div class="section-title">Reverb y compresor a tempo</div>
+                <div class="calc-out" id="fxOut" style="margin-top:0"></div>
+                <p class="calc-hint">Puntos de partida: la reverb respira con la canción si su cola termina antes del siguiente pulso. Ajusta luego de oído.</p>
+            </div>
+        </div>
+
+        <!-- ── Nota ↔ frecuencia ── -->
+        <div id="tab-freq" hidden>
+            <div class="section-card">
+                <div class="section-title">Nota → frecuencia</div>
+                <div class="calc-row3">
+                    <div><label for="fPc">Nota</label><select id="fPc" onchange="fromNote()"></select></div>
+                    <div><label for="fOct">Octava</label><select id="fOct" onchange="fromNote()"></select></div>
+                    <div><label for="fA4">La4 =</label><input type="number" id="fA4" min="400" max="480" step="0.1" value="440" oninput="fromNote()"></div>
+                </div>
+                <div class="section-title" style="margin-top:14px !important">Frecuencia → nota</div>
+                <div class="calc-row">
+                    <div><label for="fHz">Hz</label><input type="number" id="fHz" min="8" max="24000" step="0.01" oninput="fromHz()"></div>
+                    <div><label>Nota más cercana</label><div class="calc-big" id="fNote">—</div></div>
+                </div>
+                <div class="calc-out" id="freqOut"></div>
+            </div>
+            <div class="section-card">
+                <div class="section-title">Armónicos</div>
+                <div class="calc-harm note-pills" id="harmOut"></div>
+                <p class="calc-hint">Una resonancia molesta suele estar en la fundamental de una nota o en uno de sus armónicos: prueba a recortar ahí con un EQ estrecho.</p>
+            </div>
+        </div>
+
+        <!-- ── Distancia de micrófonos ── -->
+        <div id="tab-mic" hidden>
+            <div class="section-card">
+                <div class="section-title">Distancia ↔ retardo</div>
+                <div class="calc-row3">
+                    <div><label for="mDist">Distancia (cm)</label><input type="number" id="mDist" min="0" max="100000" step="1" value="100" oninput="fromDist()"></div>
+                    <div><label for="mMs">Retardo (ms)</label><input type="number" id="mMs" min="0" max="1000" step="0.01" oninput="fromMs()"></div>
+                    <div><label for="mTemp">Temperatura (°C)</label><input type="number" id="mTemp" min="-20" max="50" step="1" value="20" oninput="fromDist()"></div>
+                </div>
+                <div class="calc-out" id="micOut"></div>
+                <p class="calc-hint" id="micHint"></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  LÓGICA PURA (sin DOM; la usan las pruebas)
+// ══════════════════════════════════════════════
+const NOTE_VALUES = [
+    { name: 'Redonda', beats: 4 }, { name: 'Blanca', beats: 2 }, { name: 'Negra', beats: 1 },
+    { name: 'Corchea', beats: 1 / 2 }, { name: 'Semicorchea', beats: 1 / 4 }, { name: 'Fusa', beats: 1 / 8 },
+    { name: 'Semifusa', beats: 1 / 16 },
+];
+
+/** Duración (ms) de cada figura a un tempo (BPM de negra): normal, con puntillo y en tresillo; y su frecuencia (Hz). */
+function tempoTable(bpm) {
+    const q = 60000 / bpm;
+    return NOTE_VALUES.map(v => ({ name: v.name, ms: q * v.beats, dotted: q * v.beats * 1.5, triplet: q * v.beats * 2 / 3, hz: 1000 / (q * v.beats) }));
+}
+
+/** Sugerencias de reverb y compresor a tempo (ms). */
+function fxTimes(bpm) {
+    const q = 60000 / bpm, pre = q / 16;   // pre-delay ≈ una semifusa (1/64)
+    return { preDelay: pre, decaySmall: q - pre, decayLarge: 2 * q - pre, attack: q / 8, release: q / 2 };
+}
+
+const noteHz = (midi, a4) => (a4 || 440) * Math.pow(2, (midi - 69) / 12);
+function hzToNote(hz, a4) {
+    const m = 69 + 12 * Math.log2(hz / (a4 || 440)), midi = Math.round(m);
+    return { midi, cents: Math.round((m - midi) * 100) };
+}
+
+/** Velocidad del sonido en el aire (m/s) a una temperatura (°C). */
+const soundSpeed = tempC => 331.3 + 0.606 * tempC;
+
+/**
+ * Diferencia de distancia entre dos micrófonos → retardo y efectos de fase:
+ * con el mismo nivel, la suma cancela primero a f = 1 / (2·retardo) y luego cada 1/retardo (filtro peine).
+ */
+function micDelay(distM, tempC) {
+    const c = soundSpeed(tempC), s = distM / c;
+    return { speed: c, ms: s * 1000, samples48: s * 48000, samples44: s * 44100, firstNotch: s > 0 ? 1 / (2 * s) : Infinity };
+}
+// ── Fin de la lógica pura ──
+
+/* ════════════════════════════════════════════════════
+   CALCULADORAS — tempo a ms/Hz (delay, reverb, LFO, compresor),
+   nota ↔ frecuencia con armónicos, y distancia de micrófonos ↔ retardo.
+   ════════════════════════════════════════════════════ */
+const store = createStore('calculadoras');
+const $ = id => document.getElementById(id);
+const num = (v, d) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('es', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtMs = v => v >= 1000 ? num(v / 1000, 3) + ' s' : num(v, v < 10 ? 2 : 1) + ' ms';
+const noteName = midi => Theory.display(Theory.keyForPc(((midi % 12) + 12) % 12) + (Math.floor(midi / 12) - 1), 'es');
+const stat = (label, value, hint) => `<div class="calc-stat"><div class="calc-stat-label">${label}</div><div class="calc-stat-value">${value}</div>${hint ? `<div class="calc-stat-hint">${hint}</div>` : ''}</div>`;
+
+let tab = store.get('tab', 'tempo');
+function setTab(t) {
+    tab = t; store.set('tab', t);
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    ['tempo', 'freq', 'mic'].forEach(k => { $('tab-' + k).hidden = k !== t; });
+}
+
+/* ── Tempo ── */
+function renderTempo() {
+    const bpm = +$('bpm').value;
+    if (!(bpm >= 20 && bpm <= 400)) return;
+    store.set('bpm', bpm);
+    $('tempoTable').innerHTML = tempoTable(bpm).map(r =>
+        `<tr><td>${r.name}</td><td>${fmtMs(r.ms)}</td><td>${fmtMs(r.dotted)}</td><td>${fmtMs(r.triplet)}</td><td>${num(r.hz, r.hz < 10 ? 2 : 1)}</td></tr>`).join('');
+    const f = fxTimes(bpm);
+    $('fxOut').innerHTML =
+        stat('Pre-delay', fmtMs(f.preDelay), 'una semifusa (1/64)') +
+        stat('Decay corto', fmtMs(f.decaySmall), 'sala: una negra − pre-delay') +
+        stat('Decay largo', fmtMs(f.decayLarge), 'hall: una blanca − pre-delay') +
+        stat('Ataque comp.', fmtMs(f.attack), 'una fusa (1/32)') +
+        stat('Release comp.', fmtMs(f.release), 'una corchea: vuelve a tiempo');
+}
+
+const taps = [];
+function tap() {
+    const now = performance.now();
+    if (taps.length && now - taps[taps.length - 1] > 2000) taps.length = 0;
+    taps.push(now);
+    if (taps.length > 6) taps.shift();
+    if (taps.length >= 2) {
+        const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+        $('bpm').value = Math.round(60000 / avg * 10) / 10;
+        renderTempo();
+    }
+    $('tapBtn').textContent = taps.length < 2 ? 'Sigue tocando…' : `Tap tempo · ${taps.length} toques`;
+}
+
+/* ── Nota ↔ Hz ── */
+const a4 = () => { const v = +$('fA4').value; return v >= 400 && v <= 480 ? v : 440; };
+function fromNote() {
+    const midi = (+$('fOct').value + 1) * 12 + +$('fPc').value;
+    $('fHz').value = noteHz(midi, a4()).toFixed(2);
+    renderFreq();
+}
+function fromHz() { renderFreq(); }
+function renderFreq() {
+    const hz = +$('fHz').value;
+    store.set('fA4', a4()); store.set('fHz', hz);
+    if (!(hz >= 8 && hz <= 24000)) { $('fNote').textContent = '—'; $('freqOut').innerHTML = ''; $('harmOut').innerHTML = ''; return; }
+    const n = hzToNote(hz, a4());
+    $('fNote').textContent = noteName(n.midi) + (n.cents ? ` ${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢` : '');
+    const c = soundSpeed(20);
+    $('freqOut').innerHTML =
+        stat('Periodo', fmtMs(1000 / hz), 'lo que dura una vibración') +
+        stat('Longitud de onda', num(c / hz, c / hz < 1 ? 3 : 2) + ' m', 'en el aire a 20 °C') +
+        stat('Octava arriba', num(hz * 2, 2) + ' Hz') +
+        stat('Octava abajo', num(hz / 2, 2) + ' Hz');
+    $('harmOut').innerHTML = Array.from({ length: 10 }, (_, k) => {
+        const h = hz * (k + 1);
+        if (h > 22000) return '';
+        const hn = hzToNote(h, a4());
+        return `<span class="note-pill${k === 0 ? ' root' : ''}">${k + 1}º · ${num(h, h < 1000 ? 1 : 0)} Hz · ${noteName(hn.midi)}${Math.abs(hn.cents) > 2 ? ` ${hn.cents > 0 ? '+' : '−'}${Math.abs(hn.cents)}¢` : ''}</span>`;
+    }).join('');
+}
+
+/* ── Micrófonos ── */
+const tempC = () => { const v = +$('mTemp').value; return v >= -20 && v <= 50 ? v : 20; };
+function fromDist() {
+    const cm = +$('mDist').value;
+    if (!(cm >= 0)) return;
+    $('mMs').value = (micDelay(cm / 100, tempC()).ms).toFixed(2);
+    renderMic(cm / 100);
+}
+function fromMs() {
+    const ms = +$('mMs').value;
+    if (!(ms >= 0)) return;
+    const m = soundSpeed(tempC()) * ms / 1000;
+    $('mDist').value = Math.round(m * 1000) / 10;
+    renderMic(m);
+}
+function renderMic(m) {
+    store.set('mDist', +$('mDist').value); store.set('mTemp', tempC());
+    const d = micDelay(m, tempC());
+    $('micOut').innerHTML =
+        stat('Retardo', fmtMs(d.ms)) +
+        stat('Muestras', `${num(d.samples48, 1)}`, `a 48 kHz · ${num(d.samples44, 1)} a 44,1 kHz`) +
+        stat('Velocidad del sonido', num(d.speed, 1) + ' m/s', `a ${tempC()} °C`) +
+        stat('1ª cancelación', isFinite(d.firstNotch) ? num(d.firstNotch, 0) + ' Hz' : '—', 'si suenan igual de fuerte; luego cada ' + (isFinite(d.firstNotch) ? num(2 * d.firstNotch, 0) + ' Hz' : '—'));
+    $('micHint').innerHTML = `Si dos micrófonos captan la misma fuente a distinta distancia, retrasa el más cercano <strong>${fmtMs(d.ms)}</strong> (o invierte la polaridad si suena hueco) para alinearlos. ` +
+        `Regla del 3:1: separa los micrófonos al menos <strong>3 veces</strong> la distancia de cada uno a su fuente para que la fuga no cancele frecuencias.`;
+}
+
+/* ── Arranque ── */
+window.addEventListener('load', () => {
+    $('fPc').innerHTML = Array.from({ length: 12 }, (_, pc) => `<option value="${pc}">${Theory.display(Theory.keyForPc(pc), 'es')}</option>`).join('');
+    $('fOct').innerHTML = Array.from({ length: 9 }, (_, o) => `<option value="${o}">${o}</option>`).join('');
+    $('bpm').value = store.get('bpm', 120);
+    $('fA4').value = store.get('fA4', 440);
+    $('fHz').value = store.get('fHz', 440);
+    const n = hzToNote(+$('fHz').value, a4());
+    $('fPc').value = ((n.midi % 12) + 12) % 12; $('fOct').value = Math.max(0, Math.min(8, Math.floor(n.midi / 12) - 1));
+    $('mDist').value = store.get('mDist', 100);
+    $('mTemp').value = store.get('mTemp', 20);
+    setTab(tab);
+    renderTempo();
+    renderFreq();
+    fromDist();
+});
+</script>
+<script src="../../shared/shell.js"></script>
+</body>
+</html>

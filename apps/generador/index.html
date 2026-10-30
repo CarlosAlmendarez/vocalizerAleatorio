@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/boot.js"></script>
+    <script src="../../shared/sound-engine.js"></script>
+    <script src="../../shared/theory.js"></script>
+    <script src="../../shared/settings.js"></script>
+    <style>
+        .gen-hz { font-family: var(--font-head); font-size: clamp(54px, 15vw, 80px); font-weight: 900; letter-spacing: -3px; line-height: 1; font-variant-numeric: tabular-nums; }
+        .gen-hz small { font-size: 0.32em; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+        .gen-note { font-size: 16px; font-weight: 700; color: var(--ink-dim); margin-top: 6px; min-height: 22px; }
+        .gen-sub { font-size: 12px; color: var(--muted); margin-top: 4px; min-height: 16px; }
+        .gen-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .gen-pills .diff-pill { min-width: 70px; }
+        .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .gen-row3 { display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 8px; align-items: end; }
+        .gen-step { height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: 700 18px var(--font-sans); cursor: pointer; }
+        .gen-field { margin-top: 12px; }
+        .gen-field input[type=range] { width: 100%; }
+        .gen-inline { display: flex; gap: 8px; align-items: center; }
+        .gen-inline input[type=number] { flex: 1; font: 700 16px var(--font-head) !important; }
+        .gen-unit { font-size: 13px; color: var(--muted); font-weight: 700; }
+        .gen-hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+        .gen-quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .gen-quick .diff-pill { flex: 0 0 auto; padding: 7px 12px; }
+        [hidden] { display: none !important; }
+        .action-bar .btn-ghost { flex: 0 0 auto !important; padding: 14px 18px !important; }
+    </style>
+</head>
+<body data-page-id="generador" data-tool-name="Generador">
+<div class="app-card">
+
+    <div class="display-section">
+        <div class="gen-hz" id="hzBig">440,00<small>Hz</small></div>
+        <div class="gen-note" id="noteBig">La4</div>
+        <div class="gen-sub" id="subBig"></div>
+    </div>
+
+    <div class="config-body">
+        <div class="gen-pills" role="tablist">
+            <button class="diff-pill" data-mode="tone" onclick="setMode('tone')">Tono de referencia</button>
+            <button class="diff-pill" data-mode="noise" onclick="setMode('noise')">Ruido y barridos</button>
+        </div>
+
+        <!-- ── Tono ── -->
+        <div id="tonePanel">
+            <div class="section-card">
+                <div class="section-title">Forma de onda</div>
+                <div class="gen-pills" id="wavePills">
+                    <button class="diff-pill" data-wave="sine" onclick="setWave('sine')">Senoidal</button>
+                    <button class="diff-pill" data-wave="triangle" onclick="setWave('triangle')">Triangular</button>
+                    <button class="diff-pill" data-wave="square" onclick="setWave('square')">Cuadrada</button>
+                    <button class="diff-pill" data-wave="sawtooth" onclick="setWave('sawtooth')">Sierra</button>
+                </div>
+            </div>
+
+            <div class="section-card" style="margin-top:12px">
+                <div class="section-title">Nota</div>
+                <div class="gen-row3">
+                    <button class="gen-step" onclick="stepNote(-1)" aria-label="Un semitono abajo">−</button>
+                    <div><label for="notePc">Nota</label><select id="notePc" onchange="setNoteFromSelects()"></select></div>
+                    <div><label for="noteOct">Octava</label><select id="noteOct" onchange="setNoteFromSelects()"></select></div>
+                    <button class="gen-step" onclick="stepNote(1)" aria-label="Un semitono arriba">+</button>
+                </div>
+                <div class="gen-field">
+                    <label for="hzInput">Frecuencia exacta</label>
+                    <div class="gen-inline">
+                        <input type="number" id="hzInput" min="20" max="20000" step="0.01" onchange="setHz(+this.value, null)">
+                        <span class="gen-unit">Hz</span>
+                    </div>
+                    <input type="range" id="hzSlider" min="0" max="1000" step="1" oninput="setHz(sliderToHz(+this.value), null)" aria-label="Frecuencia (escala logarítmica)">
+                </div>
+            </div>
+
+            <div class="section-card" style="margin-top:12px">
+                <div class="section-title">Afinación</div>
+                <div class="gen-field" style="margin-top:0">
+                    <label for="a4Input">La4 (A4) =</label>
+                    <div class="gen-inline">
+                        <input type="number" id="a4Input" min="400" max="480" step="0.1" onchange="setA4(+this.value)">
+                        <span class="gen-unit">Hz</span>
+                    </div>
+                    <div class="gen-quick" id="a4Quick">
+                        <button class="diff-pill" onclick="setA4(415)">415 barroco</button>
+                        <button class="diff-pill" onclick="setA4(432)">432</button>
+                        <button class="diff-pill" onclick="setA4(440)">440</button>
+                        <button class="diff-pill" onclick="setA4(442)">442</button>
+                        <button class="diff-pill" onclick="setA4(443)">443</button>
+                    </div>
+                </div>
+                <div class="gen-row">
+                    <div><label for="tempSel">Temperamento</label><select id="tempSel" onchange="setTemperament(this.value)"></select></div>
+                    <div><label for="tonicSel">Tónica</label><select id="tonicSel" onchange="setTonic(+this.value)"></select></div>
+                </div>
+                <p class="gen-hint" id="tempHint"></p>
+            </div>
+        </div>
+
+        <!-- ── Ruido ── -->
+        <div id="noisePanel" hidden>
+            <div class="section-card">
+                <div class="section-title">Color del ruido</div>
+                <div class="gen-pills" id="colorPills">
+                    <button class="diff-pill" data-color="white" onclick="setColor('white')">Blanco</button>
+                    <button class="diff-pill" data-color="pink" onclick="setColor('pink')">Rosa</button>
+                    <button class="diff-pill" data-color="brown" onclick="setColor('brown')">Marrón</button>
+                </div>
+                <p class="gen-hint" id="colorHint"></p>
+            </div>
+            <div class="section-card" style="margin-top:12px">
+                <div class="section-title">Efecto</div>
+                <div class="gen-pills" id="fxPills">
+                    <button class="diff-pill" data-fx="steady" onclick="setFx('steady')">Continuo</button>
+                    <button class="diff-pill" data-fx="riser" onclick="setFx('riser')">Riser ↗</button>
+                    <button class="diff-pill" data-fx="down" onclick="setFx('down')">Downlifter ↘</button>
+                </div>
+                <div class="gen-field">
+                    <label for="durInput">Duración del barrido y del WAV: <span id="durVal">8 s</span></label>
+                    <input type="range" id="durInput" min="1" max="30" step="1" oninput="setDur(+this.value)">
+                </div>
+                <p class="gen-hint" id="fxHint"></p>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Volumen</div>
+            <input type="range" id="volInput" min="0" max="100" step="1" style="width:100%" oninput="setVol(+this.value)" aria-label="Volumen">
+            <p class="gen-hint">Empieza bajo, sobre todo con auriculares: un tono puro a volumen alto cansa el oído.</p>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-primary" id="playBtn" onclick="togglePlay()">▶ Reproducir</button>
+        <button class="btn btn-ghost" onclick="downloadWav()" title="Descargar como WAV">⬇ WAV</button>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  LÓGICA PURA (sin DOM; la usan las pruebas)
+// ══════════════════════════════════════════════
+const cents = r => 1200 * Math.log2(r);
+// Cada temperamento: posición en cents de los 12 grados desde la tónica
+const TEMPERAMENTS = {
+    equal:       { name: 'Igual (moderno)', cents: Array.from({ length: 12 }, (_, k) => k * 100),
+                   hint: 'Todas las tonalidades suenan igual: el de pianos, guitarras y casi toda la música actual.' },
+    pythagorean: { name: 'Pitagórico', cents: [1, 256/243, 9/8, 32/27, 81/64, 4/3, 729/512, 3/2, 128/81, 27/16, 16/9, 243/128].map(cents),
+                   hint: 'Quintas perfectas (3/2); las terceras mayores quedan muy abiertas. Música medieval.' },
+    just:        { name: 'Justo (entonación natural)', cents: [1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8].map(cents),
+                   hint: 'Intervalos puros respecto a la tónica (tercera 5/4, quinta 3/2): ideal para afinar coros y acordes en una tonalidad.' },
+    meantone:    { name: 'Mesotónico 1/4 de coma', cents: [0, 76.0, 193.2, 310.3, 386.3, 503.4, 579.5, 696.6, 772.6, 889.7, 1006.8, 1082.9],
+                   hint: 'Terceras mayores puras; las tonalidades lejanas suenan desafinadas. Renacimiento y primer Barroco.' },
+    werckmeister:{ name: 'Werckmeister III', cents: [0, 90.2, 192.2, 294.1, 390.2, 498.0, 588.3, 696.1, 792.2, 888.3, 996.1, 1092.2],
+                   hint: 'Temperamento "bueno" del Barroco: todas las tonalidades sirven, cada una con su color.' },
+};
+
+/** Cents de la nota MIDI en el temperamento, contando desde la tónica (clase de altura 0–11). */
+function tempCents(midi, temp, tonic) {
+    const d = midi - tonic, oct = Math.floor(d / 12);
+    return 1200 * oct + TEMPERAMENTS[temp].cents[d - 12 * oct];
+}
+
+/** Frecuencia de una nota MIDI: La4 = a4 en cualquier temperamento. */
+function noteFreq(midi, a4, temp, tonic) {
+    temp = temp || 'equal';
+    return a4 * Math.pow(2, (tempCents(midi, temp, tonic || 0) - tempCents(69, temp, tonic || 0)) / 1200);
+}
+
+/** Nota del temperamento igual más cercana a hz y su desvío en cents. */
+function hzToNote(hz, a4) {
+    const m = 69 + 12 * Math.log2(hz / (a4 || 440)), midi = Math.round(m);
+    return { midi, cents: Math.round((m - midi) * 100) };
+}
+
+/** Ruido de color en un Float32Array (rnd: 0..1). Rosa: filtro de Paul Kellet; marrón: integrado con fuga. */
+function makeNoise(n, color, rnd) {
+    rnd = rnd || Math.random;
+    const out = new Float32Array(n);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0, peak = 0;
+    for (let i = 0; i < n; i++) {
+        const w = rnd() * 2 - 1;
+        let v;
+        if (color === 'pink') {
+            b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+            b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+            v = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362; b6 = w * 0.115926;
+        } else if (color === 'brown') {
+            last = (last + 0.02 * w) / 1.02; v = last;
+        } else v = w;
+        out[i] = v;
+        peak = Math.max(peak, Math.abs(v));
+    }
+    for (let i = 0; i < n; i++) out[i] *= 0.9 / (peak || 1);   // mismo pico en los tres colores
+    return out;
+}
+
+/** WAV de 16 bits mono. */
+function toWav(samples, sr) {
+    const n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 32767, true);
+    return new Uint8Array(buf);
+}
+// ── Fin de la lógica pura ──
+
+/* ════════════════════════════════════════════════════
+   GENERADOR — diapasón (ondas puras, Hz exactos, temperamentos históricos)
+   y ruido blanco/rosa/marrón con barridos tipo riser.
+   El audio va por el AudioContext de soundEngine (en iPhone suena con el
+   interruptor de silencio puesto, como el resto de la app).
+   ════════════════════════════════════════════════════ */
+const store = createStore('generador');
+const $ = id => document.getElementById(id);
+const NOISE_LOOP_SEC = 4;
+const COLOR_HINTS = {
+    white: 'Igual energía en cada frecuencia: suena brillante, como un soplido. Útil para probar enmascaramiento.',
+    pink: 'Igual energía por octava: suena equilibrado al oído. El estándar para medir y ajustar altavoces y mezclas.',
+    brown: 'Más energía en los graves: un rumor profundo, como una cascada lejana.',
+};
+const FX_HINTS = {
+    steady: 'Suena sin parar hasta que lo detengas.',
+    riser: 'El ruido se abre de grave a agudo y crece: tensión antes de un drop o un estribillo.',
+    down: 'Al revés: de agudo a grave y se apaga, para salir de una sección.',
+};
+
+let mode = store.get('mode', 'tone');
+let wave = store.get('wave', 'sine');
+let a4 = store.get('a4', 440);
+let temp = TEMPERAMENTS[store.get('temp', 'equal')] ? store.get('temp', 'equal') : 'equal';
+let tonic = store.get('tonic', 0);
+let curMidi = store.get('midi', 69);          // nota elegida (null si se escribió una frecuencia)
+let hz = store.get('hz', 440);
+let color = store.get('color', 'pink');
+let fx = store.get('fx', 'steady');
+let dur = store.get('dur', 8);
+let vol = store.get('vol', 40);
+let voice = null;                              // { stop(), osc?, gain } lo que suena ahora
+
+const ac = () => soundEngine.ac;
+const pcName = pc => Theory.display(Theory.keyForPc(pc), 'es');
+const fmtHz = v => v.toFixed(2).replace('.', ',');
+const level = () => Math.pow(vol / 100, 2) * 0.5;   // curva de volumen más natural
+
+/* ── Vista ── */
+function render() {
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.querySelectorAll('[data-wave]').forEach(b => b.classList.toggle('active', b.dataset.wave === wave));
+    document.querySelectorAll('[data-color]').forEach(b => b.classList.toggle('active', b.dataset.color === color));
+    document.querySelectorAll('[data-fx]').forEach(b => b.classList.toggle('active', b.dataset.fx === fx));
+    document.querySelectorAll('#a4Quick .diff-pill').forEach(b => b.classList.toggle('active', parseFloat(b.textContent) === a4));
+    $('tonePanel').hidden = mode !== 'tone';
+    $('noisePanel').hidden = mode !== 'noise';
+    $('a4Input').value = a4;
+    $('tempSel').value = temp;
+    $('tonicSel').value = tonic;
+    $('tonicSel').disabled = temp === 'equal';
+    $('tempHint').textContent = TEMPERAMENTS[temp].hint;
+    $('colorHint').textContent = COLOR_HINTS[color];
+    $('fxHint').textContent = FX_HINTS[fx];
+    $('durVal').textContent = dur + ' s';
+    $('durInput').value = dur;
+    $('volInput').value = vol;
+    $('hzInput').value = hz.toFixed(2);
+    $('hzSlider').value = hzToSlider(hz);
+    if (curMidi != null) { $('notePc').value = ((curMidi % 12) + 12) % 12; $('noteOct').value = Math.floor(curMidi / 12) - 1; }
+
+    if (mode === 'tone') {
+        $('hzBig').innerHTML = fmtHz(hz) + '<small>Hz</small>';
+        const n = hzToNote(hz, a4);
+        $('noteBig').textContent = curMidi != null
+            ? pcName(((curMidi % 12) + 12) % 12) + (Math.floor(curMidi / 12) - 1)
+            : `≈ ${pcName(((n.midi % 12) + 12) % 12)}${Math.floor(n.midi / 12) - 1} ${n.cents > 0 ? '+' : n.cents < 0 ? '−' : '±'}${Math.abs(n.cents)}¢`;
+        let sub = `La4 = ${String(a4).replace('.', ',')} Hz`;
+        if (curMidi != null && temp !== 'equal') {
+            const d = Math.round(cents(hz / noteFreq(curMidi, a4, 'equal', 0)) * 10) / 10;
+            sub += ` · ${TEMPERAMENTS[temp].name} en ${pcName(tonic)}: ${d > 0 ? '+' : d < 0 ? '−' : '±'}${String(Math.abs(d)).replace('.', ',')}¢ respecto al temperamento igual`;
+        }
+        $('subBig').textContent = sub;
+    } else {
+        $('hzBig').innerHTML = { white: 'Blanco', pink: 'Rosa', brown: 'Marrón' }[color] + '<small>ruido</small>';
+        $('noteBig').textContent = { steady: 'Continuo', riser: `Riser de ${dur} s`, down: `Downlifter de ${dur} s` }[fx];
+        $('subBig').textContent = '';
+    }
+}
+
+/* ── Escala logarítmica del deslizador: 20 Hz … 20 kHz ── */
+const sliderToHz = v => 20 * Math.pow(1000, v / 1000);
+const hzToSlider = h => Math.round(1000 * Math.log(h / 20) / Math.log(1000));
+
+/* ── Ajustes ── */
+function setMode(m) { if (m === mode) return; const was = !!voice; stop(); mode = m; store.set('mode', m); render(); if (was) play(); }
+function setWave(w) { wave = w; store.set('wave', w); if (voice && voice.osc) voice.osc.type = w; render(); }
+function setHz(v, midi) {
+    if (!(v > 0)) return;
+    hz = Math.min(20000, Math.max(20, v));
+    curMidi = midi;
+    store.set('hz', hz); store.set('midi', midi);
+    if (voice && voice.osc) voice.osc.frequency.setTargetAtTime(hz, ac().currentTime, 0.01);
+    render();
+}
+function noteHz(midi) { return noteFreq(midi, a4, temp, tonic); }
+function setNoteFromSelects() {
+    const midi = (+$('noteOct').value + 1) * 12 + +$('notePc').value;
+    setHz(noteHz(midi), midi);
+}
+function stepNote(d) {
+    const base = curMidi != null ? curMidi : hzToNote(hz, a4).midi;
+    const midi = Math.min(127, Math.max(16, base + d));
+    setHz(noteHz(midi), midi);
+}
+function setA4(v) {
+    if (!(v >= 400 && v <= 480)) { render(); return; }
+    a4 = Math.round(v * 10) / 10; store.set('a4', a4);
+    if (curMidi != null) setHz(noteHz(curMidi), curMidi); else render();
+}
+function setTemperament(t) { temp = t; store.set('temp', t); if (curMidi != null) setHz(noteHz(curMidi), curMidi); else render(); }
+function setTonic(pc) { tonic = pc; store.set('tonic', pc); if (curMidi != null) setHz(noteHz(curMidi), curMidi); else render(); }
+function setColor(c) { color = c; store.set('color', c); render(); if (voice && mode === 'noise') { stop(); play(); } }
+function setFx(f) { fx = f; store.set('fx', f); render(); if (voice && mode === 'noise') { stop(); play(); } }
+function setDur(v) { dur = v; store.set('dur', v); render(); }
+function setVol(v) {
+    vol = v; store.set('vol', v);
+    if (voice && voice.gain && mode === 'tone') voice.gain.gain.setTargetAtTime(level(), ac().currentTime, 0.02);
+}
+
+/* ── Grafo de audio (también sirve para renderizar el WAV) ── */
+function noiseBuffer(ctx) {
+    const b = ctx.createBuffer(1, Math.round(ctx.sampleRate * NOISE_LOOP_SEC), ctx.sampleRate);
+    b.getChannelData(0).set(makeNoise(b.length, color));
+    return b;
+}
+
+/** Conecta lo elegido a dest desde t0; dura `len` s (Infinity = hasta stop). Devuelve { stop(t), osc, gain }. */
+function build(ctx, dest, t0, len) {
+    const g = ctx.createGain(), L = level();
+    g.connect(dest);
+    if (mode === 'tone') {
+        const osc = ctx.createOscillator();
+        osc.type = wave;
+        osc.frequency.value = hz;
+        // Las ondas con armónicos suenan mucho más fuerte que la senoidal: se compensa
+        const comp = { sine: 1, triangle: 0.9, square: 0.45, sawtooth: 0.55 }[wave];
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(L * comp, t0 + 0.02);
+        if (isFinite(len)) { g.gain.setValueAtTime(L * comp, t0 + len - 0.03); g.gain.linearRampToValueAtTime(0, t0 + len); }
+        osc.connect(g);
+        osc.start(t0);
+        if (isFinite(len)) osc.stop(t0 + len + 0.01);
+        return { osc, gain: g, stop: t => { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0, t, 0.008); osc.stop(t + 0.06); } };
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    let node = src;
+    if (fx === 'steady') {
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(L, t0 + 0.05);
+        if (isFinite(len)) { g.gain.setValueAtTime(L, t0 + len - 0.05); g.gain.linearRampToValueAtTime(0, t0 + len); }
+    } else {
+        // Barrido: filtro que se abre (riser) o se cierra (downlifter) y volumen que crece o se apaga
+        const f = ctx.createBiquadFilter(), up = fx === 'riser', d = isFinite(len) ? len : dur;
+        f.type = 'lowpass';
+        f.Q.value = 6;
+        f.frequency.setValueAtTime(up ? 150 : 14000, t0);
+        f.frequency.exponentialRampToValueAtTime(up ? 14000 : 150, t0 + d);
+        g.gain.setValueAtTime(up ? L * 0.08 : L, t0);
+        g.gain.linearRampToValueAtTime(up ? L : L * 0.02, t0 + d - 0.02);
+        g.gain.linearRampToValueAtTime(0, t0 + d);
+        src.connect(f);
+        node = f;
+        len = d;
+    }
+    if (node !== src) node.connect(g); else src.connect(g);
+    src.start(t0);
+    if (isFinite(len)) src.stop(t0 + len + 0.01);
+    return { gain: g, src, len, stop: t => { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0, t, 0.01); src.stop(t + 0.08); } };
+}
+
+/* ── Reproducir ── */
+async function togglePlay() { if (voice) stop(); else await play(); }
+function mtPlayToggle() { togglePlay(); }
+
+async function play() {
+    await soundEngine.start();
+    if (!ac()) return;
+    stop();
+    const t0 = ac().currentTime + 0.02;
+    const v = build(ac(), ac().destination, t0, mode === 'noise' && fx !== 'steady' ? dur : Infinity);
+    voice = v;
+    if (v.src && isFinite(v.len)) v.src.onended = () => { if (voice === v) { voice = null; updateBtn(); } };
+    MT.keepAwake(true);
+    updateBtn();
+}
+
+function stop() {
+    if (!voice) return;
+    const v = voice;
+    voice = null;
+    if (v.src) v.src.onended = null;
+    try { v.stop(ac().currentTime); } catch (e) {}
+    MT.keepAwake(false);
+    updateBtn();
+}
+
+function updateBtn() {
+    const b = $('playBtn');
+    b.textContent = voice ? '■ Detener' : '▶ Reproducir';
+    b.style.background = voice ? 'linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75))' : '';
+}
+
+/* ── Descargar WAV (se renderiza sin tiempo real) ── */
+async function downloadWav() {
+    const sr = 44100, len = mode === 'noise' && fx !== 'steady' ? dur : Math.max(2, dur);
+    const off = new OfflineAudioContext(1, Math.round(sr * len), sr);
+    build(off, off.destination, 0, len);
+    const buf = await off.startRendering();
+    const name = mode === 'tone'
+        ? `tono-${wave}-${fmtHz(hz).replace(',', '_')}Hz.wav`
+        : `ruido-${color}${fx === 'steady' ? '' : '-' + (fx === 'riser' ? 'riser' : 'downlifter')}-${len}s.wav`;
+    const url = URL.createObjectURL(new Blob([toWav(buf.getChannelData(0), sr)], { type: 'audio/wav' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/* ── Arranque ── */
+window.addEventListener('load', () => {
+    $('notePc').innerHTML = Array.from({ length: 12 }, (_, pc) => `<option value="${pc}">${pcName(pc)}</option>`).join('');
+    $('tonicSel').innerHTML = $('notePc').innerHTML;
+    $('noteOct').innerHTML = Array.from({ length: 9 }, (_, o) => `<option value="${o}">${o}</option>`).join('');
+    $('tempSel').innerHTML = Object.keys(TEMPERAMENTS).map(k => `<option value="${k}">${TEMPERAMENTS[k].name}</option>`).join('');
+    if (curMidi != null) hz = noteHz(curMidi);
+    render();
+});
+window.addEventListener('pagehide', stop);
+</script>
+<script src="../../shared/shell.js"></script>
+</body>
+</html>

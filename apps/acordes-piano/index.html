@@ -177,6 +177,16 @@
             padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
             background: var(--surface-s); border: 1px solid var(--border); color: var(--muted);
         }
+        /* ── Buscador inverso ── */
+        .mode-toggle { align-self: center; }
+        body[data-mode="find"] .dict-only, body:not([data-mode="find"]) .find-only { display: none !important; }
+        .find-hint { text-align: center; font-size: 13px; color: var(--ink-dim); }
+        .find-actions { display: flex; gap: 8px; }
+        .find-actions .hand-btn { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+        .find-actions .hand-btn:disabled { opacity: 0.4; cursor: default; }
+        body[data-mode="find"] #pianoCanvas { cursor: pointer; touch-action: manipulation; }
+        .theory-alt { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .theory-alt button { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-s); color: var(--ink); font: 700 12px var(--font-head); cursor: pointer; }
         .finger-pill-num {
             width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
             color: var(--accent-ink); font-size: 9px; font-weight: 900;
@@ -194,19 +204,26 @@
             <div class="piano-title">Piano <span class="acc">Acordes</span></div>
             <div class="piano-sub">Fingering · inversiones · teoría</div>
         </div>
-        <div class="hand-toggle">
+        <div class="hand-toggle dict-only">
             <button class="hand-btn on" data-hand="right" onclick="setHand('right',this)">☞ Derecha</button>
             <button class="hand-btn" data-hand="left" onclick="setHand('left',this)">☜ Izquierda</button>
         </div>
     </div>
 
+    <!-- Modo: diccionario o buscador inverso -->
+    <div class="hand-toggle mode-toggle" role="group" aria-label="Modo">
+        <button class="hand-btn on" data-mode="dict" onclick="setMode('dict')">Diccionario</button>
+        <button class="hand-btn" data-mode="find" onclick="setMode('find')">¿Qué acorde es?</button>
+    </div>
+    <div class="find-hint find-only">Toca las teclas que suenan (la más grave es el bajo) y te digo qué acorde forman.</div>
+
     <!-- Root notes -->
-    <div class="piano-root-scroll">
+    <div class="piano-root-scroll dict-only">
         <div id="rootGrid" class="piano-root-grid"></div>
     </div>
 
     <!-- Chord types -->
-    <div class="piano-type-scroll">
+    <div class="piano-type-scroll dict-only">
         <div id="typeRow" class="piano-type-row"></div>
     </div>
 
@@ -223,10 +240,14 @@
     </div>
 
     <!-- Inversions -->
-    <div class="piano-inv-row" id="invRow"></div>
+    <div class="piano-inv-row dict-only" id="invRow"></div>
+    <div class="find-actions find-only">
+        <button class="hand-btn" id="clearBtn" onclick="clearPicked()">Borrar teclas</button>
+        <button class="hand-btn" id="toDictBtn" onclick="openInDictionary()">Ver en el diccionario</button>
+    </div>
 
     <!-- Finger guide -->
-    <div class="finger-legend" id="fingerLegend">
+    <div class="finger-legend dict-only" id="fingerLegend">
         <span class="finger-legend-title">Dedos</span>
         <div class="finger-legend-pills" id="fingerPills"></div>
     </div>
@@ -245,10 +266,11 @@
 
     <!-- Theory card -->
     <div class="piano-theory-card">
-        <div class="theory-title">Construcción del acorde</div>
+        <div class="theory-title" id="theoryTitle">Construcción del acorde</div>
         <div class="theory-formula" id="theoryFormula">—</div>
         <div class="theory-intervals" id="theoryIntervals"></div>
         <div class="theory-desc" id="theoryDesc">—</div>
+        <div class="theory-alt find-only" id="theoryAlt"></div>
     </div>
 
 </div>
@@ -340,6 +362,10 @@ let chordType = CHORD_INTERVALS[store.get('type')] ? store.get('type') : 'maj';
 let inversion = 0;
 let leftHand  = false;
 let playStyle = store.get('style', 'block');   // 'block' (plaqué) | 'arp'
+let mode      = store.get('mode', 'dict');      // 'dict' | 'find' (¿qué acorde es?)
+let picked    = new Set(Array.isArray(store.get('picked')) ? store.get('picked') : []);   // teclas tocadas (MIDI)
+let found     = null;                           // Theory.identify de las teclas tocadas
+let foundIdx  = 0;                              // lectura elegida entre las posibles
 
 function setPlayStyle(style) {
     playStyle = style;
@@ -387,12 +413,18 @@ function currentChord() {
 const CHORD_THEORY_TYPE = { dom7: 'dom7', min7: 'min7' };
 
 function midiName(midi) {
+    if (mode === 'find') {   // escritas según el acorde reconocido (si lo hay)
+        const m = found && found.matches[foundIdx], p = ((midi % 12) + 12) % 12;
+        const i = m ? m.notes.findIndex(n => Theory.pc(n) === p) : -1;
+        return Theory.display(i >= 0 ? m.notes[i] : Theory.keyForPc(p), 'en');
+    }
     const c = currentChord();
     const i = c.pcs.indexOf(((midi % 12) + 12) % 12);
     return i >= 0 ? Theory.display(c.notes[i], 'en') : SHARP_NAMES[((midi % 12) + 12) % 12];
 }
 
 function getFingers() {
+    if (mode === 'find') return [];
     const n = CHORD_INTERVALS[chordType].length;
     const hand = leftHand ? 'left' : 'right';
     const table = FINGERING[hand][n] || FINGERING[hand][3];
@@ -430,6 +462,7 @@ function drawKeyboard() {
     canvas.width  = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     canvas.style.height = cssH + 'px';
+    canvas._geo = { W: cssW, H: cssH };
 
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
@@ -453,8 +486,9 @@ function drawKeyboard() {
     const bKeyCol = isDark ? '#18182a' : '#111118';
     const wBorder = isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)';
 
-    const midis    = currentMidis();
-    const rootMidi = BASE_MIDI + rootIdx;
+    const midis    = mode === 'find' ? [...picked] : currentMidis();
+    const fm       = mode === 'find' && found && found.matches[foundIdx];
+    const rootMidi = BASE_MIDI + (mode === 'find' ? (fm ? fm.rootPc : -100) : rootIdx);
     const sorted   = [...midis].sort((a, b) => a - b);
     const fingers  = getFingers();
 
@@ -593,7 +627,7 @@ async function playChord() {
 
     const now = piano.now;
     if (piano.status !== 'error') {
-        const midis = currentMidis();
+        const midis = mode === 'find' ? [...picked].sort((a, b) => a - b) : currentMidis();
         const noteNames = midis.map(m => SHARP_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1));
         if (playStyle === 'arp') {
             // Arpegio: sube y vuelve a la fundamental, nota a nota
@@ -619,6 +653,8 @@ async function playChord() {
 // ── UI updates ────────────────────────────────────────────────────
 function update() {
     drawKeyboard();
+    if (mode === 'find') { updateFind(); return; }
+    document.getElementById('theoryTitle').textContent = 'Construcción del acorde';
 
     const midis   = currentMidis();
     const typeObj = CHORD_TYPES.find(t => t.id === chordType);
@@ -660,6 +696,95 @@ function updateFingerLegend(midis) {
         const oct = Math.floor(m / 12) - 1 + (nm[0] === 'B' && pcM === 0 ? -1 : 0) + (nm[0] === 'C' && pcM === 11 ? 1 : 0);
         return `<span class="finger-pill"><span class="finger-pill-num">${f}</span>${nm}${oct} · ${FINGER_NAMES[f] || f}</span>`;
     }).join('');
+}
+
+// ── Buscador inverso ("¿Qué acorde es?") ─────────────────────────
+function setMode(m) {
+    mode = m;
+    store.set('mode', m);
+    document.body.dataset.mode = m;
+    document.querySelectorAll('.mode-toggle .hand-btn').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    if (m === 'find') identifyPicked();
+    update();
+}
+
+function identifyPicked() {
+    found = picked.size ? Theory.identify([...picked]) : null;
+    foundIdx = 0;
+    store.set('picked', [...picked]);
+}
+
+/** Tecla bajo un punto del teclado dibujado (las negras van encima). */
+function keyAt(x, y) {
+    const g = document.getElementById('pianoCanvas')._geo;
+    if (!g) return null;
+    const wW = g.W / N_WHITES, bW = wW * 0.60, bH = (g.H - 2) * 0.60;
+    if (y <= bH) {
+        for (let oct = 0; oct < DISPLAY_OCTS; oct++) {
+            for (const [semi, pos] of Object.entries(BLACK_XPOS)) {
+                const bx = (oct * 7 + pos) * wW - bW / 2;
+                if (x >= bx && x <= bx + bW) return BASE_MIDI + oct * 12 + +semi;
+            }
+        }
+    }
+    const i = Math.max(0, Math.min(N_WHITES - 1, Math.floor(x / wW)));
+    return BASE_MIDI + Math.floor(i / 7) * 12 + WHITE_IN_OCT[i % 7];
+}
+
+async function toggleKey(midi) {
+    if (picked.has(midi)) picked.delete(midi);
+    else {
+        picked.add(midi);
+        try { await piano.ready(); piano.note(SHARP_NAMES[midi % 12] + (Math.floor(midi / 12) - 1), piano.now, { dur: 0.8, gain: 0.7 }); } catch (_) {}
+    }
+    identifyPicked();
+    update();
+}
+
+function clearPicked() { picked.clear(); identifyPicked(); update(); }
+
+function chooseReading(i) { foundIdx = i; update(); }
+
+/** Lleva el acorde reconocido al diccionario (fundamental, tipo e inversión). */
+function openInDictionary() {
+    const m = found && found.matches[foundIdx];
+    if (!m || !CHORD_INTERVALS[m.type]) return;
+    rootIdx = m.rootPc; chordType = m.type;
+    store.set('root', rootIdx); store.set('type', chordType);
+    const inv = m.inversion === 'Fundamental' ? 0 : ['1ª inversión', '2ª inversión', '3ª inversión'].indexOf(m.inversion) + 1;
+    renderRootGrid(); renderTypeRow(); setMode('dict');
+    inversion = Math.max(0, Math.min(inv, CHORD_INTERVALS[chordType].length - 1));
+    renderInvButtons(); update();
+}
+
+function updateFind() {
+    const sorted = [...picked].sort((a, b) => a - b);
+    const m = found && found.matches[foundIdx];
+    const $ = id => document.getElementById(id);
+    $('theoryTitle').textContent = 'Qué acorde es';
+    $('notesRow').textContent = sorted.length ? sorted.map(midiName).join(' · ') : 'Ninguna tecla';
+    $('clearBtn').disabled = !sorted.length;
+    $('toDictBtn').disabled = !(m && CHORD_INTERVALS[m.type]);
+    $('theoryAlt').innerHTML = '';
+    if (m) {
+        const def = Theory.chordDef(m.type), slash = m.symbol.includes('/') ? '/' + Theory.display(m.symbol.split('/')[1], 'en') : '';
+        $('chordBig').textContent = Theory.display(m.root, 'en');
+        $('chordTypeLbl').textContent = def.sym + slash;
+        $('theoryFormula').textContent = `${m.name} · ${m.inversion}` + (m.omitted.length ? ' · sin la 5ª' : '');
+        $('theoryIntervals').innerHTML = def.deg.map((d, k) => `<span class="theory-interval-chip">${d} = ${Theory.display(m.notes[k], 'en')}</span>`).join('');
+        const others = found.matches.length - 1;
+        $('theoryDesc').textContent = others ? 'Estas notas también se pueden leer como (toca para verlo):' : 'Es la única lectura posible de estas notas.';
+        $('theoryAlt').innerHTML = found.matches.slice(0, 6).map((x, i) => i === foundIdx ? '' :
+            `<button onclick="chooseReading(${i})">${Theory.display(x.root, 'en')}${Theory.chordDef(x.type).sym}${x.symbol.includes('/') ? '/' + Theory.display(x.symbol.split('/')[1], 'en') : ''}</button>`).join('');
+    } else {
+        $('chordBig').textContent = sorted.length ? '?' : '—';
+        $('chordTypeLbl').textContent = '';
+        $('theoryFormula').textContent = found && found.interval ? `Intervalo: ${found.interval}` : sorted.length ? (found && found.pcs.length >= 3 ? 'No es un acorde conocido' : 'Toca al menos dos notas distintas') : 'Toca las teclas del acorde';
+        $('theoryIntervals').innerHTML = '';
+        $('theoryDesc').textContent = found && found.interval ? 'Con dos notas distintas hay un intervalo; añade una tercera para formar un acorde.'
+            : found && found.pcs.length >= 3 ? 'Prueba a quitar una nota de paso o una tensión: reconozco triadas, cuatriadas, sus, 6, 9, 11 y 13.'
+            : 'La nota más grave decide la inversión (por ejemplo C/E).';
+    }
 }
 
 // ── Selection handlers ────────────────────────────────────────────
@@ -728,12 +853,18 @@ function renderInvButtons() {
 // ── Init ──────────────────────────────────────────────────────────
 function init() {
     setPlayStyle(playStyle);
+    document.getElementById('pianoCanvas').addEventListener('click', e => {
+        if (mode !== 'find') return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const k = keyAt(e.clientX - r.left, e.clientY - r.top);
+        if (k !== null) toggleKey(k);
+    });
     const hb = document.querySelector(`.hand-btn[data-hand="${store.get('hand', 'right')}"]`);
     if (hb) setHand(hb.dataset.hand, hb);
     renderRootGrid();
     renderTypeRow();
     renderInvButtons();
-    update();
+    setMode(mode);
 
     window.addEventListener('resize', drawKeyboard);
     window.addEventListener('mt-theme-change', drawKeyboard);

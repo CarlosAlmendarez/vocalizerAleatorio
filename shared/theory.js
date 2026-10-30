@@ -134,7 +134,22 @@
     min7: { name: 'Menor 7',           sym: 'm7',   ivs: [[0,1],[3,3],[7,5],[10,7]],   deg: ['1','♭3','5','♭7'] },
     m7b5: { name: 'Semidisminuido',    sym: 'm7♭5', ivs: [[0,1],[3,3],[6,5],[10,7]],   deg: ['1','♭3','♭5','♭7'] },
     dim7: { name: 'Disminuido 7',      sym: '°7',   ivs: [[0,1],[3,3],[6,5],[9,7]],    deg: ['1','♭3','♭5','𝄫7'] },
-    add9: { name: 'Add 9',             sym: 'add9', ivs: [[0,1],[4,3],[7,5],[14,9]],   deg: ['1','3','5','9'] }
+    add9: { name: 'Add 9',             sym: 'add9', ivs: [[0,1],[4,3],[7,5],[14,9]],   deg: ['1','3','5','9'] },
+    // Más tipos (los usa sobre todo el buscador inverso, Theory.identify)
+    power:  { name: 'Quinta (power chord)', sym: '5',     ivs: [[0,1],[7,5]],                     deg: ['1','5'] },
+    maj6:   { name: 'Sexta',             sym: '6',      ivs: [[0,1],[4,3],[7,5],[9,6]],           deg: ['1','3','5','6'] },
+    min6:   { name: 'Menor sexta',       sym: 'm6',     ivs: [[0,1],[3,3],[7,5],[9,6]],           deg: ['1','♭3','5','6'] },
+    sus47:  { name: 'Séptima sus4',      sym: '7sus4',  ivs: [[0,1],[5,4],[7,5],[10,7]],          deg: ['1','4','5','♭7'] },
+    minMaj7:{ name: 'Menor con 7ª mayor', sym: 'm(maj7)', ivs: [[0,1],[3,3],[7,5],[11,7]],        deg: ['1','♭3','5','7'] },
+    aug7:   { name: 'Aumentado 7',       sym: '+7',     ivs: [[0,1],[4,3],[8,5],[10,7]],          deg: ['1','3','♯5','♭7'] },
+    madd9:  { name: 'Menor add 9',       sym: 'madd9',  ivs: [[0,1],[3,3],[7,5],[14,9]],          deg: ['1','♭3','5','9'] },
+    dom9:   { name: 'Novena',            sym: '9',      ivs: [[0,1],[4,3],[7,5],[10,7],[14,9]],   deg: ['1','3','5','♭7','9'] },
+    maj9:   { name: 'Mayor 9',           sym: 'maj9',   ivs: [[0,1],[4,3],[7,5],[11,7],[14,9]],   deg: ['1','3','5','7','9'] },
+    min9:   { name: 'Menor 9',           sym: 'm9',     ivs: [[0,1],[3,3],[7,5],[10,7],[14,9]],   deg: ['1','♭3','5','♭7','9'] },
+    six9:   { name: 'Seis nueve',        sym: '6/9',    ivs: [[0,1],[4,3],[7,5],[9,6],[14,9]],    deg: ['1','3','5','6','9'] },
+    dom7b9: { name: 'Séptima ♭9',        sym: '7♭9',    ivs: [[0,1],[4,3],[7,5],[10,7],[13,9]],   deg: ['1','3','5','♭7','♭9'] },
+    dom11:  { name: 'Once',              sym: '11',     ivs: [[0,1],[7,5],[10,7],[14,9],[17,11]], deg: ['1','5','♭7','9','11'] },
+    dom13:  { name: 'Trece',             sym: '13',     ivs: [[0,1],[4,3],[10,7],[14,9],[21,13]], deg: ['1','3','♭7','9','13'] }
   };
   // Alias usados por las apps
   var CHORD_ALIAS = { major: 'maj', minor: 'min', '7': 'dom7', m7: 'min7' };
@@ -171,6 +186,59 @@
       notes: notes, degrees: def.deg.slice(),
       pcs: notes.map(pc), semitones: def.ivs.map(function (iv) { return iv[0]; })
     };
+  }
+
+  /* ── Buscador inverso: qué acorde forman unas notas ───────────────── */
+  // Preferencia entre tipos que encajan igual de bien (lo más común primero)
+  var IDENTIFY_ORDER = ['maj', 'min', 'dom7', 'min7', 'maj7', 'sus4', 'sus2', 'dim', 'aug', 'm7b5', 'dim7', 'maj6', 'min6',
+                        'add9', 'madd9', 'sus47', 'dom9', 'min9', 'maj9', 'six9', 'minMaj7', 'aug7', 'dom7b9', 'dom11', 'dom13', 'power'];
+  var INTERVAL_NAMES = ['Unísono u octava', '2ª menor', '2ª mayor', '3ª menor', '3ª mayor', '4ª justa', 'Tritono',
+                        '5ª justa', '6ª menor', '6ª mayor', '7ª menor', '7ª mayor'];
+  var INVERSION_NAMES = { '3': '1ª inversión', '♭3': '1ª inversión', '5': '2ª inversión', '♭5': '2ª inversión', '♯5': '2ª inversión',
+                          '7': '3ª inversión', '♭7': '3ª inversión', '𝄫7': '3ª inversión', '6': '3ª inversión' };
+
+  /**
+   * Acordes que forman unas notas MIDI (el orden no importa; la más grave es el bajo):
+   *   identify([64, 67, 72]) → { notes, bass, interval, matches: [{ symbol:'C/E', name, root, type,
+   *                              inversion:'1ª inversión', omitted:['5'], exact }…] }   (mejor primero)
+   * Solo la 5ª justa puede faltar (como en los voicings); con dos notas distintas se nombra el intervalo.
+   */
+  function identify(midis) {
+    var sorted = (midis || []).slice().sort(function (a, b) { return a - b; });
+    var pcs = [];
+    sorted.forEach(function (m) { var p = mod(m, 12); if (pcs.indexOf(p) < 0) pcs.push(p); });
+    var out = { pcs: pcs, bass: sorted.length ? mod(sorted[0], 12) : null, interval: null, matches: [] };
+    if (pcs.length === 2) {
+      var iv = mod(pcs[1] - pcs[0], 12);
+      out.interval = INTERVAL_NAMES[mod(sorted[sorted.length - 1] - sorted[0], 12) === iv ? iv : mod(-iv, 12)];
+    }
+    if (pcs.length < 2) return out;
+    pcs.forEach(function (r) {
+      IDENTIFY_ORDER.forEach(function (type, rank) {
+        var def = CHORDS[type], tp = def.ivs.map(function (iv) { return mod(r + iv[0], 12); });
+        if (!pcs.every(function (p) { return tp.indexOf(p) >= 0; })) return;   // sobra una nota
+        var missing = [];
+        def.ivs.forEach(function (iv, k) { if (pcs.indexOf(tp[k]) < 0) missing.push(def.deg[k]); });
+        // Solo puede faltar la 5ª justa, y nunca en un power chord ni dejando menos de 3 notas (salvo el 5)
+        if (missing.some(function (d) { return d !== '5'; })) return;
+        if (missing.length && (type === 'power' || tp.length - missing.length < 3)) return;
+        if (type === 'power' && pcs.length !== 2) return;
+        var c = chord(bestRoot(r, type), type);
+        var bassIdx = c.pcs.indexOf(out.bass), bassDeg = def.deg[bassIdx];
+        var slash = out.bass !== r ? '/' + c.notes[bassIdx] : '';
+        out.matches.push({
+          root: c.root, rootPc: r, type: type, name: def.name, notes: c.notes,
+          symbol: c.symbol + slash, inversion: out.bass === r ? 'Fundamental' : (INVERSION_NAMES[bassDeg] || 'Bajo en ' + bassDeg),
+          omitted: missing, exact: !missing.length,
+          // Puntuación: notas completas, fundamental en el bajo, tipo común
+          score: (missing.length ? 0 : 100) + (out.bass === r ? 50 : 0) - rank
+        });
+      });
+    });
+    // Si algo encaja con todas sus notas, sobran las lecturas a las que les falta la 5ª
+    if (out.matches.some(function (m) { return m.exact; })) out.matches = out.matches.filter(function (m) { return m.exact; });
+    out.matches.sort(function (a, b) { return b.score - a.score; });
+    return out;
   }
 
   /* ── Escalas ───────────────────────────────────────────────────────── */
@@ -353,7 +421,7 @@
     LETTERS: LETTERS, ES: ES, CHORDS: CHORDS, SCALES: SCALES,
     parse: parse, spell: spell, pc: pc, midi: midi, display: display, simplify: simplify,
     fromRoot: fromRoot, enharmonics: enharmonics, rootButtonLabel: rootButtonLabel, bestRoot: bestRoot, bestScaleRoot: bestScaleRoot, chordDef: chordDef,
-    chord: chord, scale: scale, degreeRoot: degreeRoot,
+    chord: chord, scale: scale, degreeRoot: degreeRoot, identify: identify,
     transposeName: transposeName, keyForPc: keyForPc,
     findVoicing: findVoicing, findVoicings: findVoicings, checkVoicing: checkVoicing
   };

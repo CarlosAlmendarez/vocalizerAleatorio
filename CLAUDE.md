@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**MusicTools** — a static, buildless multi-page web app (Spanish UI) of ~13 standalone
-musician tools (vocalizer, tuner, metronome, chord dictionaries, ear training, circle of
-fifths, etc.). No framework, no bundler, no `package.json`. Every tool is a single
+**MusicTools** — a static, buildless multi-page web app (Spanish UI) of ~18 standalone
+musician tools (vocalizer, voice analysis/editing, tuner, metronome, chord dictionaries, ear
+training, circle of fifths, lyrics meter/rhyme, tone/noise generator, spectrum analyzer,
+studio calculators, etc.). No framework, no bundler, no `package.json`. Every tool is a single
 self-contained `apps/<tool>/index.html` with its CSS in a `<style>` block and its JS in an
 inline `<script>`. `index.html` at the repo root is the launcher/home screen.
 
@@ -27,6 +28,7 @@ inline `<script>`. `index.html` at the repo root is the launcher/home screen.
   - `ranges.test.js` — every note each app can play is inside its decoded `range`.
   - `melody.test.js` — voice analysis on synthetic singing: notes, cents, vibrato, legato, weak mic, cuts.
   - `psola.test.js` — pitch/timing/volume/timbre editing: targets reached, formants kept (or moved on purpose), limiter, unedited audio identical.
+  - `letras.test.js` — Spanish syllabification, metric count (synalepha, aguda/esdrújula) and rhyme on known verses.
   Arrays coming out of a `vm` context have a different prototype: compare with `plain()`.
   When fixing a bug, add a test that fails without the fix. Also load the affected page in a
   browser — there are no DOM/visual tests.
@@ -160,6 +162,7 @@ Theory.display('Eb4', 'es')           // 'Mi♭4'  — use for anything shown to
 Theory.rootButtonLabel(pc, 'es')      // 'Do♯' + <span class="enh-alt">Re♭</span>
 Theory.findVoicing({ tuning, pcs, optional, rootInBass, allowMute, minStrings })
 Theory.findVoicings(opts, 4)         // up to 4 positions in different neck areas, best first
+Theory.identify([64, 67, 72])        // reverse finder → matches[0]: { symbol:'C/E', inversion:'1ª inversión', omitted } 
 Theory.checkVoicing(frets, tuning, pcs, optional, rootInBass)
 ```
 

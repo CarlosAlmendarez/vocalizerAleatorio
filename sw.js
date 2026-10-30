@@ -10,14 +10,14 @@
  * Al cambiar la lista de archivos o la estrategia, subir VERSION.
  * ---------------------------------------------------------------------------
  */
-const VERSION     = 'mt-v6';
+const VERSION     = 'mt-v7';
 const SHELL_CACHE = VERSION + '-shell';
 const ASSET_CACHE = 'mt-assets-v1';   // instrumentos/fuentes: no cambian, sobreviven a versiones
 
 const APPS = [
   'vocalizer', 'analisis-vocal', 'afinador', 'acordes-guitarra', 'acordes-ukulele', 'acordes-bajo',
   'acordes-piano', 'escalas', 'metronomo', 'groove', 'transponer', 'quinta',
-  'progresiones', 'entrenamiento-auditivo'
+  'progresiones', 'entrenamiento-auditivo', 'letras', 'generador', 'analizador', 'calculadoras'
 ];
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',

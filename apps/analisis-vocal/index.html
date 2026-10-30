@@ -370,6 +370,13 @@
             <div class="section-title" style="margin:12px 0 8px !important">Más desafinadas</div>
             <div class="note-pills" id="sumWorst"></div>
         </div>
+        <div class="section-title" style="margin:14px 0 8px !important">Recortar</div>
+        <p class="av-hint" id="trimInfo">Toca la gráfica para poner el cabezal y marca dónde empieza y dónde termina lo que quieres conservar. Se aplica al escuchar y al descargar; no se borra nada.</p>
+        <div class="av-actions" style="margin-top:8px">
+            <button class="btn-ghost" onclick="setTrim('start')">Empieza en el cabezal</button>
+            <button class="btn-ghost" onclick="setTrim('end')">Termina en el cabezal</button>
+            <button class="btn-ghost" id="trimClearBtn" onclick="clearTrim()">Quitar recorte</button>
+        </div>
         <div class="av-actions">
             <button class="btn-ghost" onclick="downloadWav()" id="wavBtn">Descargar audio (WAV)</button>
             <button class="btn-ghost" onclick="downloadMidi()">Descargar MIDI</button>
@@ -618,7 +625,7 @@ async function startRecording(append, retry) {
         take = { id: null, name: '', created: 0, dirty: true, frames: [], curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: null, gain: 1, rawPeak: 0, duration: 0, joins: [], range: null,
                  key: null, keyName: null, scale: null, stats: null,
-                 edits: {}, cuts: [], shifts: null, tmap: null, gains: null, edited: null };
+                 edits: {}, cuts: [], shifts: null, tmap: null, gains: null, edited: null, trim: null };
         rec = { chunks: [], length: 0, maxPeak: 0 };
         selected = -1; cursor = 0;
         undoStack.length = redoStack.length = 0;
@@ -745,6 +752,7 @@ function finishTake() {
     fitRollHeight();
     renderEdits();
     renderSummary();
+    renderTrim();
     renderNote();
     requestDraw();
 }
@@ -781,7 +789,7 @@ function refreshEditMaps() {
     take.gains = take.notes.some(gainOf) ? Psola.gainsFor(take.frames, take.notes, take.edits) : null;
 }
 
-function snapshot() { return JSON.stringify({ edits: take.edits, cuts: take.cuts }); }
+function snapshot() { return JSON.stringify({ edits: take.edits, cuts: take.cuts, trim: take.trim || null }); }
 function pushUndo() {
     undoStack.push(snapshot());
     if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -791,7 +799,50 @@ function restore(json) {
     const s = JSON.parse(json);
     take.edits = s.edits;
     take.cuts = s.cuts;
+    take.trim = s.trim || null;
+    renderTrim();
     afterEdit(true);
+}
+
+/* ── Recorte (no destructivo): [inicio, fin] en segundos del audio que se oye ── */
+const trimRange = () => take && take.trim ? take.trim : [0, take ? take.duration : 0];
+
+function setTrim(which) {
+    if (!take || state === 'recording') return;
+    const [a, b] = trimRange(), t = Math.min(Math.max(0, cursor), take.duration);
+    const next = which === 'start' ? [t, b] : [a, t];
+    if (next[1] - next[0] < 0.2) {
+        $('trimInfo').textContent = which === 'start'
+            ? 'El inicio tiene que quedar antes del final: mueve el cabezal más a la izquierda.'
+            : 'El final tiene que quedar después del inicio: mueve el cabezal más a la derecha.';
+        return;
+    }
+    pushUndo();
+    take.trim = next[0] <= 0.005 && next[1] >= take.duration - 0.005 ? null : next;
+    take.dirty = true;
+    renderTrim();
+    updateUI();
+    requestDraw();
+    saveSoon();
+}
+
+function clearTrim() {
+    if (!take || !take.trim) return;
+    pushUndo();
+    take.trim = null;
+    take.dirty = true;
+    renderTrim();
+    requestDraw();
+    saveSoon();
+}
+
+function renderTrim() {
+    if (!take) return;
+    const [a, b] = trimRange(), f = s => s.toFixed(1).replace('.', ',') + ' s';
+    $('trimClearBtn').disabled = !take.trim;
+    $('trimInfo').textContent = take.trim
+        ? `Se conserva de ${f(a)} a ${f(b)} (${f(b - a)}): es lo que suena al escuchar y lo que se descarga.`
+        : 'Toca la gráfica para poner el cabezal y marca dónde empieza y dónde termina lo que quieres conservar. Se aplica al escuchar y al descargar; no se borra nada.';
 }
 function undo() { if (!take || !undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); }
 function redo() { if (!take || !redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); }
@@ -1031,18 +1082,20 @@ function startPlayback(from, to) {
     if (!take || !take.buffer || !soundEngine.ac) return;
     stopPlayback();
     const ac = soundEngine.ac;
-    if (to === undefined && from >= take.duration - 0.05) from = 0;
+    // Con recorte, la toma completa suena solo dentro de él
+    const [ta, tb] = trimRange(), whole = to === undefined;
+    if (whole && (from >= tb - 0.05 || from < ta)) from = ta;
+    if (whole) to = tb;
     const src = ac.createBufferSource();
     src.buffer = activeBuffer();
     src.connect(ac.destination);
     const when = ac.currentTime + 0.03;
-    if (to === undefined) src.start(when, from);
-    else src.start(when, from, Math.max(0.05, to - from));
+    src.start(when, from, Math.max(0.05, to - from));
     playback = { src, startAc: when, offset: from };
     src.onended = () => {
         if (!playback || playback.src !== src) return;
         playback = null;
-        cursor = to === undefined ? take.duration : from;
+        cursor = whole ? tb : from;
         state = 'ready';
         soundEngine.keepAwake(false);
         updateUI();
@@ -1470,6 +1523,16 @@ function draw() {
         };
         if (showEdited) strokeCurve(i => i < take.analyzed ? take.curve[i] : NaN, `rgba(${colors.inkRgb}, 0.25)`, 1, false);
         strokeCurve(curveAt, `rgba(${colors.inkRgb}, 0.8)`, 1.5, true);
+
+        // Recorte: lo que queda fuera, sombreado; los bordes, con línea discontinua
+        if (take.trim && state !== 'recording') {
+            const [ta, tb] = take.trim, xa = xOf(ta), xb = xOf(tb);
+            cx.fillStyle = `rgba(${colors.inkRgb}, 0.12)`;
+            if (xa > left) cx.fillRect(left, top, xa - left, ph);
+            if (xb < left + pw) cx.fillRect(xb, top, left + pw - xb, ph);
+            cx.fillStyle = colors.accent;
+            [xa, xb].forEach(x => { for (let y = top; y < top + ph; y += 10) cx.fillRect(x - 1, y, 2, 6); });
+        }
 
         // Uniones entre tramos (pausa → continuar)
         cx.fillStyle = colors.borderS;
@@ -1939,7 +2002,7 @@ async function saveTake(withAudio) {
     const meta = {
         id: take.id, name: take.name, created: take.created, updated: Date.now(),
         duration: take.duration, notes: take.notes.length, sampleRate: take.buffer.sampleRate,
-        gain: take.gain, rawPeak: take.rawPeak, joins: take.joins, edits: take.edits, cuts: take.cuts,
+        gain: take.gain, rawPeak: take.rawPeak, joins: take.joins, edits: take.edits, cuts: take.cuts, trim: take.trim || null,
         edited: hasEdits(), ft: ft.buffer, fm: fm.buffer, fr: fr.buffer,
     };
     const id = take.id, t = take;
@@ -1978,7 +2041,7 @@ async function openTake(id) {
         take = { id: meta.id, name: meta.name, created: meta.created, dirty: false, frames, curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: makeBuffer(data, meta.sampleRate), gain: meta.gain || 1, rawPeak: meta.rawPeak || 0,
                  duration: meta.duration, joins: meta.joins || [], range: null, key: null, keyName: null, scale: null, stats: null,
-                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, tmap: null, gains: null, edited: null };
+                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, tmap: null, gains: null, edited: null, trim: Array.isArray(meta.trim) ? meta.trim : null };
         undoStack.length = redoStack.length = 0;
         abMode = 'edit';
         state = 'ready';
@@ -2070,13 +2133,19 @@ function download(bytes, ext, type) {
 }
 function downloadWav() {
     const buf = activeBuffer();
-    if (buf) download(Melody.toWav(buf.getChannelData(0), buf.sampleRate), 'wav', 'audio/wav');
+    if (!buf) return;
+    const [a, b] = trimRange(), sr = buf.sampleRate;
+    download(Melody.toWav(buf.getChannelData(0).subarray(Math.round(a * sr), Math.round(b * sr)), sr), 'wav', 'audio/wav');
 }
 function downloadMidi() {
     if (!take || !take.notes.length) return;
-    // Con la vista "Editada", las notas van a su altura editada
-    const notes = take.notes.map(n => Object.assign({}, n, { note: Math.round(shownMidi(n)), start: shownT(n.start), end: shownT(n.end) }));
-    download(Melody.toMidiFile(notes), 'mid', 'audio/midi');
+    // Con la vista "Editada", las notas van a su altura y tiempo editados; con recorte, solo las de dentro
+    const [a, b] = trimRange();
+    const notes = take.notes
+        .map(n => Object.assign({}, n, { note: Math.round(shownMidi(n)), start: shownT(n.start), end: shownT(n.end) }))
+        .filter(n => n.end > a && n.start < b)
+        .map(n => Object.assign(n, { start: Math.max(0, n.start - a), end: Math.min(b, n.end) - a }));
+    if (notes.length) download(Melody.toMidiFile(notes), 'mid', 'audio/midi');
 }
 
 /* ── Arranque ── */

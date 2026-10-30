@@ -108,7 +108,7 @@ test('entrenamiento auditivo: miles de preguntas en todos los modos, niveles y d
   run(ctx, src.slice(src.indexOf('// ── Preguntas'), src.indexOf('// ── Flujo de juego')), 'ear-b');
   const midis = run(ctx, `(() => {
     const out = [];
-    for (const mode of ['notes', 'intervals', 'chords']) for (const diff of ['beginner', 'intermediate', 'expert'])
+    for (const mode of ['notes', 'intervals', 'chords', 'scales', 'rhythm', 'melody']) for (const diff of ['beginner', 'intermediate', 'expert'])
       for (const dir of ['up', 'down', 'harm']) {
         G.mode = mode; G.diff = diff; G.dir = dir;
         for (let i = 0; i < 150; i++) {
@@ -116,6 +116,8 @@ test('entrenamiento auditivo: miles de preguntas en todos los modos, niveles y d
           if (q.type === 'notes') out.push(noteToMidi(q.note));
           if (q.type === 'intervals') out.push(noteToMidi(q.root), noteToMidi(q.targetNote));
           if (q.type === 'chords') CHORD_SEMITONES[q.chordType].forEach(s => out.push(noteToMidi(q.root) + s));
+          if (q.type === 'scales' || q.type === 'melody') out.push(...q.notes);
+          if (q.type === 'rhythm') out.push(noteToMidi(q.note));
         }
       }
     return out;

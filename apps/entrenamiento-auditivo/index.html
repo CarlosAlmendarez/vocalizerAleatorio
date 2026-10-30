@@ -8,6 +8,8 @@
     <script src="../../shared/sound-engine.js"></script>
     <script src="../../shared/note-player.js"></script>
     <script src="../../shared/settings.js"></script>
+    <script src="../../shared/pitch.js"></script>
+    <script src="../../shared/melody.js"></script>
     <link rel="stylesheet" href="../../shared/design.css">
     <script src="../../shared/boot.js"></script>
     <style>
@@ -205,6 +207,28 @@
         .ear-ans-grid.g2 { grid-template-columns: 1fr 1fr; }
         .ear-ans-grid.g3 { grid-template-columns: 1fr 1fr 1fr; }
         .ear-ans-grid.g4 { grid-template-columns: 1fr 1fr; }
+        .ear-ans-grid.g1 { grid-template-columns: 1fr; }
+        /* Dictado rítmico: una casilla por semicorchea, agrupadas por pulso */
+        .rh-grid { display: flex; gap: 10px; justify-content: center; width: 100%; }
+        .rh-beat { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+        .rh-num { font-size: 10px; font-weight: 700; color: var(--muted); }
+        .rh-cells { display: flex; gap: 3px; }
+        .rh-cell { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border-s); }
+        .rh-cell.on { background: currentColor; border-color: currentColor; }
+        .rh-cell.sub { width: 9px; height: 9px; margin: 2px; }
+        .rh-legend { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; }
+        /* Dictado cantado */
+        .sing-card { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-s); }
+        .sing-btn { width: 100%; padding: 14px; border-radius: var(--radius-pill); border: none; cursor: pointer;
+                    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-ink); font: 800 16px var(--font-head); }
+        .sing-btn.on { background: linear-gradient(135deg, var(--danger), rgba(var(--danger-rgb), 0.75)); color: #fff; }
+        .sing-btn:disabled { opacity: 0.45; cursor: default; }
+        .sing-live { font: 800 28px var(--font-head); min-height: 34px; color: var(--ink); }
+        .sing-status { font-size: 12px; color: var(--ink-dim); text-align: center; min-height: 16px; }
+        .sing-res { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+        .sing-res span { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid var(--border); }
+        .sing-res .ok { color: var(--success); border-color: rgba(var(--success-rgb), 0.5); background: rgba(var(--success-rgb), 0.1); }
+        .sing-res .bad { color: var(--danger); border-color: rgba(var(--danger-rgb), 0.5); background: rgba(var(--danger-rgb), 0.1); }
         .ear-ans-btn {
             padding: 16px 8px; border-radius: 12px;
             border: 1px solid var(--border); background: var(--surface);
@@ -358,6 +382,33 @@
                         <div class="ear-mode-desc">Tipo de acorde</div>
                     </div>
                 </button>
+                <button class="ear-mode-card" id="mc-scales" onclick="selMode('scales',this)">
+                    <div class="ear-mode-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19h4v-4h4v-4h4V7h4"/></svg>
+                    </div>
+                    <div>
+                        <div class="ear-mode-name">Escalas</div>
+                        <div class="ear-mode-desc">Escalas y modos</div>
+                    </div>
+                </button>
+                <button class="ear-mode-card" id="mc-rhythm" onclick="selMode('rhythm',this)">
+                    <div class="ear-mode-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="17" r="2.5"/><circle cx="17" cy="15" r="2.5"/><path d="M8.5 17V6l11-2v11"/><path d="M8.5 9l11-2"/></svg>
+                    </div>
+                    <div>
+                        <div class="ear-mode-name">Ritmo</div>
+                        <div class="ear-mode-desc">Dictado rítmico</div>
+                    </div>
+                </button>
+                <button class="ear-mode-card" id="mc-melody" onclick="selMode('melody',this)">
+                    <div class="ear-mode-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                    </div>
+                    <div>
+                        <div class="ear-mode-name">Cantar</div>
+                        <div class="ear-mode-desc">Dictado melódico</div>
+                    </div>
+                </button>
             </div>
         </div>
 
@@ -403,7 +454,7 @@
     <div id="gameView" style="display:none;">
 
         <!-- Game piano -->
-        <div class="ear-piano-card">
+        <div class="ear-piano-card" id="gamePianoCard">
             <div class="ear-piano-hint" id="pianoHint">Toca la nota correcta</div>
             <div class="ear-piano-outer">
                 <div class="piano-wrap" id="piano2"></div>
@@ -414,6 +465,16 @@
         <div id="confirmCard" style="display:none;">
             <div class="ear-confirm-wrap">
                 <button class="ear-confirm-btn" id="btnConfirm" onclick="confirmNoteAnswer()">Confirmar nota</button>
+            </div>
+        </div>
+
+        <!-- Dictado cantado -->
+        <div id="singCard" style="display:none;">
+            <div class="sing-card">
+                <div class="sing-live" id="singLive">🎙</div>
+                <button class="sing-btn" id="singBtn" onclick="toggleSing()">🎙 Cantar ahora</button>
+                <div class="sing-status" id="singStatus">Escucha la frase y cántala. Puedes cantarla una octava más grave o más aguda.</div>
+                <div class="sing-res" id="singRes"></div>
             </div>
         </div>
 
@@ -492,23 +553,60 @@ const CHORD_SEMITONES = {
     m7:[0,3,7,10], maj7:[0,4,7,11], dim:[0,3,6], aug:[0,4,8]
 };
 
+// Escalas y modos (semitonos desde la tónica)
+const SCALE_DEFS = {
+    major:      { name: 'Mayor (jónico)',    st: [0, 2, 4, 5, 7, 9, 11] },
+    minor:      { name: 'Menor natural (eólico)', st: [0, 2, 3, 5, 7, 8, 10] },
+    harmMinor:  { name: 'Menor armónica',    st: [0, 2, 3, 5, 7, 8, 11] },
+    pentMajor:  { name: 'Pentatónica mayor', st: [0, 2, 4, 7, 9] },
+    pentMinor:  { name: 'Pentatónica menor', st: [0, 3, 5, 7, 10] },
+    blues:      { name: 'Blues',             st: [0, 3, 5, 6, 7, 10] },
+    dorian:     { name: 'Dórico',            st: [0, 2, 3, 5, 7, 9, 10] },
+    phrygian:   { name: 'Frigio',            st: [0, 1, 3, 5, 7, 8, 10] },
+    lydian:     { name: 'Lidio',             st: [0, 2, 4, 6, 7, 9, 11] },
+    mixolydian: { name: 'Mixolidio',         st: [0, 2, 4, 5, 7, 9, 10] },
+    locrian:    { name: 'Locrio',            st: [0, 1, 3, 5, 6, 8, 10] },
+};
+// Dictado rítmico: figuras de un pulso, en semicorcheas (1 = ataque)
+const BEAT_FIGS = {
+    q:    { cells: [1, 0, 0, 0], name: 'negra' },
+    ee:   { cells: [1, 0, 1, 0], name: 'dos corcheas' },
+    r:    { cells: [0, 0, 0, 0], name: 'silencio' },
+    ssss: { cells: [1, 1, 1, 1], name: 'cuatro semicorcheas' },
+    ess:  { cells: [1, 0, 1, 1], name: 'corchea y dos semicorcheas' },
+    sse:  { cells: [1, 1, 1, 0], name: 'dos semicorcheas y corchea' },
+    des:  { cells: [1, 0, 0, 1], name: 'corchea con puntillo y semicorchea' },
+    sync: { cells: [1, 1, 0, 1], name: 'semicorchea, corchea, semicorchea' },
+};
+const RHYTHM_NOTE = 'C5';
+const MELODY_ROOTS = [60, 62, 64, 65, 67];   // tónicas (Do4–Sol4): la frase cabe en una voz media
+
 const CFG = {
     beginner: {
         notes:     ['C4','D4','E4','F4','G4','A4','B4'],
         intervals: [2,4,5,7,12],
         chords:    ['major','minor'],
+        scales:    ['major', 'minor'],
+        rhythm:    { figs: ['q', 'ee', 'r'], bpm: 70 },
+        melody:    { len: 3, leap: 1 },   // leap: salto máximo en grados de la escala
         lives: 10,
     },
     intermediate: {
         notes:     ['C4','C#4','D4','D#4','E4','F4','F#4','G4','G#4','A4','A#4','B4'],
         intervals: [1,2,3,4,5,7,8,9,12],
         chords:    ['major','minor','7','m7'],
+        scales:    ['major', 'minor', 'harmMinor', 'pentMajor', 'pentMinor', 'blues'],
+        rhythm:    { figs: ['q', 'ee', 'r', 'ssss', 'ess', 'sse'], bpm: 80 },
+        melody:    { len: 4, leap: 3 },
         lives: 8,
     },
     expert: {
         notes: (()=>{ const n=[]; for(let m=60;m<=83;m++) n.push(NOTE_NAMES[m%12]+(Math.floor(m/12)-1)); return n; })(),
         intervals: [1,2,3,4,5,6,7,8,9,10,11,12],
         chords:    ['major','minor','7','m7','maj7','dim','aug'],
+        scales:    ['major', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'minor', 'locrian', 'harmMinor'],
+        rhythm:    { figs: ['q', 'ee', 'r', 'ssss', 'ess', 'sse', 'des', 'sync'], bpm: 90 },
+        melody:    { len: 5, leap: 5 },
         lives: 5,
     },
 };
@@ -528,6 +626,21 @@ const RULES = {
         beginner:     ['Escucha el acorde','Elige Mayor o Menor','2 opciones · 10 vidas'],
         intermediate: ['Escucha el acorde','Identifica el tipo entre 4 opciones · 8 vidas'],
         expert:       ['7 tipos de acorde posibles','Sin pistas visuales · 5 vidas'],
+    },
+    scales: {
+        beginner:     ['Escucha la escala ascendente','¿Mayor o menor?','10 vidas'],
+        intermediate: ['Mayor, menor, menor armónica, pentatónicas y blues','4 opciones · 8 vidas'],
+        expert:       ['Los 7 modos griegos y la menor armónica','Sube y baja · 5 vidas'],
+    },
+    rhythm: {
+        beginner:     ['Cuatro clics de entrada y un compás de 4/4','Elige el ritmo que sonó: negras, corcheas y silencios','Cada círculo es una semicorchea · 70 BPM · 10 vidas'],
+        intermediate: ['Se añaden semicorcheas y sus combinaciones','Las opciones solo cambian en un pulso: escucha bien · 80 BPM · 8 vidas'],
+        expert:       ['Puntillos y síncopas','90 BPM · 5 vidas'],
+    },
+    melody: {
+        beginner:     ['Escucha una frase de 3 notas por grados conjuntos','Pulsa "Cantar ahora" y cántala','Vale una octava más grave o más aguda (±50¢) · 10 vidas'],
+        intermediate: ['Frases de 4 notas con saltos pequeños','8 vidas'],
+        expert:       ['Frases de 5 notas con saltos de hasta una sexta','5 vidas'],
     },
 };
 
@@ -583,6 +696,125 @@ async function playInterval(rootNote, targetNote, dir) {
     pingKey('piano2', rootNote, 'k-ping', 350);
     // el resaltado de la segunda nota llega cuando esa nota suena de verdad
     if (!expertIntervals) piano.ui(now + gap, () => pingKey('piano2', targetNote, 'k-ping', 350));
+}
+
+const midiToName = m => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+
+async function playScale(q) {
+    await ensureAudio();
+    piano.cancel();
+    const now = piano.now, step = 0.32;
+    q.notes.forEach((m, i) => {
+        piano.note(midiToName(m), now + i * step, { dur: step * 1.4, gain: 0.82 });
+        piano.ui(now + i * step, () => pingKey('piano2', midiToName(m), 'k-ping', 250));
+    });
+}
+
+async function playRhythm(q) {
+    await ensureAudio();
+    piano.cancel();
+    const beat = 60 / q.bpm, now = piano.now + 0.05;
+    for (let b = 0; b < 4; b++) piano.click(now + b * beat);   // compás de entrada
+    const t0 = now + 4 * beat;
+    for (let b = 0; b < 4; b++) piano.click(t0 + b * beat);     // el pulso sigue sonando, flojo
+    q.cells.forEach((on, k) => { if (on) piano.note(q.note, t0 + k * beat / 4, { dur: beat / 4 * 0.9, gain: 0.9 }); });
+    document.getElementById('pianoHint').textContent = 'Cuenta: 1, 2, 3, 4…';
+    piano.ui(t0, () => { document.getElementById('pianoHint').textContent = '¡Ahora!'; });
+    piano.ui(t0 + 4 * beat, () => { document.getElementById('pianoHint').textContent = 'Elige el ritmo que sonó'; });
+}
+
+async function playMelody(q) {
+    await ensureAudio();
+    piano.cancel();
+    const now = piano.now, step = 0.7;
+    q.notes.forEach((m, i) => piano.note(midiToName(m), now + i * step, { dur: step * 0.95, gain: 0.85 }));
+    q.notes.forEach((m, i) => piano.ui(now + i * step, () => { if (!G.answered) pingKey('piano2', midiToName(m), 'k-ping', 400); }));
+    setSingEnabled(false);
+    piano.ui(now + q.notes.length * step, () => setSingEnabled(true));
+}
+
+// ── Dictado cantado: micrófono → shared/melody.js ────────────────
+let sing = null;   // { stream, src, proc, sink, an, t0, lastVoice }
+const SING_MAX_SEC = 15, SING_TAIL_SEC = 1.4;
+
+function setSingEnabled(on) {
+    const b = document.getElementById('singBtn');
+    if (b && !sing) b.disabled = !on || G.answered;
+}
+
+async function toggleSing() { if (sing) finishSing(); else await startSing(); }
+
+async function startSing() {
+    if (G.answered || G.phase !== 'playing' || G.question.type !== 'melody') return;
+    let stream;
+    try {
+        // Antes de cualquier await: en iPhone el permiso debe pedirse dentro del toque
+        stream = await soundEngine.getMic({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true }, video: false });
+    } catch (e) {
+        document.getElementById('singStatus').textContent = e.name === 'NotAllowedError' ? 'Permiso del micrófono denegado: actívalo en los ajustes del navegador.' : 'No se pudo usar el micrófono (' + e.name + ').';
+        return;
+    }
+    await soundEngine.start();
+    piano.cancel();
+    const ac = soundEngine.ac;
+    const src = ac.createMediaStreamSource(stream);
+    const proc = ac.createScriptProcessor(2048, 1, 1), sink = ac.createGain();
+    sink.gain.value = 0;
+    const an = Melody.createAnalyzer(ac.sampleRate);
+    sing = { stream, src, proc, sink, an, t0: performance.now(), lastVoice: 0, heard: false };
+    proc.onaudioprocess = e => {
+        if (!sing) return;
+        const fr = sing.an.push(e.inputBuffer.getChannelData(0));
+        const voiced = fr.filter(f => !isNaN(f.midi));
+        if (voiced.length) {
+            sing.heard = true; sing.lastVoice = performance.now();
+            const m = voiced[voiced.length - 1].midi;
+            document.getElementById('singLive').textContent = noteToSpanish(midiToName(Math.round(m)));
+        }
+        const el = (performance.now() - sing.t0) / 1000;
+        // Termina sola: silencio tras cantar, o el máximo
+        if ((sing.heard && performance.now() - sing.lastVoice > SING_TAIL_SEC * 1000) || el > SING_MAX_SEC) setTimeout(finishSing, 0);
+    };
+    src.connect(proc); proc.connect(sink); sink.connect(ac.destination);
+    const b = document.getElementById('singBtn');
+    b.classList.add('on'); b.textContent = '■ Terminar';
+    document.getElementById('singStatus').textContent = 'Te escucho… al callar 1,5 s se corrige sola.';
+    document.getElementById('singLive').textContent = '…';
+}
+
+function stopSing() {
+    if (!sing) return null;
+    const s = sing;
+    sing = null;
+    s.proc.onaudioprocess = null;
+    try { s.src.disconnect(); s.proc.disconnect(); s.sink.disconnect(); } catch (e) {}
+    s.stream.getTracks().forEach(t => t.stop());
+    soundEngine.releaseMic();
+    const b = document.getElementById('singBtn');
+    b.classList.remove('on'); b.textContent = '🎙 Cantar ahora';
+    return s;
+}
+
+function finishSing() {
+    const s = stopSing();
+    if (!s || G.answered) return;
+    const res = Melody.analyze(s.an.frames);
+    const sung = res.notes.filter(n => n.end - n.start >= 0.12).map(n => n.midi);
+    const q = G.question;
+    if (!sung.length) {
+        document.getElementById('singStatus').textContent = 'No te oí: acércate al micrófono y vuelve a intentarlo.';
+        document.getElementById('singLive').textContent = '🎙';
+        return;
+    }
+    const g = gradeMelody(q.notes, sung, 50);
+    document.getElementById('singRes').innerHTML = g.items.map(it =>
+        `<span class="${it.ok ? 'ok' : 'bad'}">${noteToSpanish(midiToName(it.want))}${it.ok ? ' ✓' : it.got == null ? ' · faltó' : ' · cantaste ' + noteToSpanish(midiToName(Math.round(it.got)))}</span>`).join('');
+    document.getElementById('singStatus').textContent = g.ok ? (g.shift ? `¡Bien! (una octava ${g.shift < 0 ? 'más grave' : 'más aguda'}, vale igual)` : '¡Bien cantada!')
+        : g.extra ? `Cantaste ${g.extra} ${g.extra === 1 ? 'nota de más' : 'notas de más'}.` : 'Escucha otra vez las que fallaron.';
+    document.getElementById('singLive').textContent = g.ok ? '✓' : '✗';
+    q.notes.forEach(m => setKeyState('piano2', midiToName(m), g.ok ? 'k-correct' : 'k-reveal'));
+    markAnswer(g.ok, q.notes.map(m => noteToSpanish(midiToName(m)).replace(/\d+$/, '')).join(' – '));
+    document.getElementById('singBtn').disabled = true;
 }
 
 // ── Piano ────────────────────────────────────────────────────────
@@ -720,6 +952,89 @@ function makeQuestion() {
                  text:'¿Qué tipo de acorde es este?',
                  choices: buildChordChoices(chordType, cfg.chords) };
     }
+    if (G.mode === 'scales') {
+        const scale = randNoRepeat(cfg.scales);
+        recordKey(scale);
+        const root = 60 + Math.floor(Math.random() * 8);   // Do4–Sol4: la octava completa cabe en el teclado
+        const up = SCALE_DEFS[scale].st.map(s => root + s).concat(root + 12);
+        const notes = G.diff === 'expert' ? up.concat(up.slice(0, -1).reverse()) : up;
+        const others = cfg.scales.filter(x => x !== scale); shuffle(others);
+        const chosen = [scale, ...others.slice(0, Math.min(4, cfg.scales.length) - 1)]; shuffle(chosen);
+        return { type: 'scales', scale, root: NOTE_NAMES[root % 12] + (Math.floor(root / 12) - 1), notes,
+                 text: '¿Qué escala es esta?', choices: chosen.map(v => ({ value: v, label: SCALE_DEFS[v].name })) };
+    }
+    if (G.mode === 'rhythm') return makeRhythm(cfg.rhythm);
+    if (G.mode === 'melody') return makeMelody(cfg.melody);
+}
+
+/** Un compás de 4/4 (4 figuras) y 3 alternativas que cambian una sola figura. */
+function makeRhythm(rc) {
+    const figs = rc.figs, pick = () => rand(figs);
+    let beats;
+    do { beats = [rand(figs.filter(f => f !== 'r')), pick(), pick(), pick()]; }   // el 1 siempre suena
+    while (randNoRepeatKey(beats.join()));
+    const key = b => b.join();
+    const options = [beats], seen = new Set([key(beats)]);
+    for (let tries = 0; options.length < 4 && tries < 200; tries++) {
+        const alt = beats.slice(), i = Math.floor(Math.random() * 4);
+        alt[i] = rand(figs.filter(f => f !== beats[i] && (i > 0 || f !== 'r')));
+        if (!seen.has(key(alt))) { seen.add(key(alt)); options.push(alt); }
+    }
+    shuffle(options);
+    const cells = b => b.flatMap(f => BEAT_FIGS[f].cells);
+    return { type: 'rhythm', beats, cells: cells(beats), bpm: rc.bpm, note: RHYTHM_NOTE,
+             text: '¿Qué ritmo sonó?', choices: options.map(o => ({ value: key(o), html: rhythmHtml(cells(o)) })) };
+}
+function randNoRepeatKey(k) { if (recentKeys.includes(k)) return true; recordKey(k); return false; }
+
+/** Casillas de un compás: 4 pulsos × 4 semicorcheas. */
+function rhythmHtml(cells) {
+    let h = '<div class="rh-grid">';
+    for (let b = 0; b < 4; b++) {
+        h += `<div class="rh-beat"><span class="rh-num">${b + 1}</span><div class="rh-cells">`;
+        for (let k = 0; k < 4; k++) h += `<span class="rh-cell${cells[b * 4 + k] ? ' on' : ''}${k ? ' sub' : ''}"></span>`;
+        h += '</div></div>';
+    }
+    return h + '</div>';
+}
+
+/** Frase en una escala mayor: grados conjuntos (principiante) o con saltos de hasta `leap` grados. */
+function makeMelody(mc) {
+    const root = rand(MELODY_ROOTS), st = SCALE_DEFS.major.st;
+    const deg = d => root + 12 * Math.floor(d / 7) + st[((d % 7) + 7) % 7];
+    let d = G.diff === 'beginner' ? 0 : rand([0, 2, 4]);
+    const degs = [d];
+    while (degs.length < mc.len) {
+        const opts = [];
+        for (let k = -mc.leap; k <= mc.leap; k++) if (k && d + k >= -2 && d + k <= 9 && deg(d + k) >= 60 && deg(d + k) <= 79) opts.push(d + k);   // dentro del piano (Do4–Sol5)
+        d = rand(opts);
+        degs.push(d);
+    }
+    const notes = degs.map(deg);
+    return { type: 'melody', root: NOTE_NAMES[root % 12] + (Math.floor(root / 12) - 1), notes,
+             text: `Escucha la frase de ${mc.len} notas y cántala` };
+}
+
+/**
+ * Compara lo cantado con la frase: notas detectadas (MIDI con decimales, en orden)
+ * frente a las pedidas, admitiendo cantarla 1 o 2 octavas más grave o aguda.
+ * → { ok, shift, items: [{ want, got, ok }] }
+ */
+function gradeMelody(target, sung, tolCents) {
+    const tol = (tolCents || 50) / 100;
+    // Notas repetidas seguidas (una nota partida por el análisis) cuentan como una
+    const merged = [];
+    sung.forEach(m => { if (!merged.length || Math.abs(m - merged[merged.length - 1]) > 0.6) merged.push(m); });
+    let best = null;
+    for (const shift of [-24, -12, 0, 12, 24]) {
+        const items = target.map((t, i) => {
+            const got = merged[i];
+            return { want: t, got: got == null ? null : got - shift, ok: got != null && Math.abs(got - shift - t) <= tol };
+        });
+        const hits = items.filter(x => x.ok).length;
+        if (!best || hits > best.hits) best = { hits, shift, items };
+    }
+    return { ok: best.hits === target.length && merged.length === target.length, shift: best.shift, items: best.items, extra: Math.max(0, merged.length - target.length) };
 }
 
 function buildIntervalChoices(correct, all) {
@@ -756,6 +1071,7 @@ async function startGame() {
     document.getElementById('ds').className = 'ear-feedback-card';
 
     show('btnStart', false); show('btnRetry', false); show('btnNext', false);
+    document.getElementById('gamePianoCard').style.display = G.mode === 'rhythm' ? 'none' : '';
     const showListen = !(G.mode === 'notes' && G.diff !== 'beginner');
     show('btnListen', showListen);
 
@@ -765,7 +1081,9 @@ async function startGame() {
 
 async function newQuestion() {
     G.answered = false; G.pendingNote = null;
+    stopSing();
     document.getElementById('confirmCard').style.display = 'none';
+    document.getElementById('singCard').style.display = 'none';
     G.question = makeQuestion(); G.qTotal++;
     document.getElementById('ds').className = 'ear-feedback-card';
     document.getElementById('qLabel').textContent = G.question.text;
@@ -791,11 +1109,31 @@ async function newQuestion() {
             setKeyState('piano2', G.question.root, 'k-root');
             scrollPianoToNote('piano2', G.question.root);
         }
-    } else {
+    } else if (G.mode === 'chords') {
         ansCard.style.display = 'block';
         document.getElementById('pianoHint').textContent = 'Escucha el acorde';
         document.getElementById('ansTitle').textContent  = 'Tipo de acorde';
         renderAnswerBtns(G.question.choices, v => checkChordAnswer(v));
+    } else if (G.mode === 'scales') {
+        ansCard.style.display = 'block';
+        document.getElementById('pianoHint').textContent = 'Escucha la escala';
+        document.getElementById('ansTitle').textContent  = 'Escala o modo';
+        renderAnswerBtns(G.question.choices, v => checkChoice(v, G.question.scale, SCALE_DEFS[G.question.scale].name));
+        setKeyState('piano2', G.question.root, 'k-root');
+        scrollPianoToNote('piano2', G.question.root);
+    } else if (G.mode === 'rhythm') {
+        ansCard.style.display = 'block';
+        document.getElementById('ansTitle').textContent  = 'Elige el ritmo (cada círculo = una semicorchea)';
+        renderAnswerBtns(G.question.choices, v => checkChoice(v, G.question.beats.join(), G.question.beats.map(f => BEAT_FIGS[f].name).join(' · ')), 'g1');
+    } else {
+        ansCard.style.display = 'none';
+        document.getElementById('singCard').style.display = 'block';
+        document.getElementById('singRes').innerHTML = '';
+        document.getElementById('singLive').textContent = '🎙';
+        document.getElementById('singStatus').textContent = 'Escucha la frase y cántala. Puedes cantarla una octava más grave o más aguda.';
+        document.getElementById('pianoHint').textContent = 'Escucha la frase · la primera nota es la tónica marcada';
+        setKeyState('piano2', midiToName(G.question.notes[0]), 'k-root');
+        scrollPianoToNote('piano2', midiToName(G.question.notes[0]));
     }
     await playQuestion();
 }
@@ -806,18 +1144,22 @@ async function playQuestion() {
     if (q.type === 'notes')     playNote(q.note);
     if (q.type === 'intervals') playInterval(q.root, q.targetNote, q.dir);
     if (q.type === 'chords')    playChord(q.root, q.chordType);
+    if (q.type === 'scales')    playScale(q);
+    if (q.type === 'rhythm')    playRhythm(q);
+    if (q.type === 'melody')    { if (sing) stopSing(); playMelody(q); }
 }
 
 function replayQ() { playQuestion(); }
 
-function renderAnswerBtns(choices, onSelect) {
+function renderAnswerBtns(choices, onSelect, forceCols) {
     const grid = document.getElementById('ansGrid');
-    const cols  = choices.length <= 2 ? 'g2' : choices.length <= 3 ? 'g3' : 'g4';
+    const cols  = forceCols || (choices.length <= 2 ? 'g2' : choices.length <= 3 ? 'g3' : 'g4');
     grid.className = 'ear-ans-grid ' + cols;
     grid.innerHTML = '';
     choices.forEach(c => {
         const btn = document.createElement('button');
-        btn.className = 'ear-ans-btn'; btn.textContent = c.label; btn.dataset.value = c.value;
+        btn.className = 'ear-ans-btn'; btn.dataset.value = c.value;
+        if (c.html) btn.innerHTML = c.html; else btn.textContent = c.label;
         btn.addEventListener('click', () => { if (!G.answered) onSelect(c.value); });
         grid.appendChild(btn);
     });
@@ -889,6 +1231,14 @@ function checkChordAnswer(selected) {
     highlightAnswerBtns(selected, G.question.chordType);
 }
 
+/** Respuesta de opción múltiple genérica (escalas, ritmo). */
+function checkChoice(selected, correct, label) {
+    if (G.answered) return;
+    const ok = selected === correct;
+    markAnswer(ok, label);
+    highlightAnswerBtns(selected, correct);
+}
+
 function highlightAnswerBtns(selected, correct) {
     document.querySelectorAll('#ansGrid .ear-ans-btn').forEach(btn => {
         btn.disabled = true;
@@ -901,6 +1251,9 @@ function highlightAnswerBtns(selected, correct) {
 function questionItem(q) {
     if (q.type === 'intervals') return INTERVAL_NAMES[q.semitones] + (q.dir === 'down' ? ' ↓' : q.dir === 'harm' ? ' (armónico)' : '');
     if (q.type === 'chords')    return CHORD_INTERVALS[q.chordType];
+    if (q.type === 'scales')    return SCALE_DEFS[q.scale].name;
+    if (q.type === 'rhythm')    return 'Ritmos a ' + q.bpm + ' BPM';
+    if (q.type === 'melody')    return 'Frases de ' + q.notes.length + ' notas';
     return noteToSpanish(q.note).replace(/\d+$/, '');
 }
 function recordItem(q, correct) {
@@ -955,6 +1308,7 @@ function nextQ() { show('btnNext', false); newQuestion(); }
 // ── Game Over ────────────────────────────────────────────────────
 function showGameOver() {
     G.phase = 'gameover';
+    stopSing();
     const acc = G.qTotal > 0 ? Math.round(G.qCorrect/G.qTotal*100) : 0;
     document.getElementById('gameView').style.display  = 'none';
     document.getElementById('goView').style.display    = 'block';
@@ -976,6 +1330,7 @@ function showGameOver() {
 // ── Lobby ────────────────────────────────────────────────────────
 function showLobby() {
     G.phase = 'lobby';
+    stopSing();
     document.getElementById('lobbyView').style.display = 'block';
     document.getElementById('gameView').style.display  = 'none';
     document.getElementById('goView').style.display    = 'none';

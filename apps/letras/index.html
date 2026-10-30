@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Letras - MusicTools</title>
+    <link rel="stylesheet" href="../../shared/design.css">
+    <script src="../../shared/boot.js"></script>
+    <script src="../../shared/settings.js"></script>
+    <style>
+        .lt-area { width: 100%; min-height: 170px; padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                   background: var(--surface); color: var(--ink); font: 500 16px/1.6 var(--font-sans); resize: vertical; box-sizing: border-box; }
+        .lt-area:focus { outline: none; border-color: rgba(var(--accent-rgb), .5); }
+        .lt-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
+        .lt-actions .diff-pill { flex: 0 0 auto; padding: 7px 14px; }
+        .lt-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+        .lt-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 8px 10px; }
+        .lt-stat-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+        .lt-stat-value { font: 800 18px var(--font-head); margin-top: 2px; letter-spacing: .04em; }
+        .lt-stat-hint { font-size: 11px; color: var(--ink-dim); }
+        .lt-stanza { display: flex; flex-direction: column; gap: 6px; }
+        .lt-stanza + .lt-stanza { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-s); }
+        .lt-line { display: grid; grid-template-columns: 38px 1fr 30px; gap: 10px; align-items: start; }
+        .lt-count { font: 900 22px var(--font-head); text-align: center; line-height: 1.1; color: var(--ink); }
+        .lt-count small { display: block; font: 600 9px var(--font-sans); color: var(--muted); letter-spacing: .04em; }
+        .lt-count.odd { color: var(--warning); }
+        .lt-text { font-size: 15px; color: var(--ink); line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+        .lt-syl { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+        .lt-syl .sl { color: var(--accent); font-weight: 700; }
+        .lt-syl .ton { color: var(--ink); font-weight: 800; text-decoration: underline; }
+        .lt-info { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+        .lt-rhyme { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 900 14px var(--font-head);
+                    border: 1px solid var(--border); color: var(--muted); }
+        .lt-rhyme.cons { color: var(--accent-ink); }
+        .lt-rhyme.ason { background: transparent; border-width: 2px; }
+        .lt-hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
+        .lt-check { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .lt-check-out { margin-top: 10px; font-size: 14px; color: var(--ink); min-height: 20px; }
+        .lt-check-out b { color: var(--accent); }
+        .lt-empty { color: var(--muted); font-size: 14px; margin: 0; }
+    </style>
+</head>
+<body data-page-id="letras" data-tool-name="Letras">
+<div class="app-card">
+    <div class="config-body">
+        <div class="section-card">
+            <div class="section-title">Tus versos</div>
+            <textarea class="lt-area" id="input" placeholder="Escribe o pega tu letra: un verso por línea, una línea en blanco entre estrofas." oninput="analyzeSoon()"></textarea>
+            <div class="lt-actions">
+                <button class="diff-pill" onclick="loadExample()">Ejemplo</button>
+                <button class="diff-pill" onclick="clearText()">Limpiar</button>
+            </div>
+            <p class="lt-hint">Cuenta las sílabas como en poesía y canción: une vocales entre palabras (sinalefa, <span style="color:var(--accent);font-weight:700">‿</span>),
+                suma una si el verso acaba en palabra aguda y resta una si es esdrújula. Ignora acordes entre corchetes [Am] y directivas {…}.</p>
+        </div>
+
+        <div class="section-card" id="summaryCard" hidden>
+            <div class="section-title">Resumen</div>
+            <div class="lt-summary" id="summary"></div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Verso a verso</div>
+            <div id="lines"><p class="lt-empty">Aquí verás las sílabas y la rima de cada verso.</p></div>
+            <p class="lt-hint">Letra mayúscula = rima consonante (igual desde la vocal tónica: <i>canción / corazón</i>).
+                Círculo de borde = rima asonante (solo las vocales: <i>luna / pluma</i>). Subrayada, la sílaba tónica final.</p>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">¿Riman?</div>
+            <div class="lt-check">
+                <input type="text" id="w1" placeholder="Primera palabra" oninput="checkPair()" autocapitalize="off">
+                <input type="text" id="w2" placeholder="Segunda palabra" oninput="checkPair()" autocapitalize="off">
+            </div>
+            <div class="lt-check-out" id="pairOut"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  LÓGICA PURA (sin DOM; la usan las pruebas)
+//  Silabeo del español, métrica (sinalefa y ley del acento final) y rima.
+// ══════════════════════════════════════════════
+const STRONG = 'aeoáéóíú';                 // fuertes (y las débiles con tilde, que forman hiato)
+const ACCENTED = 'áéíóú';
+const VOWELS = 'aeiouáéíóúü';
+const CLUSTERS = ['pr', 'br', 'tr', 'dr', 'cr', 'kr', 'gr', 'fr', 'pl', 'bl', 'cl', 'kl', 'gl', 'fl', 'tl'];
+const METER_NAMES = { 2: 'bisílabo', 3: 'trisílabo', 4: 'tetrasílabo', 5: 'pentasílabo', 6: 'hexasílabo', 7: 'heptasílabo',
+                      8: 'octosílabo', 9: 'eneasílabo', 10: 'decasílabo', 11: 'endecasílabo', 12: 'dodecasílabo',
+                      13: 'tridecasílabo', 14: 'alejandrino' };
+
+/** ¿La letra i de la palabra es vocal? (u muda en que/qui/gue/gui; y vocal al final o ante consonante) */
+function isVowelAt(w, i) {
+    const c = w[i];
+    if (c === 'y') return w === 'y' || (i > 0 && i === w.length - 1);
+    if (!VOWELS.includes(c)) return false;
+    if (c === 'u' && i > 0 && (w[i - 1] === 'q' || w[i - 1] === 'g') && 'eéií'.includes(w[i + 1] || '')) return false;
+    return true;
+}
+
+/** Sílabas de una palabra (minúsculas, solo letras) con la tónica marcada. */
+function syllabify(word) {
+    const w = word.toLowerCase();
+    // y final de palabra o ante consonante ("rey", "hoy", "muy") suena vocal
+    const vow = [...w].map((c, i) => isVowelAt(w, i));
+    // Núcleos: tramos de vocales, partidos donde hay hiato (dos fuertes, o débil con tilde junto a otra)
+    const nuclei = [];
+    for (let i = 0; i < w.length; i++) {
+        if (!vow[i]) continue;
+        const prevV = i > 0 && vow[i - 1];
+        const hiatus = prevV && (STRONG.includes(w[i]) && STRONG.includes(w[i - 1]) || 'íú'.includes(w[i]) || 'íú'.includes(w[i - 1]));
+        if (prevV && !hiatus) nuclei[nuclei.length - 1][1] = i;
+        else nuclei.push([i, i]);
+    }
+    if (!nuclei.length) return { syl: [w], stress: 0, nuclei: [] };
+    // Fronteras entre núcleos según las consonantes de en medio (ch, ll, rr, qu y gu cuentan como una)
+    const cuts = [];
+    for (let k = 0; k + 1 < nuclei.length; k++) {
+        const a = nuclei[k][1] + 1, b = nuclei[k + 1][0];
+        const units = [];
+        for (let i = a; i < b; i++) {
+            const two = w.slice(i, i + 2);
+            if (['ch', 'll', 'rr'].includes(two) || (two === 'qu' || two === 'gu') && !vow[i + 1]) { units.push([i, two]); i++; }
+            else units.push([i, w[i]]);
+        }
+        const n = units.length, cl = (u, v) => CLUSTERS.includes(u[1] + v[1]);
+        let at;
+        if (n === 0) at = b;
+        else if (n === 1) at = units[0][0];
+        else if (n === 2) at = cl(units[0], units[1]) ? units[0][0] : units[1][0];
+        else if (n === 3) at = cl(units[1], units[2]) ? units[1][0] : units[2][0];
+        else at = units[n - 2][0];
+        cuts.push(at);
+    }
+    const syl = [];
+    let s = 0;
+    cuts.forEach(c => { syl.push(w.slice(s, c)); s = c; });
+    syl.push(w.slice(s));
+    // Tónica: la de la tilde; si no, llana si acaba en vocal, n o s; aguda si no
+    let stress = nuclei.findIndex(([x, y]) => [...w.slice(x, y + 1)].some(c => ACCENTED.includes(c)));
+    if (stress < 0) {
+        const last = w[w.length - 1];
+        stress = nuclei.length === 1 ? 0 : 'aeiouns'.includes(last) ? nuclei.length - 2 : nuclei.length - 1;
+    }
+    return { syl, stress, nuclei };
+}
+
+/** Palabras de un verso (sin acordes [Am], signos ni números). */
+function wordsOf(line) {
+    return line.replace(/\[[^\]]*\]/g, '').toLowerCase().replace(/[^a-záéíóúüñ\s'-]/g, ' ').split(/[\s'-]+/).filter(Boolean);
+}
+
+const startsVowel = w => VOWELS.includes(w[0]) || w[0] === 'y' && w.length === 1 || w[0] === 'h' && VOWELS.includes(w[1] || '');
+const endsVowel = w => VOWELS.includes(w[w.length - 1]) || (w[w.length - 1] === 'y' && w.length > 1 && !VOWELS.includes(w[w.length - 2])) || w === 'y';
+
+/**
+ * Métrica de un verso:
+ *   { count, phon, end: 'aguda'|'llana'|'esdrújula', parts: [{ text, tonic, sinalefa }], last }
+ * count = sílabas métricas (con sinalefas y la ley del acento final).
+ */
+function scanLine(line) {
+    const words = wordsOf(line);
+    if (!words.length) return null;
+    const parts = [];
+    let phon = 0;
+    words.forEach((w, wi) => {
+        const r = syllabify(w);
+        phon += r.syl.length;
+        r.syl.forEach((sy, si) => {
+            const join = si === 0 && wi > 0 && endsVowel(words[wi - 1]) && startsVowel(w);
+            if (join) parts[parts.length - 1].text += '‿' + sy, parts[parts.length - 1].sinalefa = true;
+            else parts.push({ text: sy, tonic: false, sinalefa: false });
+            if (wi === words.length - 1 && si === r.stress) parts[parts.length - 1].tonic = true;
+        });
+    });
+    const lastR = syllabify(words[words.length - 1]);
+    const fromEnd = lastR.syl.length - 1 - lastR.stress;
+    const end = fromEnd === 0 ? 'aguda' : fromEnd === 1 ? 'llana' : 'esdrújula';
+    const count = parts.length + (end === 'aguda' ? 1 : end === 'esdrújula' ? -1 : 0);
+    return { count, phon, end, parts, last: words[words.length - 1] };
+}
+
+/** Sonido para comparar rimas: sin tildes ni h; b=v, s=z=c(e,i), y=ll, k=c=qu, j=g(e,i). */
+function soundOf(s) {
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/h/g, '').replace(/v/g, 'b').replace(/qu(?=[ei])/g, 'k').replace(/gu(?=[ei])/g, 'g')
+        .replace(/c(?=[ei])/g, 's').replace(/z/g, 's').replace(/c/g, 'k').replace(/ll/g, 'y').replace(/g(?=[ei])/g, 'j');
+}
+
+/** Claves de rima de una palabra: consonante (desde la vocal tónica) y asonante (sus vocales). */
+function rhymeKeys(word) {
+    const w = word.toLowerCase(), r = syllabify(w);
+    if (!r.nuclei.length) return null;
+    const [x, y] = r.nuclei[r.stress];
+    // Dentro del núcleo tónico, la vocal que lleva el acento: la de la tilde, si no la fuerte, si no la última
+    let v = -1;
+    for (let i = x; i <= y; i++) if (ACCENTED.includes(w[i])) v = i;
+    if (v < 0) for (let i = x; i <= y; i++) if ('aeo'.includes(w[i])) { v = i; break; }
+    if (v < 0) v = y;
+    const plain = c => c.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const strongOf = (a, b) => { const seg = w.slice(a, b + 1); const m = [...seg].find(c => 'aeoáéó'.includes(c)); return plain(m || seg[seg.length - 1]); };
+    // Asonante: vocal tónica + la de la última sílaba (en las esdrújulas se salta la del medio)
+    const ason = [plain(w[v])];
+    if (r.stress < r.nuclei.length - 1) { const [a, b] = r.nuclei[r.nuclei.length - 1]; ason.push(strongOf(a, b)); }
+    return { cons: soundOf(w.slice(v)), ason: ason.join('-') };
+}
+
+/** ¿Riman dos palabras? → 'consonante' | 'asonante' | null */
+function rhymeType(a, b) {
+    const ka = rhymeKeys(a), kb = rhymeKeys(b);
+    if (!ka || !kb) return null;
+    if (ka.cons === kb.cons) return 'consonante';
+    if (ka.ason === kb.ason) return 'asonante';
+    return null;
+}
+
+/** Esquema de rima de una estrofa: letras (mayúscula = consonante, minúscula = asonante, - = suelto). */
+function rhymeScheme(lastWords) {
+    const keys = lastWords.map(w => w ? rhymeKeys(w) : null);
+    // Grupos: primero los consonantes; con lo que sobra, los asonantes
+    const group = new Array(keys.length).fill(-1), groups = [];
+    [['cons', true], ['ason', false]].forEach(([field, cons]) => {
+        keys.forEach((k, i) => {
+            if (!k || group[i] >= 0) return;
+            const same = keys.map((o, j) => j > i && o && group[j] < 0 && o[field] === k[field] ? j : -1).filter(j => j >= 0);
+            if (!same.length) return;
+            groups.push({ cons, first: i });
+            [i, ...same].forEach(j => { group[j] = groups.length - 1; });
+        });
+    });
+    // Letras por orden de aparición (ABAB, no BABA); mayúscula = consonante
+    const order = groups.map((g, gi) => gi).sort((a, b) => groups[a].first - groups[b].first);
+    const letterOf = {};
+    order.forEach((gi, n) => { const l = String.fromCharCode(65 + n); letterOf[gi] = groups[gi].cons ? l : l.toLowerCase(); });
+    return group.map(g => g < 0 ? '-' : letterOf[g]);
+}
+
+/** Nombre de estrofas conocidas (4 versos). */
+function stanzaName(counts, scheme) {
+    if (counts.length !== 4) return '';
+    const s = scheme.join(''), all = n => counts.every(c => c === n), art = counts.every(c => c >= 2 && c <= 8);
+    if (all(11) && s === 'ABBA') return 'Cuarteto';
+    if (all(11) && s === 'ABAB') return 'Serventesio';
+    if (art && s === 'ABBA') return 'Redondilla';
+    if (art && s === 'ABAB') return 'Cuarteta';
+    if (art && /^-a-a$/.test(s)) return 'Copla';
+    return '';
+}
+// ── Fin de la lógica pura ──
+
+/* ════════════════════════════════════════════════════
+   LETRAS — métrica y rima para letristas: sílabas métricas de cada verso,
+   esquema de rima por estrofa y comprobador de rimas entre dos palabras.
+   ════════════════════════════════════════════════════ */
+const store = createStore('letras');
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Colores de las rimas: tonos de los tokens del tema, para que funcione en los tres
+const RHYME_COLORS = ['var(--accent)', 'var(--accent2)', 'var(--success)', 'var(--warning)', 'var(--danger)', 'var(--ink-dim)'];
+
+let timer = null;
+function analyzeSoon() { clearTimeout(timer); timer = setTimeout(analyze, 150); }
+
+function analyze() {
+    const text = $('input').value;
+    store.set('text', text);
+    const stanzas = text.replace(/\r/g, '').split(/\n\s*\n/)
+        .map(st => st.split('\n').filter(l => l.trim() && !/^\s*\{.*\}\s*$/.test(l)))
+        .filter(st => st.length);
+    if (!stanzas.length) {
+        $('lines').innerHTML = '<p class="lt-empty">Aquí verás las sílabas y la rima de cada verso.</p>';
+        $('summaryCard').hidden = true;
+        return;
+    }
+    const allCounts = [];
+    const schemes = [];
+    $('lines').innerHTML = stanzas.map(st => {
+        const scans = st.map(scanLine);
+        const scheme = rhymeScheme(scans.map(s => s && s.last));
+        const counts = scans.filter(Boolean).map(s => s.count);
+        allCounts.push(...counts);
+        const name = stanzaName(counts, scheme);
+        schemes.push({ s: scheme.join(''), name });
+        const mode = counts.length ? counts.slice().sort((a, b) => counts.filter(v => v === b).length - counts.filter(v => v === a).length)[0] : 0;
+        return '<div class="lt-stanza">' + st.map((line, i) => {
+            const s = scans[i];
+            if (!s) return '';
+            const letter = scheme[i], cons = letter !== '-' && letter === letter.toUpperCase();
+            const idx = letter === '-' ? -1 : (letter.toUpperCase().charCodeAt(0) - 65) % RHYME_COLORS.length;
+            const col = idx < 0 ? '' : RHYME_COLORS[idx];
+            const syl = s.parts.map(p => {
+                const t = esc(p.text).replace(/‿/g, '<span class="sl">‿</span>');
+                return p.tonic ? `<span class="ton">${t}</span>` : t;
+            }).join('-');
+            const k = rhymeKeys(s.last);
+            const adj = s.end === 'aguda' ? '+1' : s.end === 'esdrújula' ? '−1' : '±0';
+            return `<div class="lt-line">
+                <div class="lt-count${counts.length > 1 && s.count !== mode ? ' odd' : ''}">${s.count}<small>${s.phon} + ${s.end === 'llana' ? '0' : adj}</small></div>
+                <div><div class="lt-text">${esc(line.replace(/\[[^\]]*\]/g, ''))}</div>
+                     <div class="lt-syl">${syl}</div>
+                     <div class="lt-info">${s.end}${METER_NAMES[s.count] ? ' · ' + METER_NAMES[s.count] : ''}${k ? ` · rima en «-${esc(s.last.slice(-Math.max(1, k.cons.length)))}» (${k.ason})` : ''}</div></div>
+                <div class="lt-rhyme ${letter === '-' ? '' : cons ? 'cons' : 'ason'}" style="${col ? (cons ? `background:${col};border-color:${col}` : `border-color:${col};color:${col}`) : ''}">${letter}</div>
+            </div>`;
+        }).join('') + '</div>';
+    }).join('');
+
+    const freq = {};
+    allCounts.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+    const regular = top.length === 1;
+    $('summaryCard').hidden = false;
+    $('summary').innerHTML =
+        `<div class="lt-stat"><div class="lt-stat-label">Versos</div><div class="lt-stat-value">${allCounts.length}</div><div class="lt-stat-hint">${stanzas.length} ${stanzas.length === 1 ? 'estrofa' : 'estrofas'}</div></div>` +
+        `<div class="lt-stat"><div class="lt-stat-label">Medida</div><div class="lt-stat-value">${regular ? top[0][0] : top.slice(0, 3).map(t => t[0]).join(' · ')}</div>` +
+        `<div class="lt-stat-hint">${regular ? (METER_NAMES[top[0][0]] ? 'todos ' + METER_NAMES[top[0][0]] + 's' : 'todos iguales') : 'sílabas más frecuentes; en ámbar los que se salen'}</div></div>` +
+        `<div class="lt-stat"><div class="lt-stat-label">Rima</div><div class="lt-stat-value">${esc(schemes.slice(0, 3).map(x => x.s).join(' · '))}${schemes.length > 3 ? '…' : ''}</div>` +
+        `<div class="lt-stat-hint">${esc([...new Set(schemes.map(x => x.name).filter(Boolean))].join(', ').toLowerCase() || 'esquema por estrofa')}</div></div>`;
+}
+
+function checkPair() {
+    const a = $('w1').value.trim().split(/\s+/).pop() || '', b = $('w2').value.trim().split(/\s+/).pop() || '';
+    const clean = w => wordsOf(w)[0] || '';
+    const x = clean(a), y = clean(b);
+    if (!x || !y) { $('pairOut').textContent = ''; return; }
+    const t = rhymeType(x, y), kx = rhymeKeys(x), ky = rhymeKeys(y);
+    $('pairOut').innerHTML = t === 'consonante' ? `Sí: rima <b>consonante</b> (suenan igual desde la vocal tónica).`
+        : t === 'asonante' ? `Sí: rima <b>asonante</b> (${esc(kx.ason)}): coinciden las vocales, no las consonantes.`
+        : `No riman: «${esc(x)}» suena en ${esc(kx ? kx.ason : '?')} y «${esc(y)}» en ${esc(ky ? ky.ason : '?')}.`;
+}
+
+function loadExample() {
+    $('input').value = 'Caminante, son tus huellas\nel camino y nada más;\nCaminante, no hay camino,\nse hace camino al andar.\n\nVerde que te quiero verde.\nVerde viento. Verdes ramas.\nEl barco sobre la mar\ny el caballo en la montaña.';
+    analyze();
+}
+function clearText() { $('input').value = ''; analyze(); }
+
+window.addEventListener('load', () => {
+    $('input').value = store.get('text', '');
+    analyze();
+});
+</script>
+<script src="../../shared/shell.js"></script>
+</body>
+</html>
