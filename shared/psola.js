@@ -2,24 +2,30 @@
  * MusicTools — PSOLA
  * ---------------------------------------------------------------------------
  * Edición de una voz grabada (fase 2 de analisis-vocal), al estilo Melodyne:
- * cambiar la nota, afinarla, aplanar su vibrato, moverla en el tiempo o
- * alargarla/acortarla, SIN efecto "ardilla". TD-PSOLA: la voz se corta en
+ * cambiar la nota, afinarla, aplanar su vibrato, moverla en el tiempo,
+ * alargarla/acortarla, cambiar su volumen o su timbre, SIN efecto "ardilla". TD-PSOLA: la voz se corta en
  * granos de dos periodos centrados en cada pulso glótico y se vuelven a
  * solapar más juntos (más agudo) o más separados (más grave); para el tiempo,
  * los granos se repiten (más larga) o se saltan (más corta). Cada grano
- * conserva su forma, y con ella el timbre (los formantes).
+ * conserva su forma, y con ella el timbre (los formantes); para cambiar el
+ * timbre a propósito, cada grano se comprime (más brillante) o se estira (más
+ * oscuro) sin cambiar su separación, así que la nota no se mueve.
  *
  *   const shifts = Psola.shiftsFor(frames, curve, notes, edits);
  *       edits[note.i0] = { target: MIDI con decimales (altura deseada), flatten: 0..1,
- *                          ds, de: segundos que se mueven el inicio y el final de la nota }
+ *                          ds, de: segundos que se mueven el inicio y el final de la nota,
+ *                          gain: dB, formant: semitonos de timbre (+ brillante, − oscuro) }
  *       → semitonos de cambio por frame (suavizados en los bordes de cada nota)
+ *   Psola.formantsFor(frames, notes, edits) / Psola.gainsFor(frames, notes, edits)
+ *       → semitonos de timbre / dB por frame, igual de suavizados
  *   const map = Psola.timeMap(notes, edits, duration);   // null si nada se movió en el tiempo
  *   Psola.toOut(map, t) / Psola.toIn(map, t)             // instante original ↔ editado
- *   const out = Psola.render(samples, sampleRate, frames, curve, shifts, map);
+ *   const out = Psola.render(samples, sampleRate, frames, curve, shifts, map, { formants, gains });
  *       → Float32Array del mismo largo; fuera de lo editado, idéntico al original
  *
  * frames/curve vienen de shared/melody.js (un frame cada 10 ms). Natural hasta
- * ±3 semitonos y entre ×0,5 y ×2 de duración. Al mover una nota, su ataque
+ * ±3 semitonos, entre ×0,5 y ×2 de duración y ±3 semitonos de timbre. Con
+ * volumen subido, un limitador suave evita que la señal pase de ±1. Al mover una nota, su ataque
  * (consonante) y su final viajan con ella; lo que cede es el silencio de al lado.
  * ---------------------------------------------------------------------------
  */
@@ -31,6 +37,8 @@
   var PAD         = 5;       // frames de margen alrededor de cada zona editada
   var ATTACK_SEC  = 0.06;    // antes de cada nota: viaja con ella (consonante, respiración)
   var RELEASE_SEC = 0.04;    // después de cada nota: ídem (cola)
+  var LIMIT       = 0.95;    // a partir de aquí, el volumen subido se comprime suavemente…
+  var CEIL        = 0.99;    // …sin llegar nunca a este pico
 
   /* ── Cambio de altura por frame a partir de las ediciones de cada nota ── */
   function shiftsFor(frames, curve, notes, edits) {
@@ -46,8 +54,12 @@
         s[i] = target + (p - note.midi) * keep - p;
       }
     });
-    // Suavizado (±30 ms): sin saltos bruscos de altura en los bordes de las notas
-    var out = new Float32Array(n), R = 3;
+    return smooth(s);
+  }
+
+  /** Suavizado (±30 ms): sin saltos bruscos en los bordes de las notas. */
+  function smooth(s) {
+    var n = s.length, out = new Float32Array(n), R = 3;
     for (var i = 0; i < n; i++) {
       var sum = 0, cnt = 0;
       for (var j = Math.max(0, i - R); j <= Math.min(n - 1, i + R); j++) { sum += s[j]; cnt++; }
@@ -55,6 +67,25 @@
     }
     return out;
   }
+
+  /**
+   * Un valor de la edición (key) por frame. Abarca también el ataque y la cola de
+   * la nota (la consonante suena igual de fuerte o con el mismo timbre que la vocal),
+   * sin llegar a la mitad del silencio que la separa de sus vecinas.
+   */
+  function perNote(frames, notes, edits, key) {
+    var n = frames.length, s = new Float32Array(n);
+    notes.forEach(function (note, k) {
+      var v = edits && edits[note.i0] && edits[note.i0][key];
+      if (!v) return;
+      var lo = k ? Math.ceil((notes[k - 1].i1 + note.i0) / 2) : 0;
+      var hi = k + 1 < notes.length ? Math.floor((note.i1 + notes[k + 1].i0) / 2) : n - 1;
+      for (var i = Math.max(lo, note.i0 - 4); i <= Math.min(hi, note.i1 + 3); i++) s[i] = v;
+    });
+    return smooth(s);
+  }
+  function formantsFor(frames, notes, edits) { return perNote(frames, notes, edits, 'formant'); }
+  function gainsFor(frames, notes, edits) { return perNote(frames, notes, edits, 'gain'); }
 
   /* ── Mapa de tiempo: pares [t editado, t original], crecientes en ambos ── */
   function timeMap(notes, edits, duration) {
@@ -95,12 +126,14 @@
   function toIn(map, t) { return warp(map, t, 0, 1); }
 
   /** Zonas que cambian [muestra ini, muestra fin) en el tiempo editado; idénticas al original en los bordes. */
-  function editedRegions(frames, shifts, map, sr) {
+  function editedRegions(frames, shifts, map, sr, formants) {
     var regs = [], a = -1, last = -Infinity, fp = 0;
     for (var i = 0; i < frames.length; i++) {
       var t = frames[i].t, src = toIn(map, t);
       while (fp + 1 < frames.length && frames[fp + 1].t <= src) fp++;
-      if (Math.abs(src - t) < 1e-5 && Math.abs(shifts[fp]) < 1e-4 && Math.abs(shifts[Math.min(fp + 1, frames.length - 1)]) < 1e-4) continue;
+      var f2 = Math.min(fp + 1, frames.length - 1);
+      if (Math.abs(src - t) < 1e-5 && Math.abs(shifts[fp]) < 1e-4 && Math.abs(shifts[f2]) < 1e-4 &&
+          (!formants || (Math.abs(formants[fp]) < 1e-4 && Math.abs(formants[f2]) < 1e-4))) continue;
       if (a < 0 || i - last > 2 * PAD) { if (a >= 0) regs.push([a, last]); a = i; }
       last = i;
     }
@@ -112,17 +145,46 @@
     });
   }
 
-  function render(x, sr, frames, curve, shifts, map) {
+  function render(x, sr, frames, curve, shifts, map, opts) {
     var out = new Float32Array(x);   // copia: lo no editado queda idéntico
     if (!frames.length) return out;
-    editedRegions(frames, shifts, map || null, sr).forEach(function (r) {
+    map = map || null;
+    var formants = opts && opts.formants, gains = opts && opts.gains;
+    editedRegions(frames, shifts, map, sr, formants).forEach(function (r) {
       var a = r[0], b = Math.min(x.length, r[1]);
-      if (b - a > 16) renderRegion(x, out, sr, frames, curve, shifts, map || null, a, b);
+      if (b - a > 16) renderRegion(x, out, sr, frames, curve, shifts, map, formants, a, b);
     });
+    if (gains) applyGains(out, sr, frames, gains, map);
     return out;
   }
 
-  function renderRegion(x, out, sr, frames, curve, shifts, map, a, b) {
+  /** Volumen por frame (dB, en tiempo original) sobre la salida, con limitador suave. */
+  function applyGains(out, sr, frames, gains, map) {
+    var n = frames.length;
+    for (var i = 0; i < n; i++) {
+      if (Math.abs(gains[i]) < 1e-4) continue;
+      var j = i;
+      while (j + 1 < n && Math.abs(gains[j + 1]) >= 1e-4) j++;
+      // Tramo [i, j] del original (±1 frame para llegar a 0 dB) → muestras de la salida
+      var t0 = frames[Math.max(0, i - 1)].t, t1 = frames[Math.min(n - 1, j + 1)].t;
+      var q0 = Math.max(0, Math.floor(toOut(map, t0) * sr)), q1 = Math.min(out.length, Math.ceil(toOut(map, t1) * sr));
+      var fp = Math.max(0, i - 1);
+      for (var q = q0; q < q1; q++) {
+        var t = toIn(map, q / sr);
+        while (fp + 1 < n && frames[fp + 1].t <= t) fp++;
+        var f2 = Math.min(n - 1, fp + 1), d = frames[f2].t - frames[fp].t;
+        var w = d > 0 ? Math.max(0, Math.min(1, (t - frames[fp].t) / d)) : 0;
+        var db = gains[fp] + (gains[f2] - gains[fp]) * w;
+        if (!db) continue;
+        var y = out[q] * Math.pow(10, db / 20), ay = Math.abs(y);
+        if (ay > LIMIT) y = (y < 0 ? -1 : 1) * (LIMIT + (CEIL - LIMIT) * Math.tanh((ay - LIMIT) / (CEIL - LIMIT)));
+        out[q] = y;
+      }
+      i = j;
+    }
+  }
+
+  function renderRegion(x, out, sr, frames, curve, shifts, map, formants, a, b) {
     var n = x.length, UV = Math.max(16, Math.round(sr * UV_SEC));
     var inSmp = function (q) { return toIn(map, q / sr) * sr; };
     var outSmp = function (q) { return toOut(map, q / sr) * sr; };
@@ -168,15 +230,26 @@
       var src = inSmp(ts);
       while (mi + 1 < marks.length && marks[mi + 1][0] <= src) mi++;
       var mk = (mi + 1 < marks.length && marks[mi + 1][0] - src < src - marks[mi][0]) ? marks[mi + 1] : marks[mi];
-      var P = mk[1], voiced = mk[2];
-      var ratio = voiced ? Math.pow(2, shifts[frameOf(src)] / 12) : 1;
+      var P = mk[1], voiced = mk[2], fi = frameOf(src);
+      var ratio = voiced ? Math.pow(2, shifts[fi] / 12) : 1;
+      // Timbre: el grano se lee comprimido (alpha > 1, formantes más altos) o estirado
+      var alpha = voiced && formants ? Math.pow(2, formants[fi] / 12) : 1;
       // Con voz, el grano sale de su pulso; sin voz, del instante exacto (repetir el mismo ruido zumbaría)
       var from = voiced ? mk[0] : Math.round(src), c = Math.round(ts);
       for (var j = -P; j <= P; j++) {
-        var s = from + j, dst = c + j - base;
-        if (s < 0 || s >= n || dst < 0 || dst >= len) continue;
+        var dst = c + j - base, v;
+        if (dst < 0 || dst >= len) continue;
+        if (alpha === 1) {
+          var s = from + j;
+          if (s < 0 || s >= n) continue;
+          v = x[s];
+        } else {
+          var sp = from + j * alpha, s0 = Math.floor(sp), fr = sp - s0;
+          if (s0 < 0 || s0 + 1 >= n) continue;
+          v = x[s0] + (x[s0 + 1] - x[s0]) * fr;
+        }
         var w = 0.5 + 0.5 * Math.cos(Math.PI * j / P);   // Hann de dos periodos
-        acc[dst] += x[s] * w;
+        acc[dst] += v * w;
         ws[dst] += w;
       }
       ts += voiced ? P / ratio : P;
@@ -192,6 +265,7 @@
     }
   }
 
-  global.Psola = { shiftsFor: shiftsFor, timeMap: timeMap, toOut: toOut, toIn: toIn, render: render };
+  global.Psola = { shiftsFor: shiftsFor, formantsFor: formantsFor, gainsFor: gainsFor,
+                   timeMap: timeMap, toOut: toOut, toIn: toIn, render: render };
 
 }(typeof window !== 'undefined' ? window : this));

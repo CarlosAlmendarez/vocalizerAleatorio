@@ -303,6 +303,18 @@
                     <input type="range" id="flatNote" min="0" max="100" step="5" value="0"
                            oninput="previewFlatten(this.value)" onchange="commitFlatten(this.value)">
                 </div>
+                <div class="av-slider">
+                    <label for="gainNote">Volumen</label>
+                    <output id="gainNoteVal">0 dB</output>
+                    <input type="range" id="gainNote" min="-12" max="12" step="0.5" value="0"
+                           oninput="previewGain(this.value)" onchange="commitNote({ gain: +this.value })">
+                </div>
+                <div class="av-slider">
+                    <label for="formNote">Timbre (formantes)</label>
+                    <output id="formNoteVal">natural</output>
+                    <input type="range" id="formNote" min="-3" max="3" step="0.25" value="0"
+                           oninput="previewFormant(this.value)" onchange="commitNote({ formant: +this.value })">
+                </div>
                 <div class="av-edit-row" style="margin-top:8px">
                     <button class="btn-ghost" onclick="moveNote(-1)" aria-label="Mover 50 ms antes">◀ Antes</button>
                     <button class="btn-ghost" onclick="stretchNote(-1)">Acortar</button>
@@ -321,8 +333,8 @@
 
     <!-- Afinar toda la toma -->
     <div class="section-card" id="tuneCard" hidden>
-        <div class="section-title">Afinar toda la toma</div>
-        <p class="av-hint">Lleva cada nota hacia el centro de su semitono. Entre 50 y 80 % suena natural; 100 % suena "perfecto".</p>
+        <div class="section-title">Corregir toda la toma</div>
+        <p class="av-hint">Lleva cada nota hacia el centro de su semitono (entre 50 y 80 % suena natural; 100 % suena "perfecto") y, si quieres, empareja el volumen de las notas.</p>
         <div class="av-slider">
             <label for="tuneAmt">Corrección de afinación</label>
             <output id="tuneAmtVal">70 %</output>
@@ -332,6 +344,11 @@
             <label for="flatAmt">Aplanar vibrato / oscilación</label>
             <output id="flatAmtVal">0 %</output>
             <input type="range" id="flatAmt" min="0" max="100" step="5" value="0" oninput="$('flatAmtVal').textContent = this.value + ' %'">
+        </div>
+        <div class="av-slider">
+            <label for="levelAmt">Igualar volumen</label>
+            <output id="levelAmtVal">0 %</output>
+            <input type="range" id="levelAmt" min="0" max="100" step="5" value="0" oninput="$('levelAmtVal').textContent = this.value + ' %'">
         </div>
         <div class="av-actions">
             <button class="btn-ghost" onclick="tuneAll()">Aplicar a todas las notas</button>
@@ -380,7 +397,7 @@
     <div class="section-card">
         <div class="section-title">Cómo leer la gráfica</div>
         <ul class="av-legend">
-            <li><span class="av-swatch ok"></span><span>Cada forma es una nota cantada; su grosor sigue tu volumen. Verde: afinada (±25¢).</span></li>
+            <li><span class="av-swatch ok"></span><span>Cada forma es una nota cantada; su grosor sigue tu volumen (el editado, si lo cambias). Verde: afinada (±25¢).</span></li>
             <li><span class="av-swatch close"></span><span>Ámbar: entre 25 y 50¢ de desvío.</span></li>
             <li><span class="av-swatch off"></span><span>Rojo: más de 50¢, casi otra nota.</span></li>
             <li><span class="av-swatch line"></span><span>La línea es tu afinación continua: deslizamientos, vibrato y ataques.</span></li>
@@ -411,8 +428,9 @@
    · shared/melody.js analiza en vivo (YIN cada 10 ms) y separa las notas.
    · La curva y las notas se dibujan mientras cantas; en pausa se hace el
      análisis (tonalidad, resumen), se puede escuchar y CONTINUAR la toma.
-   · Edición (fase 2): cada nota guarda { target, flatten, ds, de } (altura,
-     vibrato, desplazamiento de su inicio y su final) y shared/psola.js recalcula
+   · Edición (fase 2): cada nota guarda { target, flatten, ds, de, gain, formant }
+     (altura, vibrato, desplazamiento de su inicio y su final, volumen en dB y
+     timbre en semitonos) y shared/psola.js recalcula
      la versión editada desde el original (no destructivo, A/B). Con la vista
      "Editada", los tiempos de pantalla y del cabezal son los del audio editado.
    · Las tomas se guardan solas en IndexedDB ("Mis tomas").
@@ -430,6 +448,7 @@ const UNDO_MAX = 50;
 const MIN_GAP = 0.02;                  // silencio mínimo (s) que queda entre notas movidas
 const STRETCH = [0.5, 2.5];            // duración editada / cantada permitida
 const MOVE_STEP = 0.05;                // botones ◀ Antes / Después ▶ (s)
+const GAIN_MAX = 12;                   // volumen por nota: ±dB
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
 const LOW_PEAK = 0.05;                 // pico de toda la toma por debajo de esto = señal muy baja
@@ -453,7 +472,8 @@ let state = 'idle';          // idle | recording | ready | playing
 let busy = false;            // pidiendo el micrófono
 /* take: { id, name, created, frames, curve, notes, analyzed, peak, buffer (original normalizado),
            gain, rawPeak, duration, joins, range, key, keyName, scale, stats,
-           edits: { i0: { target, flatten, ds, de } }, cuts: [['split'|'merge', frame]…], shifts, tmap, edited (AudioBuffer) } */
+           edits: { i0: { target, flatten, ds, de, gain, formant } }, cuts: [['split'|'merge', frame]…],
+           shifts, tmap, gains (dB por frame), edited (AudioBuffer) } */
 let take = null;
 let rec = null;              // { stream, capture, analyzer, tOffset, chunks, length, sr, level, maxPeak, lastSeg, lastChunk }
 let playback = null;         // { src, startAc, offset }
@@ -598,7 +618,7 @@ async function startRecording(append, retry) {
         take = { id: null, name: '', created: 0, dirty: true, frames: [], curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: null, gain: 1, rawPeak: 0, duration: 0, joins: [], range: null,
                  key: null, keyName: null, scale: null, stats: null,
-                 edits: {}, cuts: [], shifts: null, tmap: null, edited: null };
+                 edits: {}, cuts: [], shifts: null, tmap: null, gains: null, edited: null };
         rec = { chunks: [], length: 0, maxPeak: 0 };
         selected = -1; cursor = 0;
         undoStack.length = redoStack.length = 0;
@@ -745,7 +765,9 @@ const targetOf = n => { const e = editOf(n); return e && e.target != null ? e.ta
 /** [ds, de]: cuánto se movieron (s) el inicio y el final de la nota. */
 const timeOf   = n => { const e = editOf(n); return e ? [e.ds || 0, e.de || 0] : [0, 0]; };
 const timeEdited = n => timeOf(n).some(d => Math.abs(d) >= 0.0005);
-const isEdited = n => { const e = editOf(n); return !!e && (Math.abs(targetOf(n) - n.midi) > 0.005 || (e.flatten || 0) > 0 || timeEdited(n)); };
+const gainOf   = n => { const e = editOf(n); return (e && e.gain) || 0; };
+const formantOf = n => { const e = editOf(n); return (e && e.formant) || 0; };
+const isEdited = n => { const e = editOf(n); return !!e && (Math.abs(targetOf(n) - n.midi) > 0.005 || (e.flatten || 0) > 0 || timeEdited(n) || !!gainOf(n) || !!formantOf(n)); };
 const hasEdits = () => !!take && take.notes.some(isEdited);
 /** Altura con la que se ve una nota: la editada (vista "Editada") o la cantada. */
 const shownMidi = n => abMode === 'edit' ? targetOf(n) : n.midi;
@@ -753,7 +775,11 @@ const shownMidi = n => abMode === 'edit' ? targetOf(n) : n.midi;
 const warped = () => abMode === 'edit' && !!take && !!take.tmap;
 const shownT = t => warped() ? Psola.toOut(take.tmap, t) : t;
 const srcT   = t => warped() ? Psola.toIn(take.tmap, t) : t;
-function refreshTimeMap() { take.tmap = Psola.timeMap(take.notes, take.edits, take.duration); }
+/** Lo que se dibuja de las ediciones (sin esperar al audio): tiempos y volumen por frame. */
+function refreshEditMaps() {
+    take.tmap = Psola.timeMap(take.notes, take.edits, take.duration);
+    take.gains = take.notes.some(gainOf) ? Psola.gainsFor(take.frames, take.notes, take.edits) : null;
+}
 
 function snapshot() { return JSON.stringify({ edits: take.edits, cuts: take.cuts }); }
 function pushUndo() {
@@ -779,7 +805,7 @@ function afterEdit(reseg) {
         if (sel) selected = take.notes.findIndex(n => n.i0 <= sel.i0 && n.i1 >= sel.i0);
         renderSummary();
     }
-    refreshTimeMap();
+    refreshEditMaps();
     if (abMode !== 'edit') setAB('edit');
     take.dirty = true;
     renderEditsSoon();
@@ -794,10 +820,12 @@ function setEdit(n, patch) {
     const e = Object.assign({}, take.edits[n.i0], patch);
     if (e.target != null && Math.abs(e.target - n.midi) < 0.005) delete e.target;
     if (!(e.flatten > 0)) delete e.flatten;
+    if (!(Math.abs(e.gain) >= 0.05)) delete e.gain;
+    if (!(Math.abs(e.formant) >= 0.01)) delete e.formant;
     ['ds', 'de'].forEach(k => { if (!(Math.abs(e[k]) >= 0.0005)) delete e[k]; });
     if (Object.keys(e).length) take.edits[n.i0] = e;
     else delete take.edits[n.i0];
-    refreshTimeMap();
+    refreshEditMaps();
 }
 
 /**
@@ -861,6 +889,18 @@ function centerNote() {
 }
 
 function previewFlatten(v) { $('flatNoteVal').textContent = v + ' %'; }
+const fmtGain = v => (v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(v)).replace('.', ',') + ' dB';
+const fmtFormant = v => v ? `${v > 0 ? '+' : '−'}${String(Math.abs(v)).replace('.', ',')} · más ${v > 0 ? 'brillante' : 'oscuro'}` : 'natural';
+function previewGain(v) { $('gainNoteVal').textContent = fmtGain(+v); }
+function previewFormant(v) { $('formNoteVal').textContent = fmtFormant(+v); }
+/** Volumen / timbre de la nota elegida (deslizadores). */
+function commitNote(patch) {
+    const n = take && take.notes[selected];
+    if (!n || state === 'recording') return;
+    pushUndo();
+    setEdit(n, patch);
+    afterEdit(false);
+}
 function commitFlatten(v) {
     const n = take && take.notes[selected];
     if (!n || state === 'recording') return;
@@ -880,13 +920,21 @@ function resetNote() {
 /** Afinar todas: cada nota hacia el centro del semitono elegido (el cantado o al que se movió). */
 function tuneAll() {
     if (!take || !take.notes.length || state === 'recording') return;
-    const amt = $('tuneAmt').value / 100, flat = $('flatAmt').value / 100;
+    const amt = $('tuneAmt').value / 100, flat = $('flatAmt').value / 100, lev = $('levelAmt').value / 100;
+    // Igualar volumen: cada nota hacia el nivel mediano de la toma (en dB, sin pasar de ±GAIN_MAX)
+    const levels = take.notes.map(n => n.level).filter(v => v > 0).sort((a, b) => a - b);
+    const median = levels[Math.floor(levels.length / 2)] || 0;
     pushUndo();
     take.notes.forEach(n => {
         const e = editOf(n);
         const semi = e && e.target != null ? Math.round(e.target) : Math.round(n.midi);
         const dev = n.midi - Math.round(n.midi);   // desvío al cantar
-        setEdit(n, { target: semi + dev * (1 - amt), flatten: flat });
+        const patch = { target: semi + dev * (1 - amt), flatten: flat };
+        if (lev > 0 && median > 0 && n.level > 0) {
+            const db = lev * 20 * Math.log10(median / n.level);
+            patch.gain = Math.round(Math.max(-GAIN_MAX, Math.min(GAIN_MAX, db)) * 2) / 2;
+        }
+        setEdit(n, patch);
     });
     afterEdit(false);
 }
@@ -955,11 +1003,13 @@ function renderEdits() {
     // Ediciones de notas que ya no existen (p. ej. tras unir) se descartan
     const live = new Set(take.notes.map(n => String(n.i0)));
     Object.keys(take.edits).forEach(k => { if (!live.has(k)) delete take.edits[k]; });
-    if (!hasEdits()) { take.shifts = take.edited = take.tmap = null; }
+    if (!hasEdits()) { take.shifts = take.edited = take.tmap = take.gains = null; }
     else {
-        refreshTimeMap();
+        refreshEditMaps();
         take.shifts = Psola.shiftsFor(take.frames, take.curve, take.notes, take.edits);
-        const out = Psola.render(take.buffer.getChannelData(0), take.buffer.sampleRate, take.frames, take.curve, take.shifts, take.tmap);
+        const formants = take.notes.some(formantOf) ? Psola.formantsFor(take.frames, take.notes, take.edits) : null;
+        const out = Psola.render(take.buffer.getChannelData(0), take.buffer.sampleRate, take.frames, take.curve,
+                                 take.shifts, take.tmap, { formants, gains: take.gains });
         take.edited = makeBuffer(out, take.buffer.sampleRate);
     }
     if (state === 'playing') startPlayback(playPos());
@@ -1257,14 +1307,15 @@ function frameAt(t) {
 }
 
 /** Contorno de una nota a una altura y (grosor = volumen). */
-function blobPath(n, y, rh, xOf) {
+function blobPath(n, y, rh, xOf, edited) {
     const frames = take.frames, peak = take.peak || 1;
+    const g = edited && abMode === 'edit' && take.gains ? take.gains : null;
     const maxH = rh * 0.45, minH = Math.max(1.5, rh * 0.1);
     const every = Math.max(1, Math.round(2 / (view.pps * HOP)));   // ~1 punto cada 2 px
     const pts = [];
     for (let k = n.i0; k <= n.i1; k += every) pts.push(k);
     if (pts[pts.length - 1] !== n.i1) pts.push(n.i1);
-    const half = k => minH + (maxH - minH) * Math.sqrt(Math.min(1, frames[k].rms / peak));
+    const half = k => minH + (maxH - minH) * Math.sqrt(Math.min(1, frames[k].rms * (g ? Math.pow(10, g[k] / 20) : 1) / peak));
     cx.beginPath();
     cx.moveTo(xOf(n.start), y);
     pts.forEach(k => cx.lineTo(xOf(frames[k].t), y - half(k)));
@@ -1362,7 +1413,7 @@ function draw() {
             // Visible si se ve la nota o su fantasma (dónde se cantó)
             if (Math.max(n.end, shownT(n.end)) < view.t0 || Math.min(n.start, shownT(n.start)) > tEnd) return;
             const m = shownMidi(n), sel = i === selected;
-            const moved = abMode === 'edit' && (Math.abs(m - n.midi) > 0.02 || timeEdited(n));
+            const moved = abMode === 'edit' && (Math.abs(m - n.midi) > 0.02 || timeEdited(n) || !!gainOf(n));
             if (moved) {   // fantasma: dónde (y cuándo) se cantó
                 blobPath(n, yOf(n.midi), rh, xOf);
                 cx.setLineDash([3, 3]);
@@ -1372,7 +1423,7 @@ function draw() {
                 cx.setLineDash([]);
             }
             const y = yOf(m);
-            const maxH = blobPath(n, y, rh, xSrc);
+            const maxH = blobPath(n, y, rh, xSrc, true);
             const rgb = colors.tune[tuneState(centsOf(m))];
             cx.fillStyle = `rgba(${rgb}, ${sel ? 0.6 : 0.3})`;
             cx.fill();
@@ -1759,6 +1810,10 @@ function renderNote() {
     const e = editOf(n), flat = Math.round(((e && e.flatten) || 0) * 100);
     $('flatNote').value = flat;
     $('flatNoteVal').textContent = flat + ' %';
+    $('gainNote').value = gainOf(n);
+    previewGain(gainOf(n));
+    $('formNote').value = formantOf(n);
+    previewFormant(formantOf(n));
     const shift = Math.round((targetOf(n) - n.midi) * 100);
     const [ds, de] = timeOf(n), len = n.end - n.start, factor = (len + de - ds) / len;
     const ms = d => Math.round(Math.abs(d) * 1000) + ' ms';
@@ -1770,10 +1825,22 @@ function renderNote() {
         if (Math.abs(ds) >= 0.0005) parts.push(`empieza ${ms(ds)} ${ds < 0 ? 'antes' : 'después'}`);
         parts.push(`duración ×${factor.toFixed(2).replace('.', ',')}`);
     }
+    if (gainOf(n)) parts.push(`volumen ${fmtGain(gainOf(n))}`);
+    if (formantOf(n)) parts.push(`timbre ${fmtFormant(formantOf(n))}`);
+    // Subir una nota que ya está cerca del máximo: el limitador de psola.js recorta la subida
+    let limited = false;
+    if (gainOf(n) > 0 && take.buffer) {
+        const d = take.buffer.getChannelData(0), sr = take.buffer.sampleRate;
+        let pk = 0;
+        for (let i = Math.max(0, Math.floor(n.start * sr)), z = Math.min(d.length, Math.ceil(n.end * sr)); i < z; i++) pk = Math.max(pk, Math.abs(d[i]));
+        limited = pk * Math.pow(10, gainOf(n) / 20) > 0.95;
+    }
     $('noteEditState').innerHTML = isEdited(n)
         ? `Editada: <strong>${noteLabel(Math.round(targetOf(n)))} ${fmtCents(centsOf(targetOf(n)))}</strong> (${parts.join(', ')})` +
           (Math.abs(shift) > 300 ? ' · más de 3 semitonos puede sonar artificial' : '') +
-          (factor > 2 ? ' · más del doble de largo puede sonar artificial' : '')
+          (factor > 2 ? ' · más del doble de largo puede sonar artificial' : '') +
+          (limited ? ' · ya estaba cerca del máximo: el limitador suaviza la subida para que no se distorsione' : '') +
+          (Math.abs(formantOf(n)) > 2 ? ' · más de 2 semitonos de timbre puede sonar artificial' : '')
         : 'Sin editar. Usa los botones o activa el lápiz: arrastra la nota arriba o abajo (altura), a los lados (tiempo) o desde un borde (duración).';
     $('resetNoteBtn').disabled = !e;
     $('mergeBtn').disabled = selected >= take.notes.length - 1;
@@ -1911,7 +1978,7 @@ async function openTake(id) {
         take = { id: meta.id, name: meta.name, created: meta.created, dirty: false, frames, curve: [], notes: [], analyzed: 0, peak: 0,
                  buffer: makeBuffer(data, meta.sampleRate), gain: meta.gain || 1, rawPeak: meta.rawPeak || 0,
                  duration: meta.duration, joins: meta.joins || [], range: null, key: null, keyName: null, scale: null, stats: null,
-                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, tmap: null, edited: null };
+                 edits: meta.edits || {}, cuts: Array.isArray(meta.cuts) ? meta.cuts : [], shifts: null, tmap: null, gains: null, edited: null };
         undoStack.length = redoStack.length = 0;
         abMode = 'edit';
         state = 'ready';

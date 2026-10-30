@@ -217,3 +217,69 @@ test('rendimiento: mover y estirar todas las notas de 10 s tarda mucho menos que
   const ms = Date.now() - t0, sec = x.length / SR;
   assert.ok(ms < sec * 1000 * 0.1, `${ms} ms para ${sec.toFixed(1)} s`);
 });
+
+/* ── Fase 2c: volumen y timbre ── */
+
+function editAll(x, edits) {
+  const a = analyze(x), e = {};
+  Object.keys(edits).forEach(k => { e[a.notes[k].i0] = edits[k]; });
+  const opts = { formants: Psola.formantsFor(a.frames, a.notes, e), gains: Psola.gainsFor(a.frames, a.notes, e) };
+  const out = Psola.render(x, SR, a.frames, a.curve, Psola.shiftsFor(a.frames, a.curve, a.notes, e),
+                           Psola.timeMap(a.notes, e, x.length / SR), opts);
+  return { a, out };
+}
+
+test('volumen por nota: sube o baja lo pedido; las demás notas, idénticas', () => {
+  for (const db of [6, -12]) {
+    const { x } = voice([{ midi: 57, dur: 0.5 }, { midi: 60, dur: 0.6, gap: 0.3 }, { midi: 64, dur: 0.5, gap: 0.3 }], 3);
+    const { a, out } = editAll(x, { 1: { gain: db } });
+    const n = a.notes[1], s0 = Math.round((n.start + 0.06) * SR), s1 = Math.round((n.end - 0.06) * SR);
+    const got = 20 * Math.log10(rms(out, s0, s1) / rms(x, s0, s1));
+    assert.ok(Math.abs(got - db) < 0.3, `${db} dB → ${got.toFixed(2)} dB`);
+    const firstEnd = Math.round(a.notes[0].end * SR), lastStart = Math.round(a.notes[2].start * SR);
+    for (let i = 0; i < firstEnd; i++) assert.equal(out[i], x[i], `muestra ${i} cambió`);
+    for (let i = lastStart; i < x.length; i++) assert.equal(out[i], x[i], `muestra ${i} cambió`);
+    const b = analyze(out);
+    assert.ok(Math.abs(b.notes[1].midi - n.midi) * 100 < 2, 'la altura no cambia');
+  }
+});
+
+test('volumen: sin saltos (fundido) y el limitador nunca deja pasar de ±1', () => {
+  const { x } = voice([{ midi: 57, dur: 0.6 }]);
+  for (let i = 0; i < x.length; i++) x[i] *= 8;   // pico ~0,9
+  const { out } = editAll(x, { 0: { gain: 12 } });
+  let peak = 0, jump = 0;
+  for (let i = 1; i < out.length; i++) { peak = Math.max(peak, Math.abs(out[i])); jump = Math.max(jump, Math.abs(out[i] - out[i - 1])); }
+  assert.ok(peak < 1, `pico ${peak.toFixed(3)}`);
+  let jx = 0; for (let i = 1; i < x.length; i++) jx = Math.max(jx, Math.abs(x[i] - x[i - 1]));
+  assert.ok(jump < jx * 4.5, `salto ${jump.toFixed(3)} (original ${jx.toFixed(3)})`);
+});
+
+test('timbre (formantes): más brillante u oscuro sin cambiar la nota ni la duración', () => {
+  const { x, plan } = voice([{ midi: 55, dur: 1.0 }]);
+  const at = Math.round((plan[0].start + 0.3) * SR), before = centroid(x, at);
+  const res = {};
+  for (const f of [3, -3]) {
+    const { a, out } = editAll(x, { 0: { formant: f } });
+    const got = analyze(out).notes;
+    assert.equal(got.length, 1);
+    assert.ok(Math.abs(got[0].midi - a.notes[0].midi) * 100 < 6, `${f}: altura ${got[0].midi.toFixed(3)}`);
+    assert.ok(Math.abs((got[0].end - got[0].start) - (a.notes[0].end - a.notes[0].start)) < 0.03, 'misma duración');
+    res[f] = centroid(out, at) / before;
+  }
+  // ±3 semitonos de formantes ≈ ±19 % en frecuencia: el centroide se mueve en ese sentido
+  assert.ok(res[3] > 1.08, `+3: centroide ×${res[3].toFixed(3)}`);
+  assert.ok(res[-3] < 0.93, `−3: centroide ×${res[-3].toFixed(3)}`);
+});
+
+test('todo junto: altura, tiempo, volumen y timbre en la misma nota', () => {
+  const { x } = voice([{ midi: 57, dur: 0.6 }, { midi: 60, dur: 0.5, gap: 0.5 }]);
+  const { a, out } = editAll(x, { 0: { target: 59, ds: 0.1, de: 0.2, gain: -6, formant: 1 } });
+  const got = analyze(out).notes[0];
+  assert.ok(Math.abs(got.midi - 59) * 100 < 6, `altura ${got.midi.toFixed(3)}`);
+  assert.ok(Math.abs(got.start - (a.notes[0].start + 0.1)) < 0.03, `inicio ${got.start.toFixed(3)}`);
+  const s0 = Math.round((got.start + 0.08) * SR), s1 = Math.round((got.end - 0.08) * SR);
+  const o0 = Math.round((a.notes[0].start + 0.08) * SR), o1 = Math.round((a.notes[0].end - 0.08) * SR);
+  const db = 20 * Math.log10(rms(out, s0, s1) / rms(x, o0, o1));
+  assert.ok(Math.abs(db + 6) < 1.5, `volumen ${db.toFixed(2)} dB`);
+});
